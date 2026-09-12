@@ -29,23 +29,24 @@ import type { AntigravityModelInfo, AntigravityServerManager } from './Antigravi
 const GOOGLE_API_PROVIDER = 'API_PROVIDER_GOOGLE_GEMINI';
 
 /**
- * Fallback catalog, used only until the language server has been reached once.
+ * Only offer this Flash generation in the picker. The 3.5/3.6 Flash tiers
+ * ("High"/"Medium"/"Low") that used to appear here are superseded and no
+ * longer selectable for new sessions -- both the seed fallback below and
+ * `selectGeminiModels`'s live-discovery filter key off this substring.
  *
- * These are the ids that existing Gemini session rows persist, so they must
- * keep their exact keys -- a session created against
- * `antigravity-gemini-agent:gemini-3-flash-agent` has to keep resolving. The
- * display names are the server's own labels, which do not match the keys
- * (`gemini-3-flash-agent` is labelled "Gemini 3.5 Flash (High)").
+ * Existing session rows that already persisted an older key (e.g.
+ * `gemini-3-flash-agent`) are unaffected: model resolution reads the stored
+ * key directly and never consults this list, so old sessions keep resolving
+ * even though the tier is no longer offered going forward.
  */
+const GEMINI_FLASH_GENERATION = '3.8 Flash';
+
+/** Fallback catalog, used only until the language server has been reached once. */
 export const SEED_GEMINI_MODELS: ReadonlyArray<{ key: string; displayName: string }> =
-  Object.freeze([
-    { key: 'gemini-3-flash-agent', displayName: 'Gemini 3.5 Flash (High)' },
-    { key: 'gemini-3.5-flash-low', displayName: 'Gemini 3.5 Flash (Medium)' },
-    { key: 'gemini-3.5-flash-extra-low', displayName: 'Gemini 3.5 Flash (Low)' },
-  ]);
+  Object.freeze([{ key: 'gemini-3.8-flash-agent', displayName: 'Gemini 3.8 Flash' }]);
 
 /** Default model key for a new Gemini session. */
-export const DEFAULT_GEMINI_MODEL_KEY = 'gemini-3-flash-agent';
+export const DEFAULT_GEMINI_MODEL_KEY = 'gemini-3.8-flash-agent';
 
 /**
  * Strip the `antigravity-gemini-agent:` namespace off a stored model id.
@@ -67,6 +68,9 @@ export function bareGeminiModelKey(raw: string | undefined | null): string {
  * it would only produce a confusing error after the user picked it. When the
  * entitlement set is empty (an older server that does not report it) the
  * catalog is used unfiltered rather than showing nothing.
+ *
+ * Also restricted to `GEMINI_FLASH_GENERATION` -- older Flash tiers may still
+ * be present in the live catalog (and entitled), but are no longer offered.
  */
 export function selectGeminiModels(
   catalog: Map<string, AntigravityModelInfo>,
@@ -79,6 +83,7 @@ export function selectGeminiModels(
     // An unlabelled entry is an internal/experimental slot (the server returns
     // several with no displayName). Nothing useful to show the user.
     if (!info.displayName) continue;
+    if (!info.displayName.includes(GEMINI_FLASH_GENERATION)) continue;
     out.push({ key: info.key, displayName: info.displayName });
   }
   return out.sort((a, b) => a.displayName.localeCompare(b.displayName));

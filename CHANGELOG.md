@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 <!-- Changes to existing functionality go here -->
+- Antigravity's Gemini model picker now offers only Gemini 3.8 Flash; older Flash tiers are no longer selectable for new sessions.
 
 ### Fixed
 <!-- Bug fixes go here -->
