@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 <!-- New features go here -->
 - Run sessions in your own Cloudflare sandbox with machine navigation, the shared composer, attachments and Actions, and profile/account selections remembered per project.
+- The AI Usage Report has a new Sessions tab breaking down cost and tokens per session, grouped by phase or tag, split between main and sub-agent usage, with estimated costs marked when a provider doesn't report an exact price.
 
 ### Changed
 <!-- Changes to existing functionality go here -->

@@ -4,3 +4,4 @@ export { HistoricalGraph } from './HistoricalGraph';
 export { ModelComparison } from './ModelComparison';
 export { ProjectInsights } from './ProjectInsights';
 export { ActivityHeatmap } from './ActivityHeatmap';
+export { SessionsBreakdown } from './SessionsBreakdown';

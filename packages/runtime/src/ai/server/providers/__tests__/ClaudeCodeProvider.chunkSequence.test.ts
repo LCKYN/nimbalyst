@@ -213,6 +213,79 @@ describe('ClaudeCodeProvider.sendMessage chunk sequence', () => {
     expect(stubs.logError).not.toHaveBeenCalled();
   });
 
+  // #1496: the lead conversation and a Task-tool sub-agent can run different
+  // models in the same turn. `complete.mainUsage`/`subagentUsage` must split the
+  // SDK's authoritative `modelUsage` totals by origin WITHOUT recomputing the
+  // top-level cumulative totals from them -- that's the NIM-689 double-count bug.
+  it('splits mainUsage/subagentUsage by origin while result.usage (not modelUsage) still drives the top-level totals', async () => {
+    const { provider } = await makeProvider();
+    queryMock.mockImplementation(() =>
+      scriptQuery([
+        INIT_CHUNK,
+        {
+          type: 'assistant',
+          session_id: 'sdk-session-1',
+          message: {
+            id: 'msg_1',
+            content: [{ type: 'text', text: 'thinking' }],
+            usage: { input_tokens: 100, output_tokens: 20 },
+            model: 'claude-sonnet-5',
+          },
+        },
+        {
+          // A Task-tool sub-agent's relayed chunk: parent_tool_use_id set, no
+          // content (so it doesn't itself add a visible text chunk to this test).
+          type: 'assistant',
+          parent_tool_use_id: 'toolu_task_1',
+          message: {
+            id: 'msg_sub_1',
+            content: [],
+            usage: { input_tokens: 40, output_tokens: 8 },
+            model: 'claude-haiku-4-5',
+          },
+        },
+        {
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          num_turns: 2,
+          usage: { input_tokens: 100, output_tokens: 20 },
+          modelUsage: {
+            'claude-sonnet-5': { inputTokens: 100, outputTokens: 20, costUSD: 0.6 },
+            'claude-haiku-4-5': { inputTokens: 40, outputTokens: 8, costUSD: 0.02 },
+          },
+        },
+      ]),
+    );
+
+    const chunks = await runTurn(provider, 'hi');
+
+    expect(normalize(chunks)).toEqual([
+      { type: 'context_usage', contextFillTokens: 100 },
+      { type: 'text', content: 'thinking' },
+      {
+        type: 'complete',
+        isComplete: true,
+        // NIM-689 guard: totals are result.usage's 100/20, NOT 100+40=140 summed
+        // across modelUsage.
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          total_tokens: 120,
+        },
+        modelUsage: {
+          'claude-sonnet-5': { inputTokens: 100, outputTokens: 20, costUSD: 0.6 },
+          'claude-haiku-4-5': { inputTokens: 40, outputTokens: 8, costUSD: 0.02 },
+        },
+        mainUsage: { inputTokens: 100, outputTokens: 20, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.6 },
+        subagentUsage: { inputTokens: 40, outputTokens: 8, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.02 },
+        contextFillTokens: 100,
+      },
+    ]);
+  });
+
   it('yields tool_call at tool_use and tool_result when the result comes back', async () => {
     const { provider } = await makeProvider();
     queryMock.mockImplementation(() =>

@@ -45,6 +45,8 @@ import type { RawDocumentContext } from '@nimbalyst/runtime/ai/services/types';
 import type { DocumentContextService } from '@nimbalyst/runtime/ai/services/DocumentContextService';
 import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
 import { resolveClaudeCodeParentContextWindow } from '@nimbalyst/runtime/ai/modelConstants';
+import { estimateCostUSD } from '@nimbalyst/runtime/ai/pricing/modelPricing';
+import type { TokenUsageBucket } from '@nimbalyst/runtime/ai/server/types';
 import {
   buildMcpSessionStatusSnapshot,
   type McpSessionStatusInput,
@@ -314,6 +316,20 @@ async function getWorkspacePathForSession(sessionId: string): Promise<string | n
     // Ignore — caller will skip the broadcast.
   }
   return null;
+}
+
+/** Add one turn's `TokenUsageBucket` onto a cumulative session-level bucket. #1496 */
+function addTokenUsageBucket(
+  prev: TokenUsageBucket | undefined,
+  delta: { inputTokens?: number; outputTokens?: number; cacheReadInputTokens?: number; cacheCreationInputTokens?: number; costUSD?: number },
+): TokenUsageBucket {
+  return {
+    inputTokens: (prev?.inputTokens || 0) + (delta.inputTokens || 0),
+    outputTokens: (prev?.outputTokens || 0) + (delta.outputTokens || 0),
+    cacheReadInputTokens: (prev?.cacheReadInputTokens || 0) + (delta.cacheReadInputTokens || 0),
+    cacheCreationInputTokens: (prev?.cacheCreationInputTokens || 0) + (delta.cacheCreationInputTokens || 0),
+    costUSD: (prev?.costUSD || 0) + (delta.costUSD || 0),
+  };
 }
 
 export class MessageStreamingHandler {
@@ -2467,10 +2483,34 @@ export class MessageStreamingHandler {
               // Cost still derives from modelUsage (the only per-model cost source; not displayed).
               const newInputTokens = tokenUsage?.input_tokens || 0;
               const newOutputTokens = tokenUsage?.output_tokens || 0;
+              const newCacheReadTokens = tokenUsage?.cache_read_input_tokens || 0;
+              const newCacheCreationTokens = tokenUsage?.cache_creation_input_tokens || 0;
               let newCostUSD = 0;
               for (const modelName of Object.keys(modelUsage)) {
                 newCostUSD += modelUsage[modelName].costUSD || 0;
               }
+
+              // Main-vs-subagent split and per-model breakdown (#1496). mainUsage/
+              // subagentUsage are this TURN's totals (attributeModelUsageByOrigin
+              // already summed whole `modelUsage` entries by origin), accumulated
+              // onto the session's running buckets. byModel unions every model key
+              // seen in modelUsage across turns, regardless of origin.
+              const updatedByModel: Record<string, TokenUsageBucket> = { ...(currentUsage.byModel ?? {}) };
+              for (const [modelName, modelStats] of Object.entries(modelUsage)) {
+                updatedByModel[modelName] = addTokenUsageBucket(updatedByModel[modelName], {
+                  inputTokens: modelStats.inputTokens,
+                  outputTokens: modelStats.outputTokens,
+                  cacheReadInputTokens: modelStats.cacheReadInputTokens,
+                  cacheCreationInputTokens: modelStats.cacheCreationInputTokens,
+                  costUSD: modelStats.costUSD,
+                });
+              }
+              const updatedMainUsage = chunk.mainUsage
+                ? addTokenUsageBucket(currentUsage.mainUsage, chunk.mainUsage)
+                : currentUsage.mainUsage;
+              const updatedSubagentUsage = chunk.subagentUsage
+                ? addTokenUsageBucket(currentUsage.subagentUsage, chunk.subagentUsage)
+                : currentUsage.subagentUsage;
 
               // Prefer the REAL per-model context window the CLI reports in
               // modelUsage — the registry value is only a static seed and was
@@ -2488,6 +2528,11 @@ export class MessageStreamingHandler {
                 outputTokens: currentUsage.outputTokens + newOutputTokens,
                 totalTokens: currentUsage.totalTokens + newInputTokens + newOutputTokens,
                 costUSD: (currentUsage.costUSD || 0) + newCostUSD,
+                cacheReadInputTokens: (currentUsage.cacheReadInputTokens || 0) + newCacheReadTokens,
+                cacheCreationInputTokens: (currentUsage.cacheCreationInputTokens || 0) + newCacheCreationTokens,
+                mainUsage: updatedMainUsage,
+                subagentUsage: updatedSubagentUsage,
+                byModel: updatedByModel,
                 // Both figures go, not just the fill. The meter falls back to
                 // cumulative `totalTokens` over whatever denominator survives,
                 // so clearing the fill alone turns a stale 90% into a confident
@@ -2600,6 +2645,35 @@ export class MessageStreamingHandler {
                 providerCumulativeOutputTokens = cumulativeOutput;
               }
 
+              // Cache token split (#1496). Best-effort: unlike input/output above,
+              // Codex's cumulative-thread bookkeeping isn't replicated here, so a
+              // resumed Codex thread's cache figures may double-count across
+              // sessions restored from an old snapshot. Low-impact (display only).
+              const newCacheReadTokens = tokenUsage.cache_read_input_tokens || 0;
+              const newCacheCreationTokens = tokenUsage.cache_creation_input_tokens || 0;
+
+              // Cost estimate fallback (#1496): most non-claude-code providers don't
+              // report an exact cost, so fall back to the pricing table keyed off
+              // the session's selected model. Uses the ACTUAL tokens added this
+              // turn (the post-delta-correction figures above), not the raw
+              // (possibly cumulative) `tokenUsage` fields.
+              const effectiveNewInputTokens = nextInputTokens - currentUsage.inputTokens;
+              const effectiveNewOutputTokens = nextOutputTokens - currentUsage.outputTokens;
+              const sdkCostUSD = tokenUsage.costUSD;
+              const estimatedCostUSD = sdkCostUSD === undefined
+                ? estimateCostUSD(sessionModelId, {
+                    inputTokens: effectiveNewInputTokens,
+                    outputTokens: effectiveNewOutputTokens,
+                    cacheReadInputTokens: newCacheReadTokens,
+                    cacheCreationInputTokens: newCacheCreationTokens,
+                  })
+                : undefined;
+              const newCostUSD = sdkCostUSD ?? estimatedCostUSD ?? 0;
+              // Sticky once true: once any turn's cost is an estimate, the whole
+              // session total displays as estimated rather than splitting a total
+              // into exact+estimated portions.
+              const costEstimated = currentUsage.costEstimated || (sdkCostUSD === undefined && estimatedCostUSD !== undefined);
+
               const updatedUsage: NonNullable<SessionData['tokenUsage']> = {
                 inputTokens: nextInputTokens,
                 outputTokens: nextOutputTokens,
@@ -2610,6 +2684,10 @@ export class MessageStreamingHandler {
                   providerCumulativeInputTokens,
                   providerCumulativeOutputTokens,
                 } : {}),
+                costUSD: (currentUsage.costUSD || 0) + newCostUSD,
+                costEstimated,
+                cacheReadInputTokens: (currentUsage.cacheReadInputTokens || 0) + newCacheReadTokens,
+                cacheCreationInputTokens: (currentUsage.cacheCreationInputTokens || 0) + newCacheCreationTokens,
                 // A compaction just replaced the conversation with a summary, so
                 // every fill figure in hand describes context that no longer
                 // exists -- including the one this chunk reports, which is read

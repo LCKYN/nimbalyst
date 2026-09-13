@@ -5,14 +5,21 @@ import { ModelComparison } from './ModelComparison';
 import { ProjectInsights } from './ProjectInsights';
 import { ActivityHeatmap } from './ActivityHeatmap';
 import { ToolUsage } from './ToolUsage';
+import { SessionsBreakdown } from './SessionsBreakdown';
 
 interface AIUsageReportProps {
   onClose?: () => void;
 }
 
+const TAB_LABELS = {
+  overview: 'Overview',
+  sessions: 'Sessions',
+  tools: 'Tools',
+} as const;
+
 export const AIUsageReport: React.FC<AIUsageReportProps> = ({ onClose }) => {
   const [workspaceFilter, setWorkspaceFilter] = useState<string | undefined>(undefined);
-  const [activeTab, setActiveTab] = useState<'overview' | 'tools'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'tools'>('overview');
 
   return (
     <div className="ai-usage-report flex flex-col h-full bg-nim text-nim overflow-hidden">
@@ -21,7 +28,7 @@ export const AIUsageReport: React.FC<AIUsageReportProps> = ({ onClose }) => {
         role="tablist"
         aria-label="AI usage report sections"
       >
-        {(['overview', 'tools'] as const).map((tab) => (
+        {(Object.keys(TAB_LABELS) as Array<keyof typeof TAB_LABELS>).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -34,7 +41,7 @@ export const AIUsageReport: React.FC<AIUsageReportProps> = ({ onClose }) => {
                 : 'border-transparent text-[var(--nim-text-muted)] hover:text-[var(--nim-text)]'
             }`}
           >
-            {tab === 'overview' ? 'Overview' : 'Tools'}
+            {TAB_LABELS[tab]}
           </button>
         ))}
       </div>
@@ -53,9 +60,9 @@ export const AIUsageReport: React.FC<AIUsageReportProps> = ({ onClose }) => {
               <div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">
                 <HistoricalGraph workspaceId={workspaceFilter} />
               </div>
-              {/*<div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">*/}
-              {/*  <ModelComparison workspaceId={workspaceFilter} />*/}
-              {/*</div>*/}
+              <div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">
+                <ModelComparison workspaceId={workspaceFilter} />
+              </div>
             </div>
 
             <div className="dashboard-row grid grid-cols-[repeat(auto-fit,minmax(500px,1fr))] gap-4">
@@ -64,6 +71,12 @@ export const AIUsageReport: React.FC<AIUsageReportProps> = ({ onClose }) => {
               </div>
             </div>
           </>
+        ) : activeTab === 'sessions' ? (
+          <div className="dashboard-row grid grid-cols-[repeat(auto-fit,minmax(500px,1fr))] gap-4">
+            <div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">
+              <SessionsBreakdown workspaceId={workspaceFilter} />
+            </div>
+          </div>
         ) : (
           <div className="dashboard-row grid grid-cols-[repeat(auto-fit,minmax(500px,1fr))] gap-4">
             <div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">

@@ -24,6 +24,8 @@ import {
   claudeCodeFamilyKeyword,
   normalizeClaudeCodeVariant,
 } from '@nimbalyst/runtime';
+import { CLAUDE_CODE_PINNED_SDK_MODELS } from '@nimbalyst/runtime/ai/modelConstants';
+import { estimateCostUSD } from '@nimbalyst/runtime/ai/pricing/modelPricing';
 import { SessionManager } from '@nimbalyst/runtime/ai/server';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import type { AssembledUsage } from './claudeCliObservation/claudeApiMessageAssembler';
@@ -109,6 +111,34 @@ export function contextWindowForCliModel(model: string | undefined, observed1m?:
   return CLI_DEFAULT_CONTEXT_WINDOW;
 }
 
+/**
+ * Current-generation canonical variants resolve to "latest" at the SDK/CLI
+ * level, so there's no static id to pin the way `CLAUDE_CODE_PINNED_SDK_MODELS`
+ * pins legacy variants. Mapped here to the current generation's concrete
+ * Anthropic id purely for pricing-table lookup (#1496) -- update alongside
+ * `CLAUDE_CODE_VARIANT_VERSIONS` when a canonical variant rolls forward.
+ */
+const CANONICAL_VARIANT_PRICING_MODEL: Partial<Record<string, string>> = {
+  fable: 'claude-fable-5-1',
+  'fable-5': 'claude-fable-5',
+  opus: 'claude-opus-5',
+  sonnet: 'claude-sonnet-5',
+  haiku: 'claude-haiku-4-5',
+};
+
+/**
+ * Resolve a CLI picker id (`claude-code-cli:opus`, `…:opus-1m`) to a concrete
+ * Anthropic model id for `modelPricing.ts` lookup. Returns undefined for
+ * unrecognized ids -- `estimateCostUSD` already treats that as "can't price".
+ */
+function pricingModelForCliModel(model: string | undefined): string | undefined {
+  if (!model) return undefined;
+  const modelPart = model.includes(':') ? model.slice(model.indexOf(':') + 1) : model;
+  const variant = normalizeClaudeCodeVariant(modelPart.toLowerCase().replace(/-1m$/, ''));
+  if (!variant) return undefined;
+  return CLAUDE_CODE_PINNED_SDK_MODELS[variant] ?? CANONICAL_VARIANT_PRICING_MODEL[variant];
+}
+
 /** Tokens occupying the context window for this step (excludes generated output). */
 export function computeContextFillTokens(usage: AssembledUsage): number {
   return (
@@ -125,23 +155,45 @@ export function computeContextFillTokens(usage: AssembledUsage): number {
  *     display semantics. Cache reads are a per-round context detail surfaced via
  *     `currentContext`, not added to cumulative input.
  *   - `currentContext` is latest-wins (input + cache_read + cache_creation).
- *   - `costUSD` is NOT computed: the Anthropic SSE stream the proxy tees carries no
- *     cost; the SDK gets it from `result.modelUsage`, which we don't have. Left as-is.
+ *   - `cacheReadInputTokens`/`cacheCreationInputTokens` DO accumulate cumulatively
+ *     (unlike `currentContext.tokens`) -- they feed the Sessions dashboard's
+ *     cache-reuse column (#1496).
+ *   - `costUSD` comes ONLY from `modelPricing.ts`'s estimate: the Anthropic SSE
+ *     stream the proxy tees carries no cost, and the SDK's exact figure comes
+ *     from `result.modelUsage`, which this path never sees. Always marked
+ *     `costEstimated: true` when present.
  */
 export function buildClaudeCliTokenUsage(
   prev: TokenUsage | undefined,
   usage: AssembledUsage,
   contextWindow: number,
+  model?: string,
 ): TokenUsage {
   const base = prev ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   const fillTokens = computeContextFillTokens(usage);
   const inputTokens = (base.inputTokens || 0) + (usage.inputTokens || 0);
   const outputTokens = (base.outputTokens || 0) + (usage.outputTokens || 0);
+  const cacheReadInputTokens = (base.cacheReadInputTokens || 0) + (usage.cacheReadInputTokens || 0);
+  const cacheCreationInputTokens = (base.cacheCreationInputTokens || 0) + (usage.cacheCreationInputTokens || 0);
+
+  const estimatedTurnCostUSD = estimateCostUSD(pricingModelForCliModel(model), {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadInputTokens: usage.cacheReadInputTokens,
+    cacheCreationInputTokens: usage.cacheCreationInputTokens,
+  });
+
   return {
     ...base,
     inputTokens,
     outputTokens,
     totalTokens: inputTokens + outputTokens,
+    cacheReadInputTokens,
+    cacheCreationInputTokens,
+    ...(estimatedTurnCostUSD !== undefined ? {
+      costUSD: (base.costUSD || 0) + estimatedTurnCostUSD,
+      costEstimated: true,
+    } : {}),
     // Legacy mirror (kept for backward compatibility; UI reads currentContext).
     contextWindow,
     currentContext: {
@@ -201,7 +253,7 @@ export async function logClaudeCliContextUsage(
       session?.model,
       observed1mForSession(input.sessionId, session?.model),
     );
-    const tokenUsage = buildClaudeCliTokenUsage(session?.tokenUsage, input.usage, contextWindow);
+    const tokenUsage = buildClaudeCliTokenUsage(session?.tokenUsage, input.usage, contextWindow, session?.model);
     await deps.updateTokenUsage(input.sessionId, tokenUsage);
     deps.notifyTokenUsage(input.sessionId, tokenUsage);
   } catch (err) {

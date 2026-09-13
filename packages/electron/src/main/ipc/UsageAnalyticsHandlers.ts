@@ -124,6 +124,17 @@ export async function registerUsageAnalyticsHandlers() {
     }
   });
 
+  // Get per-session usage breakdown (tokens/cost/cache/main-vs-subagent/per-model)
+  // for the AI Usage Report "Sessions" tab (#1496)
+  safeHandle('usage-analytics:get-session-breakdown', async (event, workspaceId?: string) => {
+    try {
+      return await analyticsService!.getSessionUsageBreakdown(workspaceId);
+    } catch (error) {
+      console.error('[UsageAnalyticsHandlers] Failed to get session usage breakdown:', error);
+      throw error;
+    }
+  });
+
   // Get document edit time series
   safeHandle('usage-analytics:get-document-time-series', async (
     event,
