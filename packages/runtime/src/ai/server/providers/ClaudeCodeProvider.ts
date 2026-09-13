@@ -134,7 +134,7 @@ import {
   extractStreamClosedToolName,
 } from './claudeCode/streamClosedRecovery';
 import { normalizeStructuredContextUsage } from '../utils/contextUsage';
-import { createTurnState } from './claudeCode/turnState';
+import { accumulateTurnModelUsage, attributeModelUsageByOrigin, createTurnState } from './claudeCode/turnState';
 import { buildTurnQuery, prepareTurnAttachments, resolveTurnPaths } from './claudeCode/turnPrologue';
 import { finishTurn, handleTurnError, type TurnEpilogueHost } from './claudeCode/turnEpilogue';
 import { applyTaskListMutation, sortTaskList, type TaskListItem } from './claudeCode/taskListReconstruct';
@@ -1081,6 +1081,16 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 if (item.modelUsage) state.modelUsageData = item.modelUsage;
                 break;
 
+              case 'step_model_usage': {
+                // Origin-tagged accumulation only, for attributing the final
+                // modelUsageData totals at `complete` -- never used as a
+                // token-count source itself. See turnState.ts.
+                const modelKey = item.model ?? 'unknown';
+                const bucket = state.originModelUsage[item.origin];
+                bucket[modelKey] = accumulateTurnModelUsage(bucket[modelKey], item.usage);
+                break;
+              }
+
               case 'context_report':
                 // Only ever set on a /context turn. Carried to the `complete`
                 // chunk so AIService can use the exact figures instead of
@@ -1402,6 +1412,14 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
             transcriptAdapter?.turnEnded(state.usageData, state.modelUsageData);
 
+            // Attribute the authoritative per-model totals (never recompute them --
+            // see NIM-689 comment above) to main vs. subagent using this turn's
+            // origin-tagged per-step tracking. #1496.
+            const { mainUsage, subagentUsage } = attributeModelUsageByOrigin(
+              state.modelUsageData,
+              state.originModelUsage,
+            );
+
             // Decide BEFORE yielding `complete` whether background sub-agents will
             // keep this turn draining. The consumer runs willResumeAfterCompletion()
             // synchronously while handling `complete` to decide whether to end the
@@ -1434,6 +1452,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 }
               } : {}),
               ...(state.modelUsageData ? { modelUsage: state.modelUsageData } : {}),
+              ...(mainUsage ? { mainUsage } : {}),
+              ...(subagentUsage ? { subagentUsage } : {}),
               ...(lastMessageContextTokens !== undefined ? { contextFillTokens: lastMessageContextTokens } : {}),
               ...(state.structuredContextUsage ? { contextReport: state.structuredContextUsage } : {}),
               ...(state.receivedCompactBoundary ? { contextCompacted: true } : {})

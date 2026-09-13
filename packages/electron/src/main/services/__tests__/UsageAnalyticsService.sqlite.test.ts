@@ -16,7 +16,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { SQLiteDatabase } from '../../database/sqlite/SQLiteDatabase';
 import type { AppDatabase } from '../../database/PGLiteDatabaseWorker';
-import { UsageAnalyticsService } from '../UsageAnalyticsService';
+import { UsageAnalyticsService, type SessionUsageBreakdownRow } from '../UsageAnalyticsService';
 
 const SCHEMA_DIR = path.resolve(__dirname, '../../database/sqlite/schemas');
 
@@ -50,9 +50,12 @@ async function insertSession(
     workspaceId?: string;
     provider?: string;
     model?: string | null;
+    title?: string;
     metadata?: Record<string, unknown>;
     createdAtMs?: number;
     providerSessionId?: string | null;
+    parentSessionId?: string | null;
+    createdBySessionId?: string | null;
   },
 ): Promise<void> {
   const createdAtIso = opts.createdAtMs
@@ -61,16 +64,18 @@ async function insertSession(
   await db.query(
     `INSERT INTO ai_sessions
        (id, workspace_id, title, provider, model, metadata,
-        provider_session_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+        provider_session_id, parent_session_id, created_by_session_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
     [
       opts.id,
       opts.workspaceId ?? 'ws1',
-      `Session ${opts.id}`,
+      opts.title ?? `Session ${opts.id}`,
       opts.provider ?? 'claude',
       opts.model ?? 'claude-sonnet-4',
       JSON.stringify(opts.metadata ?? {}),
       opts.providerSessionId ?? null,
+      opts.parentSessionId ?? null,
+      opts.createdBySessionId ?? null,
       createdAtIso,
     ],
   );
@@ -215,6 +220,98 @@ describe('UsageAnalyticsService on SQLite', () => {
       expect(a!.totalTokens).toBe(150);
       expect(a!.sessionCount).toBe(1);
       expect(a!.lastActivity).toBe(1_700_000_000_000);
+    });
+  });
+
+  describe('getSessionUsageBreakdown (#1496)', () => {
+    it('rolls a workstream up under its root, sorts by cost desc, and tolerates old-shape metadata', async () => {
+      // Root of a workstream: new-shape tokenUsage with the full #1496 fields.
+      await insertSession(db, {
+        id: 'root-session',
+        workspaceId: 'ws1',
+        title: 'Root workstream session',
+        provider: 'claude-code',
+        model: 'claude-code:opus',
+        metadata: {
+          phase: 'in-review',
+          tags: ['bug-fix'],
+          tokenUsage: {
+            inputTokens: 1000,
+            outputTokens: 200,
+            totalTokens: 1200,
+            costUSD: 2.5,
+            cacheReadInputTokens: 50,
+            cacheCreationInputTokens: 10,
+            mainUsage: { inputTokens: 800, outputTokens: 150, costUSD: 2.0 },
+            subagentUsage: { inputTokens: 200, outputTokens: 50, costUSD: 0.5 },
+            byModel: {
+              'claude-opus-5': { inputTokens: 800, outputTokens: 150, costUSD: 2.0 },
+              'claude-haiku-4-5': { inputTokens: 200, outputTokens: 50, costUSD: 0.5 },
+            },
+          },
+        },
+      });
+      // Child of the workstream: OLD-shape tokenUsage -- no cache split, no
+      // mainUsage/subagentUsage/byModel, no costEstimated. Must not crash and
+      // must still roll up under the root.
+      await insertSession(db, {
+        id: 'child-session',
+        workspaceId: 'ws1',
+        title: 'Child workstream session',
+        parentSessionId: 'root-session',
+        metadata: {
+          tokenUsage: { inputTokens: 40, outputTokens: 10, totalTokens: 50, costUSD: 0.1 },
+        },
+      });
+      // Unrelated solo session with NO tokenUsage at all (pre-tracking session).
+      await insertSession(db, {
+        id: 'solo-session',
+        workspaceId: 'ws1',
+        title: 'Solo session',
+        metadata: {},
+      });
+      // Different workspace -- must be excluded by the workspaceId filter.
+      await insertSession(db, {
+        id: 'other-ws-session',
+        workspaceId: 'ws2',
+        metadata: { tokenUsage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 99 } },
+      });
+
+      const rows = await svc.getSessionUsageBreakdown('ws1');
+
+      expect(rows.map((r) => r.id)).toEqual(['root-session', 'child-session', 'solo-session']);
+
+      const root = rows.find((r) => r.id === 'root-session') as SessionUsageBreakdownRow;
+      expect(root.workstreamRootId).toBe('root-session');
+      expect(root.phase).toBe('in-review');
+      expect(root.tags).toEqual(['bug-fix']);
+      expect(root.costUSD).toBe(2.5);
+      expect(root.costEstimated).toBe(false);
+      expect(root.cacheReadInputTokens).toBe(50);
+      expect(root.cacheCreationInputTokens).toBe(10);
+      expect(root.mainUsage).toEqual({ inputTokens: 800, outputTokens: 150, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 2.0 });
+      expect(root.subagentUsage).toEqual({ inputTokens: 200, outputTokens: 50, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.5 });
+      expect(root.byModel).toEqual({
+        'claude-opus-5': { inputTokens: 800, outputTokens: 150, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 2.0 },
+        'claude-haiku-4-5': { inputTokens: 200, outputTokens: 50, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.5 },
+      });
+
+      const child = rows.find((r) => r.id === 'child-session') as SessionUsageBreakdownRow;
+      expect(child.workstreamRootId).toBe('root-session');
+      expect(child.parentSessionId).toBe('root-session');
+      expect(child.costUSD).toBe(0.1);
+      expect(child.mainUsage).toBeUndefined();
+      expect(child.subagentUsage).toBeUndefined();
+      expect(child.byModel).toBeUndefined();
+      expect(child.cacheReadInputTokens).toBe(0);
+      expect(child.cacheCreationInputTokens).toBe(0);
+
+      const solo = rows.find((r) => r.id === 'solo-session') as SessionUsageBreakdownRow;
+      expect(solo.workstreamRootId).toBe('solo-session');
+      expect(solo.totalTokens).toBe(0);
+      expect(solo.costUSD).toBe(0);
+      expect(solo.phase).toBeUndefined();
+      expect(solo.tags).toBeUndefined();
     });
   });
 

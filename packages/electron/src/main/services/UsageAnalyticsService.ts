@@ -51,6 +51,43 @@ export interface DocumentEditStats {
   sizeBytes: number;
 }
 
+/** A tokens/cost bucket surfaced in the Sessions breakdown (main/subagent/per-model). */
+export interface TokenUsageBucketRow {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  costUSD?: number;
+}
+
+/**
+ * One session's usage row for the AI Usage Report "Sessions" tab (#1496).
+ * `workstreamRootId` groups a hierarchical parent/child workstream under one
+ * id (the top-most ancestor) so the UI can roll up cost across a workstream
+ * without a second round-trip.
+ */
+export interface SessionUsageBreakdownRow {
+  id: string;
+  title: string;
+  provider: string;
+  model: string | null;
+  phase?: string;
+  tags?: string[];
+  parentSessionId: string | null;
+  createdBySessionId: string | null;
+  workstreamRootId: string;
+  totalTokens: number;
+  costUSD: number;
+  costEstimated: boolean;
+  mainUsage?: TokenUsageBucketRow;
+  subagentUsage?: TokenUsageBucketRow;
+  byModel?: Record<string, TokenUsageBucketRow>;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export class UsageAnalyticsService {
   constructor(private db: AppDatabase) {}
 
@@ -184,6 +221,97 @@ export class UsageAnalyticsService {
       totalTokens: parseInt(row.total_tokens) || 0,
       lastActivity: toEpochMs(row.last_activity_at) || Date.now(),
     }));
+  }
+
+  /**
+   * Per-task/session usage breakdown for the AI Usage Report "Sessions" tab
+   * (#1496): tokens, cost (SDK-exact or pricing-table estimate), cache
+   * read/write, main-vs-subagent split, and per-model breakdown, plus enough
+   * of the hierarchy to roll a workstream's children up under one root.
+   *
+   * The parent/child walk happens here in JS, not a recursive SQL CTE --
+   * consistent with `getTimeSeriesDataPortable`'s existing bias towards JS-side
+   * aggregation once the query stops being a genuinely SQL-divergent operation
+   * (date truncation is; a parent-pointer walk isn't, so there's no reason to
+   * maintain two SQL dialects for it).
+   */
+  async getSessionUsageBreakdown(workspaceId?: string): Promise<SessionUsageBreakdownRow[]> {
+    const whereClause = workspaceId ? `WHERE workspace_id = $1` : '';
+    const params = workspaceId ? [workspaceId] : [];
+
+    const result = await this.db.query<{
+      id: string;
+      title: string;
+      provider: string;
+      model: string | null;
+      parent_session_id: string | null;
+      created_by_session_id: string | null;
+      created_at: unknown;
+      updated_at: unknown;
+      metadata: unknown;
+    }>(
+      `SELECT id, title, provider, model, parent_session_id, created_by_session_id,
+              created_at, updated_at, metadata
+       FROM ai_sessions
+       ${whereClause}`,
+      params,
+    );
+
+    // Parent lookup for the workstream-root walk. Only sessions in THIS result
+    // set (i.e. this workspace, when filtered) count as resolvable ancestors --
+    // a parent outside the filtered set is treated as the root itself.
+    const parentById = new Map<string, string | null>();
+    for (const row of result.rows) {
+      parentById.set(row.id, row.parent_session_id ?? null);
+    }
+
+    const resolveWorkstreamRootId = (id: string): string => {
+      const seen = new Set<string>([id]);
+      let current = id;
+      for (;;) {
+        const parent = parentById.get(current);
+        if (!parent || !parentById.has(parent) || seen.has(parent)) return current;
+        seen.add(parent);
+        current = parent;
+      }
+    };
+
+    const rows: SessionUsageBreakdownRow[] = result.rows.map((row) => {
+      const metadata = parseJsonRecord(row.metadata) ?? {};
+      const tokenUsageRaw = metadata.tokenUsage;
+      const tokenUsage: Record<string, unknown> =
+        tokenUsageRaw && typeof tokenUsageRaw === 'object' ? tokenUsageRaw as Record<string, unknown> : {};
+
+      const inputTokens = Number(tokenUsage.inputTokens ?? 0) || 0;
+      const outputTokens = Number(tokenUsage.outputTokens ?? 0) || 0;
+      const totalTokens = Number(tokenUsage.totalTokens ?? inputTokens + outputTokens) || 0;
+      const costUSD = Number(tokenUsage.costUSD ?? 0) || 0;
+
+      return {
+        id: row.id,
+        title: row.title || 'Untitled Session',
+        provider: row.provider,
+        model: row.model ?? null,
+        phase: typeof metadata.phase === 'string' ? metadata.phase : undefined,
+        tags: Array.isArray(metadata.tags) ? metadata.tags as string[] : undefined,
+        parentSessionId: row.parent_session_id ?? null,
+        createdBySessionId: row.created_by_session_id ?? null,
+        workstreamRootId: resolveWorkstreamRootId(row.id),
+        totalTokens,
+        costUSD,
+        costEstimated: tokenUsage.costEstimated === true,
+        mainUsage: normalizeTokenUsageBucket(tokenUsage.mainUsage),
+        subagentUsage: normalizeTokenUsageBucket(tokenUsage.subagentUsage),
+        byModel: normalizeTokenUsageByModel(tokenUsage.byModel),
+        cacheReadInputTokens: Number(tokenUsage.cacheReadInputTokens ?? 0) || 0,
+        cacheCreationInputTokens: Number(tokenUsage.cacheCreationInputTokens ?? 0) || 0,
+        createdAt: toEpochMs(row.created_at) || 0,
+        updatedAt: toEpochMs(row.updated_at) || 0,
+      };
+    });
+
+    rows.sort((a, b) => b.costUSD - a.costUSD);
+    return rows;
   }
 
   /**
@@ -732,6 +860,29 @@ function parseJsonRecord(raw: unknown): Record<string, any> | null {
     }
   }
   return raw && typeof raw === 'object' ? raw as Record<string, any> : null;
+}
+
+/** Defensively parse one `TokenUsageBucket` from already-parsed metadata JSON (old-shape sessions lack it entirely). */
+function normalizeTokenUsageBucket(raw: unknown): TokenUsageBucketRow | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const bucket = raw as Record<string, unknown>;
+  return {
+    inputTokens: Number(bucket.inputTokens ?? 0) || 0,
+    outputTokens: Number(bucket.outputTokens ?? 0) || 0,
+    cacheReadInputTokens: Number(bucket.cacheReadInputTokens ?? 0) || 0,
+    cacheCreationInputTokens: Number(bucket.cacheCreationInputTokens ?? 0) || 0,
+    costUSD: Number(bucket.costUSD ?? 0) || 0,
+  };
+}
+
+function normalizeTokenUsageByModel(raw: unknown): Record<string, TokenUsageBucketRow> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Record<string, TokenUsageBucketRow> = {};
+  for (const [modelName, value] of Object.entries(raw as Record<string, unknown>)) {
+    const bucket = normalizeTokenUsageBucket(value);
+    if (bucket) out[modelName] = bucket;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function readTokenUsage(rawMetadata: unknown): {

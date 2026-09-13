@@ -128,6 +128,21 @@ export interface TurnState {
   /** Per-model usage from the SDK's `result` chunk; the only per-model cost source. */
   modelUsageData: Record<string, TurnModelUsage> | undefined;
 
+  /**
+   * Per-step token counts, tagged by origin (`main` lead conversation vs.
+   * `subagent` Task-tool runs) and keyed by the model that produced them.
+   * Populated from EVERY per-step assistant chunk this turn -- including
+   * sub-agent chunks, unlike `usageData`/`lastAssistantUsage` which guard
+   * those out (NIM-671/#457, NIM-868). Used ONLY to decide, at `complete`,
+   * which bucket (`mainUsage`/`subagentUsage`) each of the authoritative
+   * `modelUsageData` entries belongs to -- never to recompute totals, or it
+   * reintroduces the modelUsage double-counting fixed by NIM-689.
+   */
+  readonly originModelUsage: {
+    main: Record<string, TurnModelUsage>;
+    subagent: Record<string, TurnModelUsage>;
+  };
+
   /** `tool_use` id → the call object yielded to the consumer and mutated on result. */
   readonly toolCallsById: Map<string, TurnToolCall>;
 }
@@ -164,7 +179,67 @@ export function createTurnState(init: {
     lastAssistantUsage: undefined,
     structuredContextUsage: undefined,
     modelUsageData: undefined,
+    originModelUsage: { main: {}, subagent: {} },
 
     toolCallsById: new Map(),
   };
+}
+
+/** Accumulate one per-step usage snapshot (SDK snake_case) into a running `TurnModelUsage` bucket. */
+export function accumulateTurnModelUsage(
+  existing: TurnModelUsage | undefined,
+  step: TurnUsage,
+): TurnModelUsage {
+  return {
+    inputTokens: (existing?.inputTokens || 0) + (step.input_tokens || 0),
+    outputTokens: (existing?.outputTokens || 0) + (step.output_tokens || 0),
+    cacheReadInputTokens: (existing?.cacheReadInputTokens || 0) + (step.cache_read_input_tokens || 0),
+    cacheCreationInputTokens: (existing?.cacheCreationInputTokens || 0) + (step.cache_creation_input_tokens || 0),
+  };
+}
+
+/** Sum two authoritative `TurnModelUsage` entries (camelCase, as found in `modelUsageData`). */
+function sumTurnModelUsage(a: TurnModelUsage | undefined, b: TurnModelUsage): TurnModelUsage {
+  return {
+    inputTokens: (a?.inputTokens || 0) + (b.inputTokens || 0),
+    outputTokens: (a?.outputTokens || 0) + (b.outputTokens || 0),
+    cacheReadInputTokens: (a?.cacheReadInputTokens || 0) + (b.cacheReadInputTokens || 0),
+    cacheCreationInputTokens: (a?.cacheCreationInputTokens || 0) + (b.cacheCreationInputTokens || 0),
+    costUSD: (a?.costUSD || 0) + (b.costUSD || 0),
+  };
+}
+
+/**
+ * Split the SDK's authoritative per-model totals (`modelUsageData`, from the
+ * terminal `result` chunk) into `mainUsage`/`subagentUsage` buckets, using
+ * `originModelUsage` ONLY to decide which bucket each model's ENTIRE entry
+ * belongs to -- never to recompute the totals themselves (that would
+ * reintroduce the modelUsage double-counting NIM-689 fixed).
+ *
+ * Whole-model attribution, not token-level splitting: a model that appeared
+ * under `main` this turn (even once) has its full authoritative total counted
+ * as main. This is deliberately conservative -- it correctly handles the
+ * common case (a sub-agent runs a cheaper model than the lead) and documents,
+ * rather than fixes, the rare case where main and a sub-agent share a model in
+ * the same turn (that model's total lands entirely in `mainUsage`).
+ */
+export function attributeModelUsageByOrigin(
+  modelUsageData: Record<string, TurnModelUsage> | undefined,
+  originModelUsage: TurnState['originModelUsage'],
+): { mainUsage: TurnModelUsage | undefined; subagentUsage: TurnModelUsage | undefined } {
+  if (!modelUsageData) return { mainUsage: undefined, subagentUsage: undefined };
+
+  let mainUsage: TurnModelUsage | undefined;
+  let subagentUsage: TurnModelUsage | undefined;
+
+  for (const [modelName, modelStats] of Object.entries(modelUsageData)) {
+    const isMain = Object.prototype.hasOwnProperty.call(originModelUsage.main, modelName);
+    if (isMain) {
+      mainUsage = sumTurnModelUsage(mainUsage, modelStats);
+    } else {
+      subagentUsage = sumTurnModelUsage(subagentUsage, modelStats);
+    }
+  }
+
+  return { mainUsage, subagentUsage };
 }

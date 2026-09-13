@@ -235,6 +235,72 @@ describe('ClaudeCodeTranscriptAdapter', () => {
     });
   });
 
+  describe('processChunk: subagent-vs-main origin tagging (step_model_usage, #1496)', () => {
+    it('tags a lead chunk as origin "main", alongside the existing guarded usage item', () => {
+      const items = adapter.processChunk({
+        type: 'assistant',
+        message: {
+          id: 'msg-main-1',
+          content: [{ type: 'text', text: 'hi' }],
+          usage: { input_tokens: 10, output_tokens: 5 },
+          model: 'claude-sonnet-5',
+        },
+      });
+      expect(items.find(i => i.kind === 'usage')).toMatchObject({ kind: 'usage', isPerStep: true });
+      expect(items.find(i => i.kind === 'step_model_usage')).toEqual({
+        kind: 'step_model_usage',
+        origin: 'main',
+        model: 'claude-sonnet-5',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+    });
+
+    it('tags a sub-agent chunk as origin "subagent" WITHOUT emitting the guarded usage item (NIM-868 untouched)', () => {
+      const items = adapter.processChunk({
+        type: 'assistant',
+        parent_tool_use_id: 'tool-task-1',
+        message: {
+          id: 'msg-sub-1',
+          content: [{ type: 'text', text: 'sub output' }],
+          usage: { input_tokens: 3, output_tokens: 2 },
+          model: 'claude-haiku-4-5',
+        },
+      });
+      // NIM-868 guard stays intact: no isPerStep `usage` item for sub-agent chunks.
+      expect(items.find(i => i.kind === 'usage')).toBeUndefined();
+      // The new parallel emission fires regardless, tagged by origin.
+      expect(items.find(i => i.kind === 'step_model_usage')).toEqual({
+        kind: 'step_model_usage',
+        origin: 'subagent',
+        model: 'claude-haiku-4-5',
+        usage: { input_tokens: 3, output_tokens: 2 },
+      });
+    });
+
+    it('does not emit step_model_usage when the chunk carries no message usage', () => {
+      const items = adapter.processChunk({
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'no usage here' }] },
+      });
+      expect(items.find(i => i.kind === 'step_model_usage')).toBeUndefined();
+    });
+
+    it('still suppresses session_id capture for the same sub-agent chunk (NIM-671 untouched)', () => {
+      const items = adapter.processChunk({
+        type: 'assistant',
+        session_id: 'subagent-session-xyz',
+        parent_tool_use_id: 'tool-task-1',
+        message: {
+          content: [{ type: 'text', text: 'sub output' }],
+          usage: { input_tokens: 3, output_tokens: 2 },
+          model: 'claude-haiku-4-5',
+        },
+      });
+      expect(items.find(i => i.kind === 'session_id')).toBeUndefined();
+      expect(items.find(i => i.kind === 'step_model_usage')).toBeDefined();
+    });
+  });
+
   describe('processChunk: session_id capture', () => {
     it('returns session_id from system init chunk (authoritative source)', () => {
       const items = adapter.processChunk({
