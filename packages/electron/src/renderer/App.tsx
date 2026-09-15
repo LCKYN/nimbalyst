@@ -1399,6 +1399,7 @@ export default function App() {
       org: 'Organization',
       'pr-review': 'PR Review',
       settings: 'Settings',
+      'usage-report': 'AI Usage',
     };
     return labels[activeMode];
   }, [activeMode]);
@@ -3068,6 +3069,19 @@ export default function App() {
                 )}
               </Activity>
             </div>
+
+            {/* AI Usage Mode - mounted only while active. Unlike the modes
+                around it this holds no editor or draft state worth preserving,
+                and each mount re-queries usage from the database, so keeping it
+                resident would run that query in every window at startup. */}
+            {activeMode === 'usage-report' && !isFullscreenPanelActive && (
+              <div
+                data-layout="usage-report-mode-wrapper"
+                className="flex flex-1 flex-col overflow-hidden min-h-0"
+              >
+                <AIUsageReport />
+              </div>
+            )}
 
             {/* Collab Mode - always mounted, visibility controlled by display */}
             <div

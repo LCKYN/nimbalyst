@@ -18,4 +18,4 @@
  * The standalone organization window (?mode=team-management) still exists as
  * the cross-org surface; `org` is the project's own organization, hosted here.
  */
-export type ContentMode = 'files' | 'agent' | 'tracker' | 'collab' | 'org' | 'pr-review' | 'settings';
+export type ContentMode = 'files' | 'agent' | 'tracker' | 'collab' | 'org' | 'pr-review' | 'settings' | 'usage-report';
