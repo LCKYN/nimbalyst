@@ -39,6 +39,9 @@ vi.mock("@nimbalyst/runtime/ai/server", () => ({
   onAgentMessageBatch: vi.fn(() => vi.fn()),
   buildMetaAgentSystemPrompt: vi.fn(),
   buildDevAgentSystemPrompt: vi.fn(),
+  // mcpEndpointRouting builds its endpoint->configKey map at module scope, so
+  // this has to be iterable even though these tests route no MCP traffic.
+  MCP_FIRST_PARTY_TOPOLOGY: [],
 }));
 
 vi.mock("@nimbalyst/runtime/ai/server/SessionStateManager", () => ({
@@ -116,7 +119,10 @@ vi.mock("../../CodexEditWindowRegistry", () => ({
 }));
 
 vi.mock("../../ToolCallMatcher", () => ({
-  toolCallMatcher: { matchSession: vi.fn() },
+  // The post-turn matcher runs from a setTimeout and chains `.then()` on this,
+  // so it has to be a promise. Returning undefined threw after the test had
+  // already passed, which surfaces as an unhandled error, not a failure.
+  toolCallMatcher: { matchSession: vi.fn(async () => 0) },
   unwrapShellCommand: vi.fn(),
 }));
 
@@ -160,6 +166,7 @@ vi.mock("../../AgentWorkflowService", () => ({
 
 vi.mock("../../../mcp/metaAgentServer", () => ({
   getMetaAgentOpenAITools: vi.fn(),
+  META_AGENT_TOOL_DEFS: [],
 }));
 
 vi.mock("../../../mcp/devAgentTools", () => ({
@@ -191,6 +198,19 @@ vi.mock("../sessionSettlePolicy", () => ({
 
 vi.mock("../../tutorial/tutorialAnalytics", () => ({
   captureTutorialMilestone: vi.fn(),
+}));
+
+// `handle` opens a session-inbox turn for the claude-code and openai-codex
+// providers only, and that reads ai_agent_messages out of PGLite. The turn
+// config suites below run other providers and never reach it; the claude-code
+// usage suite does, and without this it aborts on "Database not initialized"
+// before any usage is persisted.
+vi.mock("../sessionInboxService", () => ({
+  sessionInbox: {
+    begin: vi.fn(async () => undefined),
+    end: vi.fn(async () => {}),
+    current: vi.fn(() => undefined),
+  },
 }));
 
 import { MessageStreamingHandler } from "../MessageStreamingHandler";

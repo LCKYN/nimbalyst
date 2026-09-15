@@ -21,6 +21,7 @@
  */
 
 import type { ParsedContextUsage } from '../../utils/contextUsage';
+import type { TokenUsageBucket } from '../../types';
 
 /** Token counts as the SDK reports them (snake_case wire shape). */
 export interface TurnUsage {
@@ -199,7 +200,10 @@ export function accumulateTurnModelUsage(
 }
 
 /** Sum two authoritative `TurnModelUsage` entries (camelCase, as found in `modelUsageData`). */
-function sumTurnModelUsage(a: TurnModelUsage | undefined, b: TurnModelUsage): TurnModelUsage {
+// Returns a TokenUsageBucket, not a TurnModelUsage: every field below is
+// already a concrete number, and the buckets ride out on `StreamChunk`'s
+// `mainUsage`/`subagentUsage`, which require `inputTokens`/`outputTokens`.
+function sumTurnModelUsage(a: TokenUsageBucket | undefined, b: TurnModelUsage): TokenUsageBucket {
   return {
     inputTokens: (a?.inputTokens || 0) + (b.inputTokens || 0),
     outputTokens: (a?.outputTokens || 0) + (b.outputTokens || 0),
@@ -226,11 +230,11 @@ function sumTurnModelUsage(a: TurnModelUsage | undefined, b: TurnModelUsage): Tu
 export function attributeModelUsageByOrigin(
   modelUsageData: Record<string, TurnModelUsage> | undefined,
   originModelUsage: TurnState['originModelUsage'],
-): { mainUsage: TurnModelUsage | undefined; subagentUsage: TurnModelUsage | undefined } {
+): { mainUsage: TokenUsageBucket | undefined; subagentUsage: TokenUsageBucket | undefined } {
   if (!modelUsageData) return { mainUsage: undefined, subagentUsage: undefined };
 
-  let mainUsage: TurnModelUsage | undefined;
-  let subagentUsage: TurnModelUsage | undefined;
+  let mainUsage: TokenUsageBucket | undefined;
+  let subagentUsage: TokenUsageBucket | undefined;
 
   for (const [modelName, modelStats] of Object.entries(modelUsageData)) {
     const isMain = Object.prototype.hasOwnProperty.call(originModelUsage.main, modelName);
