@@ -1,4 +1,7 @@
 // @vitest-environment node
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
 import {
   getHostEnvironment,
@@ -86,18 +89,29 @@ describe('HostEnvironment', () => {
 
 describe('claudeCodeEnvironment against an injected host', () => {
   it('takes the packaged branch and derives the unpacked sibling from the injected app path', async () => {
-    setHostEnvironment({
-      isPackaged: () => true,
-      getAppPath: () => '/Applications/Nimbalyst.app/Contents/Resources/app.asar',
-    });
+    // The app path must point somewhere genuinely empty. Pointing it at the
+    // real `/Applications/Nimbalyst.app` made the assertion depend on whether
+    // the developer happens to have Nimbalyst installed: the packaged branch
+    // returns `<app path dir>/claude-runtime/<platform>-<arch>/<binary>` when
+    // that file exists, so this passed on CI and failed on every machine with
+    // a shipped build in `/Applications`.
+    const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbalyst-host-env-'));
+    try {
+      setHostEnvironment({
+        isPackaged: () => true,
+        getAppPath: () => path.join(appRoot, 'Contents', 'Resources', 'app.asar'),
+      });
 
-    const { resolveNativeBinaryPath } = await import('../../electron/claudeCodeEnvironment');
+      const { resolveNativeBinaryPath } = await import('../../electron/claudeCodeEnvironment');
 
-    // The packaged branch constructs a path under app.asar.unpacked and checks
-    // the filesystem. Nothing is there in a test, so the honest answer is
-    // undefined -- the point is that it took the packaged branch at all, which
-    // it can only do by reading the injected host.
-    expect(resolveNativeBinaryPath()).toBeUndefined();
+      // The packaged branch constructs a path under app.asar.unpacked and
+      // checks the filesystem. Nothing is there, so the honest answer is
+      // undefined -- the point is that it took the packaged branch at all,
+      // which it can only do by reading the injected host.
+      expect(resolveNativeBinaryPath()).toBeUndefined();
+    } finally {
+      fs.rmSync(appRoot, { recursive: true, force: true });
+    }
   });
 
   it('reports no orphaned self-update files when the host is not packaged', async () => {
