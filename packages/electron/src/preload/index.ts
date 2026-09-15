@@ -1724,7 +1724,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Per-tool usage (tip targeting rollup + AI Usage Report Tools tab)
   toolUsage: {
     getRollup: () => ipcRenderer.invoke('tool-usage:get-rollup'),
-    getReport: (workspaceId?: string) => ipcRenderer.invoke('tool-usage:get-report', workspaceId),
+    getReport: (workspaceId?: string, sinceMs?: number) =>
+      ipcRenderer.invoke('tool-usage:get-report', workspaceId, sinceMs),
     backfill: () => ipcRenderer.invoke('tool-usage:backfill'),
   },
 

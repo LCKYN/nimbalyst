@@ -858,7 +858,7 @@ interface ElectronAPI {
   // Per-tool usage (tip targeting rollup + AI Usage Report Tools tab)
   toolUsage: {
     getRollup: () => Promise<Record<string, { count: number; firstUsed: string; lastUsed: string }>>;
-    getReport: (workspaceId?: string) => Promise<{
+    getReport: (workspaceId?: string, sinceMs?: number) => Promise<{
       topTools: Array<{ toolName: string; mcpServer: string | null; count: number; errorCount: number }>;
       byKind: { builtin: number; mcp: number };
       byProvider: Array<{ provider: string; count: number }>;

@@ -11,6 +11,7 @@ import {
 
 interface ToolUsageProps {
   workspaceId?: string;
+  sinceMs?: number;
 }
 
 interface ToolUsageReportRow {
@@ -42,7 +43,7 @@ function displayProjectName(projectPath: string): string {
   return projectPath.split(/[\\/]/).filter(Boolean).pop() || projectPath;
 }
 
-export const ToolUsage: React.FC<ToolUsageProps> = ({ workspaceId }) => {
+export const ToolUsage: React.FC<ToolUsageProps> = ({ workspaceId, sinceMs }) => {
   const [report, setReport] = useState<ToolUsageReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [backfilling, setBackfilling] = useState(false);
@@ -52,6 +53,7 @@ export const ToolUsage: React.FC<ToolUsageProps> = ({ workspaceId }) => {
     try {
       const result = (await window.electronAPI.toolUsage.getReport(
         workspaceId,
+        sinceMs,
       )) as ToolUsageReport;
       setReport(result);
     } catch (error) {
@@ -60,7 +62,7 @@ export const ToolUsage: React.FC<ToolUsageProps> = ({ workspaceId }) => {
     } finally {
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, sinceMs]);
 
   useEffect(() => {
     void loadData();

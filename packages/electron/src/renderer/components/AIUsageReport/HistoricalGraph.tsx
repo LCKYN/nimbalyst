@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { SectionHeading } from './ReportControls';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface HistoricalGraphProps {
   workspaceId?: string;
+  sinceMs?: number;
 }
 
 interface TimeSeriesDataPoint {
@@ -13,9 +15,8 @@ interface TimeSeriesDataPoint {
   sessionCount: number;
 }
 
-export const HistoricalGraph: React.FC<HistoricalGraphProps> = ({ workspaceId }) => {
+export const HistoricalGraph: React.FC<HistoricalGraphProps> = ({ workspaceId, sinceMs }) => {
   const [data, setData] = useState<TimeSeriesDataPoint[]>([]);
-  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,13 +24,9 @@ export const HistoricalGraph: React.FC<HistoricalGraphProps> = ({ workspaceId })
       setLoading(true);
       try {
         const now = Date.now();
-        const ranges = {
-          week: 7 * 24 * 60 * 60 * 1000,
-          month: 30 * 24 * 60 * 60 * 1000,
-          quarter: 90 * 24 * 60 * 60 * 1000,
-          year: 365 * 24 * 60 * 60 * 1000,
-        };
-        const startDate = now - ranges[timeRange];
+        // The report's shared range decides the window. "All time" has no lower
+        // bound, so fall back to a year rather than querying from the epoch.
+        const startDate = sinceMs ?? now - 365 * 24 * 60 * 60 * 1000;
 
         const timeSeries = await window.electronAPI.invoke(
           'usage-analytics:get-time-series',
@@ -46,7 +43,7 @@ export const HistoricalGraph: React.FC<HistoricalGraphProps> = ({ workspaceId })
       }
     };
     loadData();
-  }, [timeRange, workspaceId]);
+  }, [workspaceId, sinceMs]);
 
   if (loading) {
     return <div className="historical-graph-loading flex items-center justify-center min-h-[400px] text-nim-muted text-base">Loading...</div>;
@@ -62,24 +59,7 @@ export const HistoricalGraph: React.FC<HistoricalGraphProps> = ({ workspaceId })
 
   return (
     <div className="historical-graph flex flex-col gap-6">
-      <div className="historical-graph-controls flex justify-between items-center">
-        <h3 className="m-0 text-lg font-semibold text-nim">Token Usage Over Time</h3>
-        <div className="time-range-selector flex gap-1">
-          {(['week', 'month', 'quarter', 'year'] as const).map((range) => (
-            <button
-              key={range}
-              className={`px-3.5 py-1.5 border rounded text-[13px] cursor-pointer transition-all duration-200 ${
-                timeRange === range
-                  ? 'bg-[var(--nim-primary)] text-white border-[var(--nim-primary)]'
-                  : 'bg-nim-secondary border-nim text-nim-muted hover:bg-nim-hover hover:text-nim'
-              }`}
-              onClick={() => setTimeRange(range)}
-            >
-              {range.charAt(0).toUpperCase() + range.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
+      <SectionHeading>Token Usage Over Time</SectionHeading>
 
       {chartData.length > 0 ? (
         <ResponsiveContainer width="100%" height={400}>
@@ -96,8 +76,10 @@ export const HistoricalGraph: React.FC<HistoricalGraphProps> = ({ workspaceId })
               }}
             />
             <Legend />
-            <Line type="monotone" dataKey="Input Tokens" stroke="#8884d8" strokeWidth={2} />
-            <Line type="monotone" dataKey="Output Tokens" stroke="#82ca9d" strokeWidth={2} />
+            {/* Were recharts' stock #8884d8 / #82ca9d -- not Nimbalyst colours,
+                and fixed regardless of theme. */}
+            <Line type="monotone" dataKey="Input Tokens" stroke="var(--nim-primary)" strokeWidth={2} />
+            <Line type="monotone" dataKey="Output Tokens" stroke="var(--nim-success)" strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
       ) : (

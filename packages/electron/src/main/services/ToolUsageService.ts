@@ -160,9 +160,21 @@ export class ToolUsageService {
   }
 
   /** Aggregates for the AI Usage Report Tools tab. */
-  async getReport(workspaceId?: string): Promise<ToolUsageReport> {
-    const where = workspaceId ? `WHERE project_path = $1` : '';
-    const params = workspaceId ? [workspaceId] : [];
+  async getReport(workspaceId?: string, sinceMs?: number): Promise<ToolUsageReport> {
+    // `day` is TEXT in YYYY-MM-DD form, which orders lexicographically the same
+    // way it orders chronologically -- so a plain `>=` against an ISO date is
+    // correct here and needs no date function on either backend.
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (workspaceId) {
+      params.push(workspaceId);
+      conditions.push(`project_path = $${params.length}`);
+    }
+    if (sinceMs) {
+      params.push(new Date(sinceMs).toISOString().slice(0, 10));
+      conditions.push(`day >= $${params.length}`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const [topRes, kindRes, providerRes, timeRes, projectRes] =
       await Promise.all([

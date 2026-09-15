@@ -1,13 +1,22 @@
 import React, { useEffect, useState } from 'react';
+import { useFloating, offset, flip, shift, FloatingPortal } from '@floating-ui/react';
+import { SectionHeading, SegmentedControl } from './ReportControls';
 
 interface ActivityHeatmapProps {
   workspaceId?: string;
+  sinceMs?: number;
 }
 
 interface ActivityHeatmapData {
   hourOfDay: number;
   dayOfWeek: number;
   activityCount: number;
+}
+
+interface TokenHeatmapData {
+  hourOfDay: number;
+  dayOfWeek: number;
+  totalTokens: number;
 }
 
 type ActivityMetric = 'sessions' | 'messages' | 'edits';
@@ -27,10 +36,28 @@ const METRIC_LABELS: Record<ActivityMetric, { title: string; description: string
   },
 };
 
-export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ workspaceId }) => {
+export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ workspaceId, sinceMs }) => {
   const [data, setData] = useState<ActivityHeatmapData[]>([]);
+  const [tokenData, setTokenData] = useState<TokenHeatmapData[]>([]);
   const [loading, setLoading] = useState(true);
   const [metric, setMetric] = useState<ActivityMetric>('messages');
+  // One tooltip for the whole grid, re-anchored to whichever cell is hovered.
+  // 168 cells, so a floating instance per cell would be 168 of them mounted.
+  const [hoveredCell, setHoveredCell] = useState<{ text: string; rect: DOMRect } | null>(null);
+
+  const { refs, floatingStyles } = useFloating({
+    placement: 'top',
+    middleware: [offset(6), flip({ padding: 8 }), shift({ padding: 8 })],
+  });
+
+  // A cell's rect is the anchor, not the cell element itself: the cells scale
+  // on hover, and `setPositionReference` takes the virtual element. Passing one
+  // through `elements.reference` is rejected by floating-ui.
+  const { setPositionReference } = refs;
+  useEffect(() => {
+    if (!hoveredCell) return;
+    setPositionReference({ getBoundingClientRect: () => hoveredCell.rect });
+  }, [hoveredCell, setPositionReference]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -43,7 +70,8 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ workspaceId })
           'usage-analytics:get-activity-heatmap',
           workspaceId,
           metric,
-          timezoneOffsetMinutes
+          timezoneOffsetMinutes,
+          sinceMs
         );
         setData(heatmapData);
       } catch (error) {
@@ -53,7 +81,35 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ workspaceId })
       }
     };
     loadData();
-  }, [workspaceId, metric]);
+  }, [workspaceId, metric, sinceMs]);
+
+  // Deliberately a separate load, not part of the one above. Tokens come from a
+  // scan of the raw message log, which is far slower than counting timestamps --
+  // gating the grid on it would leave the whole heatmap blank meanwhile. The
+  // readout picks tokens up when they arrive and reads fine without them.
+  // Metric-independent: the hour's token cost is the same whichever count the
+  // cells are showing.
+  useEffect(() => {
+    let cancelled = false;
+    const loadTokens = async () => {
+      try {
+        const result = await window.electronAPI.invoke(
+          'usage-analytics:get-token-heatmap',
+          workspaceId,
+          new Date().getTimezoneOffset(),
+          sinceMs,
+        );
+        if (!cancelled) setTokenData(Array.isArray(result) ? result : []);
+      } catch (error) {
+        console.error('Failed to load token heatmap:', error);
+        if (!cancelled) setTokenData([]);
+      }
+    };
+    void loadTokens();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, sinceMs]);
 
   if (loading) {
     return (
@@ -77,6 +133,11 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ workspaceId })
     activityMap.set(key, d.activityCount);
   });
 
+  const tokenMap = new Map<string, number>();
+  tokenData.forEach((d) => {
+    tokenMap.set(`${d.dayOfWeek}-${d.hourOfDay}`, d.totalTokens);
+  });
+
   const getIntensity = (dayOfWeek: number, hour: number): number => {
     const key = `${dayOfWeek}-${hour}`;
     const count = activityMap.get(key) || 0;
@@ -88,25 +149,17 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ workspaceId })
   return (
     <div className="activity-heatmap flex flex-col gap-3">
       <div className="heatmap-header-section flex justify-between items-start gap-4">
-        <div>
-          <h3 className="m-0 text-base font-semibold text-[var(--nim-text)]">
-            {currentMetricLabels.title}
-          </h3>
-          <p className="heatmap-description mt-1 mb-0 text-xs text-[var(--nim-text-muted)]">
-            {currentMetricLabels.description}
-          </p>
-        </div>
-        <div className="metric-toggle flex gap-1 bg-[var(--nim-bg-secondary)] p-1 rounded-md">
-          {(['messages', 'edits', 'sessions'] as ActivityMetric[]).map((m) => (
-            <button
-              key={m}
-              className={`metric-button border-none px-3 py-1.5 text-xs font-medium text-[var(--nim-text-muted)] cursor-pointer rounded transition-all duration-200 whitespace-nowrap hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${metric === m ? 'active bg-[var(--nim-bg)] text-[var(--nim-text)] shadow-sm' : ''}`}
-              onClick={() => setMetric(m)}
-            >
-              {METRIC_LABELS[m].title.replace(/^(AI |Documents )/g, '')}
-            </button>
-          ))}
-        </div>
+        <SectionHeading description={currentMetricLabels.description}>
+          {currentMetricLabels.title}
+        </SectionHeading>
+        <SegmentedControl
+          options={(['messages', 'edits', 'sessions'] as ActivityMetric[]).map((value) => ({
+            value,
+            label: METRIC_LABELS[value].title.replace(/^(AI |Documents )/g, ''),
+          }))}
+          value={metric}
+          onChange={setMetric}
+        />
       </div>
 
       <div className="heatmap-container overflow-x-auto">
@@ -138,17 +191,40 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ workspaceId })
                   if (metric === 'edits') return `${count} edit${count !== 1 ? 's' : ''} saved`;
                   return `${count} session${count !== 1 ? 's' : ''} started`;
                 })();
+                const tokensThisHour = tokenMap.get(`${dayIndex}-${hour}`);
+                const cellLabel =
+                  `${day} ${hour.toString().padStart(2, '0')}:00 - ${tooltipText}` +
+                  // Omitted entirely rather than shown as 0 while the scan is
+                  // still running -- "0 tokens" and "not loaded yet" must not
+                  // look the same.
+                  (tokensThisHour ? ` · ${tokensThisHour.toLocaleString()} tokens` : '');
                 return (
                   <div
                     key={hour}
-                    className="heatmap-cell aspect-square rounded-sm bg-nim border border-nim cursor-pointer transition-all duration-200 flex items-center justify-center min-h-[20px] max-h-[28px] relative hover:scale-110 hover:z-10 hover:border-nim"
+                    className="heatmap-cell aspect-square rounded-sm bg-nim border border-nim cursor-pointer transition-all duration-200 flex items-center justify-center min-h-[24px] max-h-[32px] relative hover:scale-110 hover:z-10 hover:border-nim"
                     style={{
-                      backgroundColor: intensity > 0 ? `rgba(59, 130, 246, ${intensity * 0.8})` : undefined,
+                      // `color-mix` rather than a literal rgba: the cells and
+                      // the legend below must be the same colour, and both must
+                      // follow the theme. The old literal happened to equal
+                      // --nim-primary in the default dark theme and nowhere else.
+                      backgroundColor:
+                        intensity > 0
+                          ? `color-mix(in srgb, var(--nim-primary) ${Math.round(intensity * 80)}%, transparent)`
+                          : undefined,
                     }}
-                    data-tooltip={`${day} ${hour}:00 - ${tooltipText}`}
+                    onMouseEnter={(event) =>
+                      setHoveredCell({
+                        text: cellLabel,
+                        rect: event.currentTarget.getBoundingClientRect(),
+                      })
+                    }
+                    onMouseLeave={() => setHoveredCell(null)}
+                    // Empty cells carry a count of zero rather than no reading at
+                    // all, which is the thing the grid alone cannot express.
+                    aria-label={cellLabel}
                   >
                     {count > 0 && (
-                      <span className="cell-count text-[7px] font-semibold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">
+                      <span className="cell-count text-[11px] font-semibold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">
                         {count}
                       </span>
                     )}
@@ -164,13 +240,29 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ workspaceId })
           <div
             className="legend-gradient w-[100px] h-2 rounded-sm"
             style={{
+              // `--nim-accent-rgb` was never defined, which made the whole
+              // rgba() invalid and left this bar blank.
               background:
-                'linear-gradient(to right, rgba(var(--nim-accent-rgb), 0), rgba(var(--nim-accent-rgb), 0.8))',
+                'linear-gradient(to right, transparent, color-mix(in srgb, var(--nim-primary) 80%, transparent))',
             }}
           ></div>
           <span>More</span>
         </div>
       </div>
+
+      {/* Portalled so the heatmap's own `overflow-x-auto` cannot clip it. */}
+      {hoveredCell && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            role="tooltip"
+            className="heatmap-cell-tooltip z-50 pointer-events-none rounded-md border border-nim bg-[var(--nim-bg-secondary)] px-2 py-1 text-xs text-[var(--nim-text)] shadow-md whitespace-nowrap"
+          >
+            {hoveredCell.text}
+          </div>
+        </FloatingPortal>
+      )}
     </div>
   );
 };

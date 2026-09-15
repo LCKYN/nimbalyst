@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { SectionHeading, SegmentedControl } from './ReportControls';
 
 interface SessionsBreakdownProps {
   workspaceId?: string;
+  sinceMs?: number;
 }
 
 interface TokenUsageBucketRow {
@@ -22,6 +24,9 @@ interface SessionUsageBreakdownRow {
   parentSessionId: string | null;
   createdBySessionId: string | null;
   workstreamRootId: string;
+  workspaceId: string | null;
+  inputTokens: number;
+  outputTokens: number;
   totalTokens: number;
   costUSD: number;
   costEstimated: boolean;
@@ -42,6 +47,63 @@ const GROUP_BY_LABELS: Record<GroupBy, string> = {
   tags: 'Tags',
 };
 
+/** Columns the table can be ordered by. `title` and `model` sort as text; the rest numerically. */
+type SortKey = 'title' | 'model' | 'inputTokens' | 'outputTokens' | 'totalTokens' | 'costUSD' | 'createdAt';
+
+interface SortState {
+  key: SortKey;
+  direction: 'asc' | 'desc';
+}
+
+export function compareRows(
+  a: SessionUsageBreakdownRow,
+  b: SessionUsageBreakdownRow,
+  sort: SortState,
+): number {
+  const factor = sort.direction === 'asc' ? 1 : -1;
+  if (sort.key === 'title') return factor * a.title.localeCompare(b.title);
+  if (sort.key === 'model') {
+    const modelOf = (row: SessionUsageBreakdownRow) => `${row.provider}${row.model ? ` / ${row.model}` : ''}`;
+    return factor * modelOf(a).localeCompare(modelOf(b));
+  }
+  return factor * (a[sort.key] - b[sort.key]);
+}
+
+export interface ColumnTotals {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUSD: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  costEstimated: boolean;
+}
+
+export function totalsFor(rows: SessionUsageBreakdownRow[]): ColumnTotals {
+  return rows.reduce<ColumnTotals>(
+    (sum, row) => ({
+      inputTokens: sum.inputTokens + row.inputTokens,
+      outputTokens: sum.outputTokens + row.outputTokens,
+      totalTokens: sum.totalTokens + row.totalTokens,
+      costUSD: sum.costUSD + row.costUSD,
+      cacheReadInputTokens: sum.cacheReadInputTokens + row.cacheReadInputTokens,
+      cacheCreationInputTokens: sum.cacheCreationInputTokens + row.cacheCreationInputTokens,
+      // One estimated row makes the whole column an estimate; saying otherwise
+      // would present a total as exact when part of it is not.
+      costEstimated: sum.costEstimated || row.costEstimated,
+    }),
+    {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      costUSD: 0,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      costEstimated: false,
+    },
+  );
+}
+
 const ESTIMATED_COST_TOOLTIP = "Estimated from published pricing — this provider doesn't report exact cost";
 
 function formatTokens(n: number): string {
@@ -55,6 +117,28 @@ function groupKeyFor(row: SessionUsageBreakdownRow, groupBy: GroupBy): string {
   return 'All sessions';
 }
 
+const SortableHeader: React.FC<{
+  sortKey: SortKey;
+  sort: SortState;
+  onSort: (key: SortKey) => void;
+  align?: 'left' | 'right';
+  children: React.ReactNode;
+}> = ({ sortKey, sort, onSort, align = 'left', children }) => {
+  const active = sort.key === sortKey;
+  return (
+    <th
+      className={`sessions-breakdown-header py-1 pr-2 font-medium cursor-pointer select-none hover:text-[var(--nim-text)] ${
+        align === 'right' ? 'text-right' : ''
+      } ${active ? 'text-[var(--nim-text)]' : ''}`}
+      onClick={() => onSort(sortKey)}
+      aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      {children}
+      {active ? (sort.direction === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  );
+};
+
 const CostCell: React.FC<{ costUSD: number; costEstimated: boolean; className?: string }> = ({
   costUSD,
   costEstimated,
@@ -66,18 +150,28 @@ const CostCell: React.FC<{ costUSD: number; costEstimated: boolean; className?: 
   </span>
 );
 
-export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceId }) => {
+export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceId, sinceMs }) => {
   const [rows, setRows] = useState<SessionUsageBreakdownRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState>({ key: 'costUSD', direction: 'desc' });
+
+  // Clicking the active column flips direction; a new column starts descending,
+  // which is what you want for every numeric column here.
+  const toggleSort = (key: SortKey) =>
+    setSort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === 'desc' ? 'asc' : 'desc' }
+        : { key, direction: key === 'title' || key === 'model' ? 'asc' : 'desc' },
+    );
 
   useEffect(() => {
     let cancelled = false;
     const loadData = async () => {
       setLoading(true);
       try {
-        const result = await window.electronAPI.invoke('usage-analytics:get-session-breakdown', workspaceId);
+        const result = await window.electronAPI.invoke('usage-analytics:get-session-breakdown', workspaceId, sinceMs);
         if (!cancelled) setRows(Array.isArray(result) ? result : []);
       } catch (error) {
         console.error('[SessionsBreakdown] Failed to load session usage breakdown:', error);
@@ -90,7 +184,7 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, sinceMs]);
 
   const groups = useMemo(() => {
     const byKey = new Map<string, SessionUsageBreakdownRow[]>();
@@ -103,13 +197,32 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
     return Array.from(byKey.entries())
       .map(([key, groupRows]) => ({
         key,
-        rows: groupRows,
-        totalTokens: groupRows.reduce((sum, r) => sum + r.totalTokens, 0),
-        costUSD: groupRows.reduce((sum, r) => sum + r.costUSD, 0),
-        costEstimated: groupRows.some((r) => r.costEstimated),
+        rows: [...groupRows].sort((a, b) => compareRows(a, b, sort)),
+        totals: totalsFor(groupRows),
       }))
-      .sort((a, b) => b.costUSD - a.costUSD);
-  }, [rows, groupBy]);
+      .sort((a, b) => b.totals.costUSD - a.totals.costUSD);
+  }, [rows, groupBy, sort]);
+
+  const grandTotals = useMemo(() => totalsFor(rows), [rows]);
+
+  // main/subagent and cache figures only exist for turns streamed after #1496.
+  // On an older history every one of those cells reads "—" or "0 / 0", so the
+  // columns are hidden rather than shown empty.
+  const showCacheColumns = useMemo(
+    () => rows.some((r) => r.cacheReadInputTokens > 0 || r.cacheCreationInputTokens > 0),
+    [rows],
+  );
+  const showOriginColumns = useMemo(() => rows.some((r) => r.mainUsage || r.subagentUsage), [rows]);
+  const columnCount = 6 + (showCacheColumns ? 1 : 0) + (showOriginColumns ? 1 : 0);
+
+  const openSession = (row: SessionUsageBreakdownRow) => {
+    if (!row.workspaceId) return;
+    void window.electronAPI
+      .invoke('usage-report:open-session', row.id, row.workspaceId)
+      .catch((error: unknown) =>
+        console.error('[SessionsBreakdown] Failed to open session:', error),
+      );
+  };
 
   if (loading) {
     return (
@@ -129,25 +242,17 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
 
   return (
     <div className="sessions-breakdown flex flex-col gap-4">
-      <div className="sessions-breakdown-header flex items-center justify-between">
-        <h3 className="m-0 text-sm font-semibold text-[var(--nim-text)]">Sessions</h3>
-        <div className="sessions-breakdown-group-control flex items-center gap-2 text-xs">
-          <span className="text-[var(--nim-text-muted)]">Group by</span>
-          {(Object.keys(GROUP_BY_LABELS) as GroupBy[]).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setGroupBy(option)}
-              className={`sessions-breakdown-group-option px-2 py-1 rounded-sm border border-nim ${
-                groupBy === option
-                  ? 'bg-[var(--nim-primary)] text-white'
-                  : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)]'
-              }`}
-            >
-              {GROUP_BY_LABELS[option]}
-            </button>
-          ))}
-        </div>
+      <div className="sessions-breakdown-header flex items-center justify-between gap-4">
+        <SectionHeading>Sessions</SectionHeading>
+        <SegmentedControl
+          label="Group by"
+          options={(Object.keys(GROUP_BY_LABELS) as GroupBy[]).map((value) => ({
+            value,
+            label: GROUP_BY_LABELS[value],
+          }))}
+          value={groupBy}
+          onChange={setGroupBy}
+        />
       </div>
 
       {groups.map((group) => (
@@ -156,8 +261,8 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
             <div className="sessions-breakdown-group-subtotal flex items-center justify-between text-xs font-semibold text-[var(--nim-text-muted)] pt-2 border-t border-nim">
               <span>{group.key}</span>
               <span>
-                {formatTokens(group.totalTokens)} tokens ·{' '}
-                <CostCell costUSD={group.costUSD} costEstimated={group.costEstimated} />
+                {formatTokens(group.totals.totalTokens)} tokens ·{' '}
+                <CostCell costUSD={group.totals.costUSD} costEstimated={group.totals.costEstimated} />
               </span>
             </div>
           )}
@@ -165,12 +270,14 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
           <table className="sessions-breakdown-table w-full text-xs border-collapse">
             <thead>
               <tr className="text-left text-[var(--nim-text-muted)]">
-                <th className="py-1 pr-2 font-medium">Session</th>
-                <th className="py-1 pr-2 font-medium">Model</th>
-                <th className="py-1 pr-2 font-medium text-right">Tokens</th>
-                <th className="py-1 pr-2 font-medium text-right">Cost</th>
-                <th className="py-1 pr-2 font-medium text-right">Cache read/write</th>
-                <th className="py-1 pr-2 font-medium text-right">Main/subagent</th>
+                <SortableHeader sortKey="title" sort={sort} onSort={toggleSort}>Session</SortableHeader>
+                <SortableHeader sortKey="model" sort={sort} onSort={toggleSort}>Model</SortableHeader>
+                <SortableHeader sortKey="inputTokens" sort={sort} onSort={toggleSort} align="right">Input</SortableHeader>
+                <SortableHeader sortKey="outputTokens" sort={sort} onSort={toggleSort} align="right">Output</SortableHeader>
+                <SortableHeader sortKey="totalTokens" sort={sort} onSort={toggleSort} align="right">Tokens</SortableHeader>
+                <SortableHeader sortKey="costUSD" sort={sort} onSort={toggleSort} align="right">Cost</SortableHeader>
+                {showCacheColumns && <th className="py-1 pr-2 font-medium text-right">Cache read/write</th>}
+                {showOriginColumns && <th className="py-1 pr-2 font-medium text-right">Main/subagent</th>}
               </tr>
             </thead>
             <tbody>
@@ -187,28 +294,51 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
                     >
                       <td className="py-1.5 pr-2 text-[var(--nim-text)] truncate max-w-[220px]" title={row.title}>
                         {hasByModel ? (isExpanded ? '▾ ' : '▸ ') : ''}
-                        {row.title}
+                        {row.workspaceId ? (
+                          <button
+                            type="button"
+                            className="sessions-breakdown-open text-nim-link hover:underline"
+                            // The row itself toggles the per-model detail, so the
+                            // click must not reach it or opening a session would
+                            // also expand the row behind the newly focused window.
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openSession(row);
+                            }}
+                            title={`Open ${row.title}`}
+                          >
+                            {row.title}
+                          </button>
+                        ) : (
+                          row.title
+                        )}
                       </td>
                       <td className="py-1.5 pr-2 text-[var(--nim-text-muted)]">
                         {row.provider}
                         {row.model ? ` / ${row.model}` : ''}
                       </td>
+                      <td className="py-1.5 pr-2 text-right text-[var(--nim-text-muted)]">{formatTokens(row.inputTokens)}</td>
+                      <td className="py-1.5 pr-2 text-right text-[var(--nim-text-muted)]">{formatTokens(row.outputTokens)}</td>
                       <td className="py-1.5 pr-2 text-right text-[var(--nim-text)]">{formatTokens(row.totalTokens)}</td>
                       <td className="py-1.5 pr-2 text-right text-[var(--nim-text)]">
                         <CostCell costUSD={row.costUSD} costEstimated={row.costEstimated} />
                       </td>
-                      <td className="py-1.5 pr-2 text-right text-[var(--nim-text-muted)]">
-                        {formatTokens(row.cacheReadInputTokens)} / {formatTokens(row.cacheCreationInputTokens)}
-                      </td>
-                      <td className="py-1.5 pr-2 text-right text-[var(--nim-text-muted)]">
-                        {row.mainUsage || row.subagentUsage
-                          ? `${formatTokens(mainTokens)} / ${formatTokens(subagentTokens)}`
-                          : '—'}
-                      </td>
+                      {showCacheColumns && (
+                        <td className="py-1.5 pr-2 text-right text-[var(--nim-text-muted)]">
+                          {formatTokens(row.cacheReadInputTokens)} / {formatTokens(row.cacheCreationInputTokens)}
+                        </td>
+                      )}
+                      {showOriginColumns && (
+                        <td className="py-1.5 pr-2 text-right text-[var(--nim-text-muted)]">
+                          {row.mainUsage || row.subagentUsage
+                            ? `${formatTokens(mainTokens)} / ${formatTokens(subagentTokens)}`
+                            : '—'}
+                        </td>
+                      )}
                     </tr>
                     {isExpanded && hasByModel && (
                       <tr className="sessions-breakdown-model-detail bg-[var(--nim-bg-tertiary)]">
-                        <td colSpan={6} className="py-2 px-2">
+                        <td colSpan={columnCount} className="py-2 px-2">
                           <table className="w-full text-[11px]">
                             <thead>
                               <tr className="text-left text-[var(--nim-text-muted)]">
@@ -246,9 +376,39 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
                 );
               })}
             </tbody>
+            <tfoot>
+              <TotalsRow label={groupBy === 'none' ? 'Total' : `${group.key} total`} totals={group.totals} />
+            </tfoot>
           </table>
         </div>
       ))}
+
+      {/* With grouping on, each table foots its own group -- this is the only
+          place the filtered set is totalled as a whole. */}
+      {groupBy !== 'none' && groups.length > 1 && (
+        <table className="sessions-breakdown-grand-total w-full text-xs border-collapse">
+          <tfoot>
+            <TotalsRow label="All groups" totals={grandTotals} />
+          </tfoot>
+        </table>
+      )}
     </div>
   );
 };
+
+const TotalsRow: React.FC<{ label: string; totals: ColumnTotals }> = ({ label, totals }) => (
+  <tr className="sessions-breakdown-totals border-t-2 border-nim font-semibold text-[var(--nim-text)]">
+    <td className="py-1.5 pr-2">{label}</td>
+    <td className="py-1.5 pr-2" />
+    <td className="py-1.5 pr-2 text-right">{formatTokens(totals.inputTokens)}</td>
+    <td className="py-1.5 pr-2 text-right">{formatTokens(totals.outputTokens)}</td>
+    <td className="py-1.5 pr-2 text-right">{formatTokens(totals.totalTokens)}</td>
+    <td className="py-1.5 pr-2 text-right">
+      <CostCell costUSD={totals.costUSD} costEstimated={totals.costEstimated} />
+    </td>
+    <td className="py-1.5 pr-2 text-right">
+      {formatTokens(totals.cacheReadInputTokens)} / {formatTokens(totals.cacheCreationInputTokens)}
+    </td>
+    <td className="py-1.5 pr-2 text-right" />
+  </tr>
+);

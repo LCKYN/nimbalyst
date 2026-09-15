@@ -11,13 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 <!-- New features go here -->
 - Run sessions in your own Cloudflare sandbox with machine navigation, the shared composer, attachments and Actions, and profile/account selections remembered per project.
-- The AI Usage Report has a new Sessions tab breaking down cost and tokens per session, grouped by phase or tag, split between main and sub-agent usage, with estimated costs marked when a provider doesn't report an exact price.
+- The AI Usage Report has a new Sessions tab breaking down cost and tokens per session, grouped by phase or tag, split between input, output, main and sub-agent usage, sortable by any column with per-group totals, and each row opens its session.
+- The AI Usage Report opens in the main window from the sidebar, and scopes every panel to one workspace and a shared date range; hovering the activity heatmap reports that hour's activity and token usage.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
 <!-- Bug fixes go here -->
+- AI Usage Report charts read correctly: the token axis no longer shows truncated zeros, the heatmap legend renders, and chart colors follow the theme.
 - Accepting large document rewrites preserves paragraph order, and rejecting them restores the original formatting.
 - The Git panel names the signal when a push is killed before it finishes, instead of showing the hook's output as the error.
 - The GitHub panel no longer shows an unrelated AI session when the selected PR or issue has no matching session.

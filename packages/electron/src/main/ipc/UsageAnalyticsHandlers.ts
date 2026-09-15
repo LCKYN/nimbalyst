@@ -20,9 +20,9 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Tool usage aggregates for the AI Usage Report Tools tab
-  safeHandle('tool-usage:get-report', async (event, workspaceId?: string) => {
+  safeHandle('tool-usage:get-report', async (event, workspaceId?: string, sinceMs?: number) => {
     try {
-      return await ToolUsageService.getInstance().getReport(workspaceId);
+      return await ToolUsageService.getInstance().getReport(workspaceId, sinceMs);
     } catch (error) {
       console.error('[UsageAnalyticsHandlers] Failed to get tool usage report:', error);
       throw error;
@@ -40,9 +40,9 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get total session count (all sessions, not just those with token data)
-  safeHandle('usage-analytics:get-all-session-count', async (event, workspaceId?: string) => {
+  safeHandle('usage-analytics:get-all-session-count', async (event, workspaceId?: string, sinceMs?: number) => {
     try {
-      return await analyticsService!.getAllSessionCount(workspaceId);
+      return await analyticsService!.getAllSessionCount(workspaceId, sinceMs);
     } catch (error) {
       console.error('[UsageAnalyticsHandlers] Failed to get all session count:', error);
       throw error;
@@ -50,9 +50,9 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get overall token usage statistics
-  safeHandle('usage-analytics:get-overall-stats', async (event, workspaceId?: string) => {
+  safeHandle('usage-analytics:get-overall-stats', async (event, workspaceId?: string, sinceMs?: number) => {
     try {
-      return await analyticsService!.getOverallTokenUsage(workspaceId);
+      return await analyticsService!.getOverallTokenUsage(workspaceId, sinceMs);
     } catch (error) {
       console.error('[UsageAnalyticsHandlers] Failed to get overall stats:', error);
       throw error;
@@ -60,9 +60,9 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get usage broken down by provider/model
-  safeHandle('usage-analytics:get-usage-by-provider', async (event, workspaceId?: string) => {
+  safeHandle('usage-analytics:get-usage-by-provider', async (event, workspaceId?: string, sinceMs?: number) => {
     try {
-      return await analyticsService!.getUsageByProvider(workspaceId);
+      return await analyticsService!.getUsageByProvider(workspaceId, sinceMs);
     } catch (error) {
       console.error('[UsageAnalyticsHandlers] Failed to get usage by provider:', error);
       throw error;
@@ -70,9 +70,9 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get usage broken down by project
-  safeHandle('usage-analytics:get-usage-by-project', async () => {
+  safeHandle('usage-analytics:get-usage-by-project', async (event, sinceMs?: number) => {
     try {
-      return await analyticsService!.getUsageByProject();
+      return await analyticsService!.getUsageByProject(sinceMs);
     } catch (error) {
       console.error('[UsageAnalyticsHandlers] Failed to get usage by project:', error);
       throw error;
@@ -100,17 +100,36 @@ export async function registerUsageAnalyticsHandlers() {
     event,
     workspaceId?: string,
     metric?: 'sessions' | 'messages' | 'edits',
-    timezoneOffsetMinutes?: number
+    timezoneOffsetMinutes?: number,
+    sinceMs?: number
   ) => {
     try {
       return await analyticsService!.getActivityHeatmap(
         workspaceId,
         metric || 'messages',
-        timezoneOffsetMinutes || 0
+        timezoneOffsetMinutes || 0,
+        sinceMs
       );
     } catch (error) {
       console.error('[UsageAnalyticsHandlers] Failed to get activity heatmap:', error);
       throw error;
+    }
+  });
+
+  // Tokens per weekday/hour, for the heatmap's hover readout. Returns [] rather
+  // than throwing: it scans the raw message log, and a slow or failed scan must
+  // degrade the tooltip, not take the whole report down with it.
+  safeHandle('usage-analytics:get-token-heatmap', async (
+    event,
+    workspaceId?: string,
+    timezoneOffsetMinutes?: number,
+    sinceMs?: number
+  ) => {
+    try {
+      return await analyticsService!.getTokenHeatmap(workspaceId, timezoneOffsetMinutes || 0, sinceMs);
+    } catch (error) {
+      console.error('[UsageAnalyticsHandlers] Failed to get token heatmap:', error);
+      return [];
     }
   });
 
@@ -126,9 +145,9 @@ export async function registerUsageAnalyticsHandlers() {
 
   // Get per-session usage breakdown (tokens/cost/cache/main-vs-subagent/per-model)
   // for the AI Usage Report "Sessions" tab (#1496)
-  safeHandle('usage-analytics:get-session-breakdown', async (event, workspaceId?: string) => {
+  safeHandle('usage-analytics:get-session-breakdown', async (event, workspaceId?: string, sinceMs?: number) => {
     try {
-      return await analyticsService!.getSessionUsageBreakdown(workspaceId);
+      return await analyticsService!.getSessionUsageBreakdown(workspaceId, sinceMs);
     } catch (error) {
       console.error('[UsageAnalyticsHandlers] Failed to get session usage breakdown:', error);
       throw error;

@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { SectionHeading } from './ReportControls';
 
 interface OverviewDashboardProps {
   workspaceId?: string;
+  sinceMs?: number;
 }
 
 interface TokenUsageStats {
@@ -21,7 +23,7 @@ interface ProviderUsageStats {
   totalTokens: number;
 }
 
-export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ workspaceId }) => {
+export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ workspaceId, sinceMs }) => {
   const [overallStats, setOverallStats] = useState<TokenUsageStats | null>(null);
   const [providerStats, setProviderStats] = useState<ProviderUsageStats[]>([]);
   const [allSessionCount, setAllSessionCount] = useState<number>(0);
@@ -32,9 +34,9 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ workspaceI
       setLoading(true);
       try {
         const [overall, providers, totalSessions] = await Promise.all([
-          window.electronAPI.invoke('usage-analytics:get-overall-stats', workspaceId),
-          window.electronAPI.invoke('usage-analytics:get-usage-by-provider', workspaceId),
-          window.electronAPI.invoke('usage-analytics:get-all-session-count', workspaceId),
+          window.electronAPI.invoke('usage-analytics:get-overall-stats', workspaceId, sinceMs),
+          window.electronAPI.invoke('usage-analytics:get-usage-by-provider', workspaceId, sinceMs),
+          window.electronAPI.invoke('usage-analytics:get-all-session-count', workspaceId, sinceMs),
         ]);
         setOverallStats(overall);
         setProviderStats(providers);
@@ -46,7 +48,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ workspaceI
       }
     };
     loadData();
-  }, [workspaceId]);
+  }, [workspaceId, sinceMs]);
 
   if (loading) {
     return (
@@ -111,11 +113,13 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ workspaceI
         )}
       </div>
 
+      {/* Boxed like the report's other sections. The stat cards above are
+          individually boxed, and OverviewDashboard is the one child
+          AIUsageReport renders without a `dashboard-section` wrapper, which
+          left this the only block in the report with no container at all. */}
       {providerStats.length > 0 && (
-        <div className="provider-breakdown mt-2">
-          <h3 className="m-0 mb-3 text-sm font-semibold text-[var(--nim-text)]">
-            Usage by Provider
-          </h3>
+        <div className="provider-breakdown mt-2 bg-nim-secondary border border-nim rounded-md p-4">
+          <div className="mb-3"><SectionHeading>Usage by Provider</SectionHeading></div>
           <div className="provider-bars flex flex-col gap-2">
             {providerStats.map((provider, index) => {
               const maxTokens = providerStats[0]?.totalTokens || 1;

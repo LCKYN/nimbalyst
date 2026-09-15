@@ -1932,6 +1932,16 @@ app.whenReady().then(async () => {
             return documentServices.get(workspacePath)?.listTrackerItems() ?? [];
         },
     });
+    // Lets the AI Usage Report open a session it is showing a cost for. The
+    // tray's own select-session channel is gated to the tray panel's sender, so
+    // it cannot be reused. TrayManager already knows how to focus the right
+    // window for a (session, workspace) pair, which is what both the standalone
+    // report window and the in-window report mode need.
+    safeHandle('usage-report:open-session', async (_event, sessionId?: string, workspacePath?: string) => {
+        if (!sessionId || !workspacePath) return { success: false };
+        TrayManager.getInstance().handleSessionClick(sessionId, workspacePath);
+        return { success: true };
+    });
     setupTrayPanelHandlers({
         getFeed: () => TrayManager.getInstance().buildPanelFeed(),
         onSelectSession: (sessionId, workspacePath) =>
