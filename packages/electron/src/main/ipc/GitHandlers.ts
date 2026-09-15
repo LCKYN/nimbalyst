@@ -434,7 +434,7 @@ export function registerGitHandlers(): void {
         // Use a unique record separator that won't appear in commit messages
         const RS = '\x1e'; // ASCII Record Separator
         const rawArgs: string[] = [
-          `--format=${RS}%H%n%s%n%an%n%ai%n%D`,
+          `--format=${RS}%H%n%P%n%s%n%an%n%ai%n%D`,
           `--max-count=${Math.min(limit, 200)}`,
         ];
 
@@ -460,19 +460,20 @@ export function registerGitHandlers(): void {
           return [];
         }
 
-        // Parse the custom format output: hash, subject, author, date, refs
+        // Parse the custom format output: hash, parents, subject, author, date, refs.
         const gitLog = rawOutput
           .split(RS)
           .filter(entry => entry.trim())
           .map(entry => {
             const lines = entry.trim().split('\n');
-            if (lines.length < 4) return null;
+            if (lines.length < 5) return null;
             return {
               hash: lines[0]?.trim() || '',
-              message: lines[1]?.trim() || '',
-              author: lines[2]?.trim() || '',
-              date: lines[3]?.trim() || '',
-              refs: lines[4]?.trim() || '',
+              parents: lines[1]?.trim().split(/\s+/).filter(Boolean) || [],
+              message: lines[2]?.trim() || '',
+              author: lines[3]?.trim() || '',
+              date: lines[4]?.trim() || '',
+              refs: lines[5]?.trim() || '',
             };
           })
           .filter((c): c is NonNullable<typeof c> => c !== null && !!c.hash);
