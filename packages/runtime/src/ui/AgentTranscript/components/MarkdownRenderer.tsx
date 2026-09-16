@@ -23,6 +23,7 @@ import {
   isAppActionHref,
 } from '../../../utils/appActionLinks';
 import { copyToClipboard } from '../../../utils/clipboard';
+import { MaterialSymbol } from '../../icons/MaterialSymbol';
 
 // Inject MarkdownRenderer styles once (for syntax highlighting, scrollbar, and overflow wrapper)
 const injectMarkdownRendererStyles = () => {
@@ -46,7 +47,8 @@ const injectMarkdownRendererStyles = () => {
       opacity: 0;
       transition: opacity 0.15s ease;
     }
-    .code-block-container:hover .code-block-copy-button {
+    .code-block-container:hover .code-block-copy-button,
+    .code-block-copy-button:focus-visible {
       opacity: 1;
     }
 
@@ -207,12 +209,17 @@ const CodeBlockCopyButton: React.FC<{ codeString: string }> = ({ codeString }) =
   return (
     <button
       type="button"
-      className="code-block-copy-button text-[0.6875rem] text-[var(--nim-text-faint)] bg-[var(--nim-bg-secondary)] py-0.5 px-1.5 rounded cursor-pointer select-none border-0"
+      className="code-block-copy-button p-1.5 rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] cursor-pointer transition-all flex items-center justify-center hover:bg-[var(--nim-bg-hover)]"
       data-testid="code-block-copy-button"
       onClick={handleCopy}
+      title="Copy code"
       aria-label={copied ? 'Copied' : 'Copy code'}
     >
-      {copied ? 'Copied' : 'Copy'}
+      <MaterialSymbol
+        icon={copied ? 'check' : 'content_copy'}
+        size={16}
+        className={copied ? 'text-[var(--nim-success)]' : 'text-[var(--nim-text-faint)]'}
+      />
     </button>
   );
 };
@@ -302,7 +309,7 @@ const OverflowWrapper: React.FC<{
       </div>
       <div className="absolute top-1 right-1 flex items-center gap-1">
         {(isOverflowing || wordWrap) && (
-          <label className="wrap-toggle flex items-center gap-1 text-[0.6875rem] text-[var(--nim-text-faint)] cursor-pointer select-none bg-[var(--nim-bg-secondary)] py-0.5 px-1.5 rounded">
+          <label className="wrap-toggle flex items-center gap-1 text-[0.6875rem] text-[var(--nim-text-faint)] cursor-pointer select-none bg-[var(--nim-bg-secondary)] p-1.5 rounded-md border border-[var(--nim-border)]">
             <input
               type="checkbox"
               checked={wordWrap}

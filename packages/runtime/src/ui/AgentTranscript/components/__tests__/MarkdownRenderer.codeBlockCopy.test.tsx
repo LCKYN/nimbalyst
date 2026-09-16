@@ -13,13 +13,15 @@ describe('MarkdownRenderer code block copy button', () => {
     copyToClipboard.mockResolvedValueOnce(undefined);
     render(<MarkdownRenderer content={'```bash\nnpm install\n```'} />);
 
+    // The button is icon-only, so its accessible name is the only label a
+    // screen reader (or this test) can read.
     const button = screen.getByTestId('code-block-copy-button');
-    expect(button.textContent).toBe('Copy');
+    expect(button.getAttribute('aria-label')).toBe('Copy code');
 
     fireEvent.click(button);
 
     expect(copyToClipboard).toHaveBeenCalledWith('npm install');
-    await waitFor(() => expect(button.textContent).toBe('Copied'));
+    await waitFor(() => expect(button.getAttribute('aria-label')).toBe('Copied'));
   });
 
   it('does not add a copy button to inline code spans', () => {
