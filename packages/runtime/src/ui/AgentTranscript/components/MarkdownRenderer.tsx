@@ -700,14 +700,18 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               );
             }
 
+            // Only a fenced single-line block carries a copy button, so only it
+            // reserves room on the right for one. Inline spans reach this same
+            // style (the `inline` branch above is dead - react-markdown v9+
+            // never sets the prop) and must keep their tight padding.
+            const reservesCopyButtonRoom = isFencedBlock && isSingleLine;
             const codeStyle: React.CSSProperties = {
               backgroundColor: 'var(--nim-bg-tertiary)',
-              // Single-line blocks reserve room on the right for the copy
-              // button so it sits inside the block's own background instead of
-              // in a gutter beside it. 2rem clears the 20px button plus
-              // its 4px inset - reserved permanently so hovering never resizes
-              // the block.
-              padding: isSingleLine ? '0.25rem 2rem 0.25rem 0.5rem' : '0.75rem',
+              // 2rem clears the 20px button plus its 4px inset - reserved
+              // permanently so hovering never resizes the block.
+              padding: reservesCopyButtonRoom
+                ? '0.25rem 2rem 0.25rem 0.5rem'
+                : isSingleLine ? '0.25rem 0.5rem' : '0.75rem',
               borderRadius: isSingleLine ? '0.25rem' : '0.375rem',
               fontSize: '0.8125rem',
               lineHeight: isSingleLine ? '1.4' : '1.5',
@@ -749,9 +753,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               <code
                 className={className}
                 style={{
-                  // Block for both: a single-line fenced block fills the row so
-                  // the copy button has room instead of crowding the text.
-                  display: 'block',
+                  // Fenced blocks fill the row so the copy button has room;
+                  // inline spans must stay inline or they break the sentence.
+                  display: isFencedBlock || !isSingleLine ? 'block' : 'inline-block',
                   ...codeStyle,
                   fontFamily: 'var(--font-mono, monospace)',
                   color: 'var(--nim-text)'

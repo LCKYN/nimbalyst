@@ -24,8 +24,15 @@ describe('MarkdownRenderer code block copy button', () => {
     await waitFor(() => expect(button.getAttribute('aria-label')).toBe('Copied'));
   });
 
-  it('does not add a copy button to inline code spans', () => {
-    render(<MarkdownRenderer content="run `npm install` now" />);
+  it('does not add a copy button to inline code spans, and keeps them inline', () => {
+    const { container } = render(<MarkdownRenderer content="run `npm install` now" />);
     expect(screen.queryByTestId('code-block-copy-button')).toBeNull();
+
+    // Inline spans share the fenced-block style object, so a change meant for
+    // blocks can silently turn them into block elements - which breaks the
+    // sentence onto separate lines and adds the copy button's reserved gutter.
+    const inlineCode = container.querySelector('code');
+    expect(inlineCode?.style.display).toBe('inline-block');
+    expect(inlineCode?.style.padding).toBe('0.25rem 0.5rem');
   });
 });
