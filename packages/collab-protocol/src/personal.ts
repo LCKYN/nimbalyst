@@ -333,6 +333,8 @@ export interface UnregisterLiveActivityTokenMessage {
   type: 'unregisterLiveActivityToken';
   deviceId: string;
   kind?: LiveActivityTokenKind;
+  /** Optional identity prevents an old activity from unregistering a newer token. */
+  token?: string;
 }
 
 /**

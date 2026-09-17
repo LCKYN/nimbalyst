@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 <!-- Bug fixes go here -->
 - On Windows, Gemini connects to the Antigravity editor you already have open instead of quietly starting a second copy of its language server.
+- iPhone fleet Live Activities recover after expiration or reconnecting and stay visible while using the Mac with an updated sync server.
 - iOS session search finds older desktop sessions and completes history sync reliably.
 - Consumed prompts stay out of the iOS queue after delayed sync updates or reconnecting.
 - The session sidebar stays visible when rotating iPhone to landscape.

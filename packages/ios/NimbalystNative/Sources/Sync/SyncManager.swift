@@ -419,6 +419,7 @@ public final class SyncManager: ObservableObject {
         indexClient.setAppInForeground(inForeground)
         sessionClient.setAppInForeground(inForeground)
         replication?.setForeground(inForeground)
+        if inForeground && registersDeviceTokens { FleetActivityController.shared.resendTokens() }
         if inForeground && recover {
             indexClient.reconnect()
             if activeSessionId != nil { sessionClient.reconnect() }

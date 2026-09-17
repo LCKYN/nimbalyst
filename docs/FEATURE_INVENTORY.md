@@ -263,7 +263,7 @@ Twelve built-in provider lanes, plus any agent an extension contributes. Every l
 - Mobile voice follows the session on screen for summaries and new tasks, while queued tasks and presented questions retain their source session. GPT Live preview supports spoken answers to simple questions, one-time permissions, and commit proposals after the app reads the exact prompt aloud; requires an updated source desktop with its workspace open. Longer or richer prompts and older hosts use existing UI cards.
 - Opt-in GPT Live voice can open existing synced project files and carry the file reference into a coding request; idle closes the paid connection and foreground resume restores bounded conversation context
 - GPT Live can announce source-desktop questions and completions with cross-device presentation ownership; the source workspace must be open in the desktop app. Interrupting a question readout requires reading it again before answering; completion announcements are explicitly dismissed on the phone.
-- Session fleet Live Activity — Lock Screen card and Dynamic Island mirroring the macOS menu bar strip, with the sessions waiting on you ranked by wait time; tap a row to open that session. Server-started, so it appears without opening the app; dims when the Mac stops reporting, ends when the fleet goes quiet. Toggled in Settings
+- Session fleet Live Activity — Lock Screen card and Dynamic Island mirroring the macOS menu bar strip, with the sessions waiting on you ranked by wait time; tap a row to open that session. Server-started, so it appears without opening the app; stays visible while using the Mac, dims when the Mac stops reporting, ends when the fleet goes quiet. Toggled in Settings
 
 ## Mobile (Android)
 

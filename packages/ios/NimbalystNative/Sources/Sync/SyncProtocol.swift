@@ -490,6 +490,7 @@ public struct UnregisterLiveActivityTokenMessage: Encodable {
     let type = "unregisterLiveActivityToken"
     public let deviceId: String
     public let kind: String?
+    public var token: String? = nil
 }
 
 struct CreateSessionRequestMessage: Codable {
