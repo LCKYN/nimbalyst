@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Share Namenym naming projects for collaborative editing and individual favorites on desktop and the web.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
