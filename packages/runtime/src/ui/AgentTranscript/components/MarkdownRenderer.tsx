@@ -226,11 +226,14 @@ const CodeBlockCopyButton: React.FC<{ codeString: string }> = ({ codeString }) =
 
 // Lightweight hover container for single-line code blocks (no overflow
 // measurement needed - just hosts the copy button in the corner).
+// Unlike OverflowWrapper this container is inline-block, so it hugs the code
+// instead of filling the row. The right padding is the gutter the absolutely
+// positioned button sits in - without it the button covers the end of the line.
 const CodeBlockContainer: React.FC<{
   children: React.ReactNode;
   codeString: string;
 }> = ({ children, codeString }) => (
-  <div className="code-block-container relative inline-block max-w-full align-top">
+  <div className="code-block-container relative inline-block max-w-full align-top pr-9">
     {children}
     <div className="absolute top-1 right-1">
       <CodeBlockCopyButton codeString={codeString} />
