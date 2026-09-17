@@ -45,11 +45,13 @@ const injectMarkdownRendererStyles = () => {
     /* Code block copy button visibility */
     .code-block-copy-button {
       opacity: 0;
+      pointer-events: none;
       transition: opacity 0.15s ease;
     }
     .code-block-container:hover .code-block-copy-button,
     .code-block-copy-button:focus-visible {
       opacity: 1;
+      pointer-events: auto;
     }
 
     /* Word wrap enabled state */
@@ -193,19 +195,31 @@ const COPY_LABEL_RESET_DELAY_MS = 1500;
 const CodeBlockCopyButton: React.FC<{ codeString: string }> = ({ codeString }) => {
   const [copied, setCopied] = useState(false);
   const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     return () => {
+      isMountedRef.current = false;
       if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
     };
   }, []);
 
   const handleCopy = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
-    await copyToClipboard(codeString);
+    try {
+      await copyToClipboard(codeString);
+    } catch (err) {
+      console.error('Failed to copy code block:', err);
+      return;
+    }
+    // react-markdown can remount this block mid-stream (see OverflowWrapper
+    // comments below), so the click's own instance may already be gone.
+    if (!isMountedRef.current) return;
     setCopied(true);
     if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
-    resetTimeoutRef.current = setTimeout(() => setCopied(false), COPY_LABEL_RESET_DELAY_MS);
+    resetTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) setCopied(false);
+    }, COPY_LABEL_RESET_DELAY_MS);
   }, [codeString]);
 
   return (
@@ -782,7 +796,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           pre: ({ children }) => (
             <>
               {React.Children.map(children, (child) =>
-                React.isValidElement(child)
+                // Only tag component children (the `code` override's output), never a
+                // raw host element - cloning a custom prop onto e.g. a plain `<pre><div>`
+                // from a future plugin would trip React's unrecognized-DOM-prop warning.
+                React.isValidElement(child) && typeof child.type !== 'string'
                   ? React.cloneElement(child as React.ReactElement<any>, { isCodeBlock: true } as any)
                   : child
               )}

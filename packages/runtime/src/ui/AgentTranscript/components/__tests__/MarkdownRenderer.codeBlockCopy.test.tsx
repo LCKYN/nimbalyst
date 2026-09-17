@@ -24,6 +24,20 @@ describe('MarkdownRenderer code block copy button', () => {
     await waitFor(() => expect(button.getAttribute('aria-label')).toBe('Copied'));
   });
 
+  it('logs and leaves the button unchanged when the clipboard write fails', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    copyToClipboard.mockRejectedValueOnce(new Error('denied'));
+    render(<MarkdownRenderer content={'```bash\nnpm install\n```'} />);
+
+    const button = screen.getByTestId('code-block-copy-button');
+    fireEvent.click(button);
+
+    await waitFor(() => expect(consoleErrorSpy).toHaveBeenCalled());
+    expect(button.getAttribute('aria-label')).toBe('Copy code');
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it('does not add a copy button to inline code spans, and keeps them inline', () => {
     const { container } = render(<MarkdownRenderer content="run `npm install` now" />);
     expect(screen.queryByTestId('code-block-copy-button')).toBeNull();
