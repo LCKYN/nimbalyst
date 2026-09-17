@@ -188,9 +188,9 @@ const COPY_LABEL_RESET_DELAY_MS = 1500;
 // Hover-visible "Copy" button rendered in the corner of a fenced code block.
 // Relies on the nearest ancestor with class `code-block-container` for hover
 // visibility (see injected styles above) - callers must provide that ancestor.
-// `compact` shrinks the button to fit inside a single-line block, which is only
-// 27px tall - the default 30px button would hang out of the bottom edge.
-const CodeBlockCopyButton: React.FC<{ codeString: string; compact?: boolean }> = ({ codeString, compact = false }) => {
+// Sized to fit inside a single-line block, which is only 27px tall - a larger
+// button would hang out of its bottom edge.
+const CodeBlockCopyButton: React.FC<{ codeString: string }> = ({ codeString }) => {
   const [copied, setCopied] = useState(false);
   const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -211,7 +211,7 @@ const CodeBlockCopyButton: React.FC<{ codeString: string; compact?: boolean }> =
   return (
     <button
       type="button"
-      className={`code-block-copy-button ${compact ? 'p-0.5' : 'p-1.5'} rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] cursor-pointer transition-all flex items-center justify-center hover:bg-[var(--nim-bg-hover)]`}
+      className={`code-block-copy-button p-0.5 rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] cursor-pointer transition-all flex items-center justify-center hover:bg-[var(--nim-bg-hover)]`}
       data-testid="code-block-copy-button"
       onClick={handleCopy}
       title="Copy code"
@@ -219,7 +219,7 @@ const CodeBlockCopyButton: React.FC<{ codeString: string; compact?: boolean }> =
     >
       <MaterialSymbol
         icon={copied ? 'check' : 'content_copy'}
-        size={compact ? 14 : 16}
+        size={14}
         className={copied ? 'text-[var(--nim-success)]' : 'text-[var(--nim-text-faint)]'}
       />
     </button>
@@ -242,7 +242,7 @@ const CodeBlockContainer: React.FC<{
     {/* Vertically centred rather than pinned to the top: the block is only one
         line tall, so centring is what gives the button even margins. */}
     <div className="absolute right-1 top-0 bottom-0 flex items-center">
-      <CodeBlockCopyButton codeString={codeString} compact />
+      <CodeBlockCopyButton codeString={codeString} />
     </div>
   </div>
 );
@@ -316,7 +316,9 @@ const OverflowWrapper: React.FC<{
       <div ref={contentRef} className="overflow-content max-w-full overflow-x-auto whitespace-pre">
         {children}
       </div>
-      <div className="absolute top-1 right-1 flex items-center gap-1">
+      {/* top-3, not top-1: the code block carries a 0.5rem top margin, so a
+          4px inset would float the controls above its rounded top edge. */}
+      <div className="absolute top-3 right-1 flex items-center gap-1">
         {(isOverflowing || wordWrap) && (
           <label className="wrap-toggle flex items-center gap-1 text-[0.6875rem] text-[var(--nim-text-faint)] cursor-pointer select-none bg-[var(--nim-bg-secondary)] p-1.5 rounded-md border border-[var(--nim-border)]">
             <input
@@ -702,7 +704,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               backgroundColor: 'var(--nim-bg-tertiary)',
               // Single-line blocks reserve room on the right for the copy
               // button so it sits inside the block's own background instead of
-              // in a gutter beside it. 2rem clears the 20px compact button plus
+              // in a gutter beside it. 2rem clears the 20px button plus
               // its 4px inset - reserved permanently so hovering never resizes
               // the block.
               padding: isSingleLine ? '0.25rem 2rem 0.25rem 0.5rem' : '0.75rem',
