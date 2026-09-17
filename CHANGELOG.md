@@ -10,40 +10,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
-- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
-- Try GPT Live voice on iOS with on-screen session context, spoken answers to presented questions and approvals, audio selection, synced-file navigation, and desktop announcements.
-- Keep the computer picker focused and hide, restore, or rename paired computers with a compatible sync server.
-- Tab between the AI model, effort, and Actions menus after opening the model picker with Cmd/Ctrl+Shift+M.
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.78.1] - 2026-09-17
+
+
+### Added
+<!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and an explicit plan editing mode.
+- Try GPT Live voice on iOS with session context, spoken prompt handling, audio routing, synced-file access, and desktop announcements.
+- Manage paired computers by hiding, restoring, or renaming devices when using a compatible sync server.
+- Navigate the AI model, effort, and Actions menus entirely by keyboard.
 - Optionally follow external Claude Code and Codex CLI sessions live, including their names, from Agent Features settings.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
-- Claude sessions gain MCP and resume reliability fixes while honoring enterprise tool restrictions.
+- Claude sessions use an updated SDK for more reliable MCP tools and resume while respecting enterprise restrictions.
 - iOS computer switching opens from the top-right computer status button.
-- Claude approval prompts default to Deny and offer only one-time approval when required.
+- Required Claude approvals default to Deny and allow only one-time approval.
+- Settings diagnostics distinguish agent-verified trust from user-authored configuration.
 
 ### Fixed
 <!-- Bug fixes go here -->
-- Dismissing an iOS session creation error safely clears the alert without losing a newer failure.
-- On Windows, Gemini connects to the Antigravity editor you already have open instead of quietly starting a second copy of its language server.
+- iOS session search, loading, transcript ordering, and reconnect recovery remain reliable across app lifecycle changes.
+- Consumed prompts stay out of the iOS queue and delivery warnings clear when the desktop starts or finishes processing.
 - iPhone fleet Live Activities recover after expiration or reconnecting and stay visible while using the Mac with an updated sync server.
-- iOS session search finds older desktop sessions and completes history sync reliably.
-- Consumed prompts stay out of the iOS queue after delayed sync updates or reconnecting.
 - The session sidebar stays visible when rotating iPhone to landscape.
-- New and existing iOS sessions finish loading when opened repeatedly from the session list.
-- Session transcripts avoid duplicate messages and preserve their order after reopening or sending document context.
-- iOS avoids false prompt delivery warnings after the desktop starts or finishes processing.
-- File-session links avoid repeated background lookups that slow down active editing.
+- Restarting Nimbalyst preserves open projects.
+- File-linked sessions and Actions metadata refresh without missed changes or repeated background lookups.
+- On Windows, Gemini connects to the open Antigravity editor and offers current Flash models.
 - In-app HTML previews render UTF-8 text correctly even when the document omits a charset declaration.
-- Commit proposals use the session's worktree and reject unsupported checkout overrides instead of committing in the wrong checkout.
-- iOS reconnects after backgrounding or network changes and refreshes missing sessions without restarting.
-- Codex turns remain active through transient reconnect attempts and HTTPS fallback.
-- Codex sessions keep tracking shell edits after tool failures and show when file tracking is incomplete.
-- Shared CSVs preserve all rows while opening and retain concurrent edits during synchronization.
-- Custom editors exit review after Keep, Revert, or Keep All, even when a later history snapshot fails.
-- Antigravity's Gemini picker now offers the current Flash generations instead of retired ones, so new sessions no longer fail with "Gemini 3.5 Flash is no longer available".
-- Prevent unexpected errors during Git history reads and voice cleanup.
-- On Linux the taskbar and window switcher show the Nimbalyst icon instead of a generic one, because the window now reports the same identity as its desktop entry (#697).
+- Commit proposals stay in the session worktree and reject unsupported checkout overrides.
+- Codex turns survive transient reconnects and keep tracking shell edits after tool failures.
+- Shared CSVs retain all rows and concurrent edits, and custom-editor reviews complete after Keep or Revert.
+- Landscape PDF pages use the correct page size and text alignment.
+- Packaged file search uses the bundled ripgrep reliably.
+- On Linux, the taskbar and window switcher show the Nimbalyst icon instead of a generic one (#697).
 - Internal MCP servers accept Streamable HTTP clients that omit a required response media type.
 
 ### Removed
