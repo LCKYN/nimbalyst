@@ -130,7 +130,10 @@ struct WorkspaceNavigationView: View {
         NavigationSplitView(columnVisibility: $columnVisibility, preferredCompactColumn: $navigation.compactColumn) {
             Group {
                 if let project = navigation.project {
-                    SessionListView(project: project, selection: selection, hostDeviceId: navigation.hostDeviceId)
+                    SessionListView(
+                        project: project, selection: selection, hostDeviceId: navigation.hostDeviceId,
+                        includeUnattributedSessions: hosts.contains { $0.deviceId == navigation.hostDeviceId && $0.type == "desktop" }
+                    )
                         .id(project.id)
                         .toolbar {
                             ToolbarItem(placement: .navigation) {

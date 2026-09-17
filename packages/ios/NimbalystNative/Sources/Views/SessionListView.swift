@@ -13,6 +13,7 @@ public struct SessionListView: View {
     @EnvironmentObject var appState: AppState
     public let project: Project
     public let hostDeviceId: String?
+    public let includeUnattributedSessions: Bool
     @Binding private var selection: WorkspaceSelection?
 
     @StateObject private var model = SessionListWindowModel()
@@ -22,9 +23,10 @@ public struct SessionListView: View {
     @State private var collapsedMetaAgents: Set<String> = []
     @State private var selectedTab: ProjectTab = .sessions
 
-    public init(project: Project, selection: Binding<WorkspaceSelection?>, hostDeviceId: String? = nil) {
+    public init(project: Project, selection: Binding<WorkspaceSelection?>, hostDeviceId: String? = nil, includeUnattributedSessions: Bool = false) {
         self.project = project
         self.hostDeviceId = hostDeviceId
+        self.includeUnattributedSessions = includeUnattributedSessions
         _selection = selection
     }
 
@@ -75,7 +77,8 @@ public struct SessionListView: View {
             searchText: searchText.isEmpty ? nil : searchText,
             phase: phaseFilter,
             metaAgentEnabled: metaAgentEnabled,
-            hostDeviceId: hostDeviceId
+            hostDeviceId: hostDeviceId,
+            includeUnattributedSessions: includeUnattributedSessions
         )
     }
 
