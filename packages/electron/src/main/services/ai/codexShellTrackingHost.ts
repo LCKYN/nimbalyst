@@ -6,7 +6,7 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { SessionFilesRepository } from '@nimbalyst/runtime/storage/repositories/SessionFilesRepository';
 import { OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
-import { subscribe, unsubscribe, getSubscriberIds } from '../../file/WorkspaceEventBus';
+import { subscribe, unsubscribe, getSubscriberIds, drainWorkspaceEvents } from '../../file/WorkspaceEventBus';
 import { contentFingerprint, isKnownFileWrite } from '../../file/knownFileWrites';
 import { getPackageRoot } from '../../utils/appPaths';
 import { shouldExcludePath } from '../../utils/fileFilters';
@@ -16,6 +16,7 @@ import { workspaceAttributionThrottle } from '../WorkspaceAttributionThrottle';
 import { notifySessionFilesUpdated } from '../sessionFilesNotify';
 import { logger } from '../../utils/logger';
 import { ExcludedShellCandidate, ShellFileAttribution } from './ShellFileAttribution';
+import { prepareShellCheckoutBaseline } from './ShellCheckoutBaseline';
 import { ShellTrackingCoverage } from './ShellTrackingCoverage';
 import { createShellCoverageStore } from './shellCoverageStore';
 import { database } from '../../database/PGLiteDatabaseWorker';
@@ -47,12 +48,14 @@ export const shellFileAttribution = new ShellFileAttribution({
     const id = 'shell-hooks:' + workspace;
     let healthy = false;
     await subscribe(workspace, id, {
-      onAdd: changed,
-      onChange: changed,
-      onUnlink: changed,
+      onAdd: () => {},
+      onChange: () => {},
+      onUnlink: () => {},
+      onObserved: (_event, file, at) => changed(file, at),
       onHealthChanged: (health) => {
         healthy = health.state === 'watching';
         if (health.state === 'recovering') shellFileAttribution.watcherLost(workspace);
+        if (healthy) shellFileAttribution.watcherRecovered(workspace);
       },
     });
     if (!healthy || !getSubscriberIds(workspace).includes(id)) {
@@ -61,6 +64,9 @@ export const shellFileAttribution = new ShellFileAttribution({
     }
     return () => unsubscribe(workspace, id);
   },
+  prepareCheckout: prepareShellCheckoutBaseline,
+  drainEvents: drainWorkspaceEvents,
+  observation: (generation, healthy) => shellTrackingCoverage.observation(generation, healthy),
   read: async (file) => {
     if (shouldExcludePath(file)) throw new ExcludedShellCandidate('Excluded path');
     try {
@@ -78,7 +84,7 @@ export const shellFileAttribution = new ShellFileAttribution({
   },
   knownWrite: (file, state) => isKnownFileWrite(file, state?.fingerprint),
   otherSessions: (workspace, filePath) => workspaceFileAttributionPolicy.getSessionIds(workspace, filePath),
-  report: (generation, reason, turnId) => shellTrackingCoverage.record(generation, reason, turnId),
+  report: (generation, reason, turnId, toolUseId) => shellTrackingCoverage.record(generation, reason, turnId, toolUseId),
   currentTurn: (generation) => shellTrackingCoverage.currentTurn(generation),
   persist: async (evidence) => {
     if (!workspaceAttributionThrottle.tryAcquire(evidence.workspacePath)) return 'throttled';

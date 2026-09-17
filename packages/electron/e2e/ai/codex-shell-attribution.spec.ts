@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { launchElectronApp, waitForAppReady } from '../helpers';
 import { dismissAPIKeyDialog } from '../utils/testHelpers';
 test.skip(() => !process.env.RUN_REAL_CODEX, 'Requires Codex CLI auth + RUN_REAL_CODEX=1');
@@ -21,6 +22,16 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
   await fs.writeFile(path.join(workspace, 'shared.ts'), '// baseline\n');
   await fs.writeFile(path.join(workspace, 'readonly.ts'), '// unchanged\n');
   await fs.writeFile(path.join(workspace, 'after-failure.ts'), '// baseline\n');
+  const git = (...args: string[]) => execFileSync('git', ['-C', workspace, ...args], { encoding: 'utf8' });
+  git('init', '-q');
+  git('config', 'user.name', 'Tracking Fixture');
+  git('config', 'user.email', 'fixture@example.invalid');
+  expect(await fs.realpath(git('rev-parse', '--show-toplevel').trim())).toBe(await fs.realpath(workspace));
+  await fs.mkdir(path.join(workspace, '.claude'));
+  for (let i = 0; i < 7500; i += 64) await Promise.all(Array.from({ length: Math.min(64, 7500 - i) }, (_, j) =>
+    fs.writeFile(path.join(workspace, '.claude', `command-${i + j}.md`), 'checkout baseline\n')));
+  git('add', '.');
+  git('commit', '-qm', 'Fixture baseline');
   let app: Awaited<ReturnType<typeof launchElectronApp>> | undefined;
   const evidence: any = { root, owners: [] };
   try {
@@ -28,8 +39,11 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
       mainPath: process.env.NIMBALYST_E2E_MAIN_PATH,
       workspace,
       preserveTestDatabase: true,
+      // This disposable fixture creates Git worktrees; workspace-write protects .git.
+      permissionMode: 'none',
       recordVideo: { dir: path.join(testInfo.outputDir, 'video') },
       env: {
+        NIMBALYST_PERMISSION_MODE: 'bypass-all',
         NIMBALYST_USER_DATA_PATH: database,
         NIMBALYST_USER_DATA_DIR: userData,
         NIMBALYST_CDP_PORT: '0',
@@ -69,18 +83,22 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
       );
       expect(session.id).toBeTruthy();
       evidence.owners.push(session.id);
+      const checkoutStep = marker === 'first' ? 'First create the fixture worktree by running `git worktree add --detach scratch-checkout HEAD`. If this fails, stop and report its full error. Then run `printf \'// authored\\n\' > scratch-checkout/shared.ts`. This checkout is a required part of the test. ' : '';
       const result = await page.evaluate(
-        async ({ workspace, id, marker }) =>
+        async ({ workspace, id, marker, checkoutStep }) =>
           (window as any).electronAPI.invoke(
             'ai:sendMessage',
-            `This is an isolated file tracking acceptance fixture. In strict sequence in this single turn: 1. Use your normal shell tool to execute exactly: printf '// ${marker}\\n' > shared.ts; cat readonly.ts; 2. Call the nimbalyst-trackers tracker_get MCP tool with id "shell-attribution-fixture-missing-item" exactly once. The item does not exist; its error is expected. 3. Continue despite that error and execute: printf '// ${marker}\\n' > after-failure.ts; Do not apply a patch, inspect other files, commit, retry the lookup, or change anything else. End with DONE.`,
+            `This is an isolated file tracking acceptance fixture. ${checkoutStep}In strict sequence in this single turn: 1. Use your normal shell tool to execute exactly: printf '// ${marker}\\n' > shared.ts; cat readonly.ts; 2. Call the nimbalyst-trackers tracker_get MCP tool with id "shell-attribution-fixture-missing-item" exactly once. The item does not exist; its error is expected. 3. Continue despite that error and execute: printf '// ${marker}\\n' > after-failure.ts; Do not apply a patch, inspect other files, commit, retry the lookup, or change anything else. End with DONE.`,
             undefined,
             id,
             workspace
           ),
-        { workspace, id: session.id, marker }
+        { workspace, id: session.id, marker, checkoutStep }
       );
       evidence[marker] = result;
+      evidence[marker + 'Raw'] = await page.evaluate(async id =>
+        (window as any).electronAPI.invoke('test:query-db', 'SELECT content FROM ai_agent_messages WHERE session_id=$1 AND direction=$2 ORDER BY id', [id, 'output']), session.id);
+      if (marker === 'first') expect(await fs.readFile(path.join(workspace, 'scratch-checkout', 'shared.ts'), 'utf8')).toBe('// authored\n');
       await expect
         .poll(() => fs.readFile(path.join(workspace, 'shared.ts'), 'utf8'), { timeout: 60_000 })
         .toBe(`// ${marker}\n`);
@@ -119,6 +137,17 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
       evidence[marker + 'AfterFailure'] = afterFailure;
       expect(afterFailure).toEqual({ failedLookup: true, owners: [...evidence.owners].sort() });
     }
+    expect(await fs.readFile(path.join(workspace, 'scratch-checkout', 'shared.ts'), 'utf8')).toBe('// authored\n');
+    const checkoutLinks = await page.evaluate(async ({ workspace }) => {
+      const api = (window as any).electronAPI;
+      return {
+        copied: await api.invoke('sessions:get-by-file', workspace, workspace + '/scratch-checkout/.claude/command-0.md'),
+        edited: await api.invoke('sessions:get-by-file', workspace, workspace + '/scratch-checkout/shared.ts'),
+      };
+    }, { workspace });
+    expect(checkoutLinks.copied).toEqual([]);
+    expect(checkoutLinks.edited.map((s: any) => s.id)).toEqual([evidence.owners[0]]);
+    evidence.checkoutLinks = checkoutLinks;
     const readLinks = await page.evaluate(
       async ({ workspace, filePath }) =>
         (window as any).electronAPI.invoke('sessions:get-by-file', workspace, filePath),
@@ -134,6 +163,7 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
         ),
       { workspace }
     );
+    expect(evidence.rows.rows.filter((row: any) => row.file_path.includes('/scratch-checkout/.claude/'))).toEqual([]);
     evidence.notifications = await page.evaluate(() => (window as any).__fileLinkEvents);
     expect(evidence.notifications.length).toBeGreaterThan(0);
   } finally {

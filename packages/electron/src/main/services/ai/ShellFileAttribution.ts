@@ -1,4 +1,5 @@
 import type { ShellCoverageReason } from '@nimbalyst/runtime/ai/shellTrackingCoverage';
+import type { ShellCheckoutBaseline } from './ShellCheckoutBaseline';
 import { boundedDrain } from './ShellTrackingCoverage';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -17,12 +18,15 @@ export interface ShellFileEvidence {
 export type ShellPersistenceOutcome = 'persisted' | 'excluded' | 'throttled' | 'quota' | 'failed';
 export class ExcludedShellCandidate extends Error {}
 export interface ShellAttributionDependencies {
-  subscribe(workspace: string, changed: (file: string) => void): Promise<() => void>;
+  subscribe(workspace: string, changed: (file: string, observedAt?: number) => void): Promise<() => void>;
+  prepareCheckout?(workspace: string): Promise<ShellCheckoutBaseline | undefined>;
+  drainEvents?(workspace: string): Promise<void>;
+  observation?(generation: string, healthy: boolean): void;
   read(file: string): Promise<ShellFileState | null>;
   knownWrite(file: string, state: ShellFileState | null): boolean;
   otherSessions(workspace: string, filePath: string): string[];
   persist(evidence: ShellFileEvidence): Promise<ShellPersistenceOutcome>;
-  report?(generation: string, reason: ShellCoverageReason, turnId?: string): void;
+  report?(generation: string, reason: ShellCoverageReason, turnId?: string, toolUseId?: string): void;
   currentTurn?(generation: string): string | undefined;
   retryDelayMs?: number;
   now?: () => number;
@@ -39,7 +43,9 @@ export class ShellFileAttribution {
       tool: string;
       start: number;
       files: Set<string>;
-      suspicious?: boolean;
+      observation: { lost: boolean };
+      checkout?: ShellCheckoutBaseline;
+      deferred: Map<string, { evidence: ShellFileEvidence; fingerprint: string | null; turnId?: string }>;
     }
   >();
   private readonly terminal = new Map<string, Set<string>>();
@@ -48,6 +54,7 @@ export class ShellFileAttribution {
   private readonly cache = new Map<string, string | null>();
   private readonly stats = { ambiguous: 0, suppressed: 0, overflow: 0 };
   private readonly disabled = new Set<string>();
+  private readonly unhealthy = new Set<string>();
   private pending = 0;
   private queue: Promise<void> = Promise.resolve();
   private readonly now: () => number;
@@ -64,7 +71,7 @@ export class ShellFileAttribution {
     if (!this.workspaces.has(workspace))
       this.workspaces.set(
         workspace,
-        this.deps.subscribe(workspace, (file) => this.changed(workspace, file))
+        this.deps.subscribe(workspace, (file, observedAt) => this.changed(workspace, file, observedAt))
       );
     try {
       await this.workspaces.get(workspace);
@@ -91,7 +98,6 @@ export class ShellFileAttribution {
       this.report(generation, 'staleEvent');
       return;
     }
-    this.checkAges();
     // A bounded per-generation registry. Missing post hooks never grow it
     // without limit; at the cap tracking abstains until lifecycle cleanup.
     if (this.windows.size >= 256) {
@@ -100,6 +106,12 @@ export class ShellFileAttribution {
       this.disabled.add(generation);
       return;
     }
+    let checkout: ShellCheckoutBaseline | undefined;
+    const captured = tool !== 'Bash' || await boundedDrain(
+      Promise.resolve(this.deps.prepareCheckout?.(this.sessions.get(generation)!.workspace)).then(value => { checkout = value; }), 750);
+    if (!this.sessions.has(generation) || this.terminal.get(generation)?.has(id)) return;
+    if (!captured) this.report(generation, 'checkoutBaseline', undefined, id);
+    if (this.unhealthy.has(this.sessions.get(generation)!.workspace)) this.report(generation, 'watcherLoss');
     this.observed.get(generation)?.add(id);
     const key = generation + '|' + id;
     if (!this.windows.has(key) || this.windows.get(key)?.tool === 'Uninstrumented')
@@ -109,26 +121,34 @@ export class ShellFileAttribution {
         tool,
         start: this.now(),
         files: new Set(),
+        observation: { lost: !captured || this.unhealthy.has(this.sessions.get(generation)!.workspace) },
+        checkout,
+        deferred: new Map(),
       });
   }
   watcherLost(workspace: string): void {
-    for (const [generation, session] of this.sessions)
-      if (session.workspace === workspace) {
-        this.disabled.add(generation);
-        this.report(generation, 'watcherLoss');
-      }
-    for (const file of this.cache.keys()) if (this.contains(workspace, file)) this.cache.delete(file);
-  }
-  private report(generation: string, reason: ShellCoverageReason, turnId?: string): void {
-    this.deps.report?.(generation, reason, turnId);
-  }
-  private checkAges(): void {
+    this.unhealthy.add(workspace);
+    const affected = new Set<string>();
     for (const window of this.windows.values()) {
-      if (!window.suspicious && this.now() - window.start > 5 * 60_000) {
-        window.suspicious = true;
-        this.report(window.generation, 'suspiciousWindow');
+      if (this.sessions.get(window.generation)?.workspace === workspace) {
+        window.observation.lost = true;
+        affected.add(window.generation);
       }
     }
+    for (const [generation, session] of this.sessions) if (session.workspace === workspace) {
+      this.deps.observation?.(generation, false);
+      if (affected.has(generation)) this.report(generation, 'watcherLoss');
+    }
+    for (const file of this.cache.keys()) if (this.contains(workspace, file)) this.cache.delete(file);
+  }
+  watcherRecovered(workspace: string): void {
+    this.unhealthy.delete(workspace);
+    for (const [generation, session] of this.sessions) if (session.workspace === workspace)
+      this.deps.observation?.(generation, true);
+    // Interrupted windows remain ineligible until their own terminal boundary.
+  }
+  private report(generation: string, reason: ShellCoverageReason, turnId?: string, toolUseId?: string): void {
+    this.deps.report?.(generation, reason, turnId, toolUseId);
   }
   started(generation: string, id: string): void {
     if (!this.sessions.has(generation) || this.terminal.get(generation)?.has(id)) return;
@@ -147,11 +167,13 @@ export class ShellFileAttribution {
       tool: 'Uninstrumented',
       start: this.now(),
       files: new Set(),
+      observation: { lost: this.unhealthy.has(this.sessions.get(generation)!.workspace) },
+      deferred: new Map(),
     });
   }
   completed(generation: string, id: string): Promise<void> {
     if (!this.sessions.has(generation) || this.terminal.get(generation)?.has(id)) return Promise.resolve();
-    if (!this.observed.get(generation)?.has(id)) this.report(generation, 'missingPre');
+    if (!this.observed.get(generation)?.has(id)) this.report(generation, 'missingPre', undefined, id);
     this.rememberTerminal(generation, id);
     return this.post(generation, id);
   }
@@ -169,6 +191,7 @@ export class ShellFileAttribution {
   async drain(sessionIds: string[], timeoutMs = 1500): Promise<boolean> {
     const work = async () => {
       do {
+        await Promise.all([...new Set([...this.sessions.values()].map(s => s.workspace))].map(w => this.deps.drainEvents?.(w)));
         await Promise.all(this.closing.values());
         const queue = this.queue;
         await queue;
@@ -193,19 +216,48 @@ export class ShellFileAttribution {
     this.rememberTerminal(generation, id);
     const drain = (async () => {
       await new Promise((r) => setTimeout(r, this.deps.settleMs ?? 150));
+      const workspace = this.sessions.get(generation)?.workspace;
+      if (workspace) await this.deps.drainEvents?.(workspace);
       await this.flush();
+      if (window.checkout && window.deferred.size && !window.observation.lost && this.sessions.has(generation)) {
+        try {
+          const candidates = [...window.deferred.values()];
+          const results = await window.checkout.finish(candidates.map(c => ({ filePath: c.evidence.filePath, fingerprint: c.fingerprint })));
+          for (const candidate of candidates) {
+            if (window.observation.lost || this.disabled.has(generation) || !this.sessions.has(generation)) break;
+            const result = results.get(candidate.evidence.filePath);
+            if (result === 'edit') {
+              if (window.files.size >= 500) {
+                this.report(generation, 'overflow', candidate.turnId, id);
+                break;
+              }
+              await this.save(candidate.evidence, generation, candidate.turnId, window.files);
+            }
+            else this.report(generation, result === 'initialization' ? 'initialization' : 'checkoutBaseline', candidate.turnId);
+          }
+        } catch {
+          this.report(generation, 'checkoutBaseline', undefined, id);
+        }
+      }
       if (this.windows.get(key) === window) this.windows.delete(key);
     })().finally(() => this.closing.delete(key));
     this.closing.set(key, drain);
     return drain;
   }
   async flush(): Promise<void> {
-    await this.queue;
+    for (;;) {
+      const queue = this.queue;
+      await queue;
+      if (queue === this.queue) return;
+    }
   }
   endTurn(generation: string): void {
     for (const [key, w] of this.windows)
       if (w.generation === generation) {
-        if (!this.closing.has(key)) this.report(generation, 'unmatchedTool');
+        if (!this.closing.has(key)) {
+          w.observation.lost = true;
+          this.report(generation, 'unmatchedTool', undefined, w.id);
+        }
         this.rememberTerminal(generation, w.id);
         this.windows.delete(key);
       }
@@ -240,10 +292,10 @@ export class ShellFileAttribution {
     const rel = path.relative(workspace, file);
     return !!rel && !rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel);
   }
-  private changed(workspace: string, rawPath: string): void {
+  private changed(workspace: string, rawPath: string, observedAt = this.now()): void {
     const filePath = path.resolve(rawPath);
     if (!this.contains(workspace, filePath)) return;
-    if (this.pending >= 500) {
+    if (this.pending >= 16_384) {
       this.stats.overflow++;
       for (const [generation, s] of this.sessions)
         if (this.contains(s.workspace, filePath)) {
@@ -252,14 +304,13 @@ export class ShellFileAttribution {
         }
       return;
     }
-    this.checkAges();
-    const timestamp = this.now();
+    const timestamp = observedAt;
     // Freeze the candidates now: a later post hook must not turn an overlap
     // into a single-owner event while the filesystem read waits in the queue.
     const candidates = [...this.windows.values()]
       .filter((w) => {
         const s = this.sessions.get(w.generation);
-        return s && this.contains(s.workspace, filePath);
+        return s && w.start <= timestamp && this.contains(s.workspace, filePath);
       })
       .map((w) => ({
         ...w,
@@ -272,7 +323,7 @@ export class ShellFileAttribution {
       this.cache.delete(filePath);
       return;
     }
-    const disabledAtArrival = [...this.disabled].some((g) => {
+    const disabledAtArrival = this.unhealthy.has(workspace) || candidates.some(w => w.observation.lost) || [...this.disabled].some((g) => {
       const s = this.sessions.get(g);
       return s && this.contains(s.workspace, filePath);
     });
@@ -298,7 +349,8 @@ export class ShellFileAttribution {
             this.report(
               generation,
               'knownWrite',
-              candidates.find((w) => w.generation === generation)?.turnId
+              candidates.find((w) => w.generation === generation)?.turnId,
+                candidates.find((w) => w.generation === generation)?.id
             );
           return;
         }
@@ -308,15 +360,18 @@ export class ShellFileAttribution {
           hasUninstrumentedSession ||
           disabledAtArrival ||
           owners.size !== 1 ||
-          candidates.some((w) => w.tool !== 'Bash' || this.disabled.has(w.generation))
+          candidates.some((w) => w.tool !== 'Bash' || w.observation.lost || this.disabled.has(w.generation))
         ) {
           this.stats.ambiguous++;
           if (candidates.some((w) => w.tool === 'Bash' || w.tool === 'Uninstrumented'))
             for (const generation of new Set(candidates.map((w) => w.generation)))
               this.report(
                 generation,
-                hasUninstrumentedSession ? 'uninstrumented' : 'overlap',
-                candidates.find((w) => w.generation === generation)?.turnId
+                hasUninstrumentedSession ? 'uninstrumented' :
+                  disabledAtArrival || candidates.some(w => w.observation.lost || this.disabled.has(w.generation)) ? 'observationGap' :
+                  owners.size !== 1 ? 'competingOwners' : 'toolOverlap',
+                candidates.find((w) => w.generation === generation)?.turnId,
+                candidates.find((w) => w.generation === generation)?.id
               );
           return;
         }
@@ -325,7 +380,6 @@ export class ShellFileAttribution {
         // A metadata-only notification for an old file is not a new edit. An
         // uncached disappearance might be a directory; only known files qualify.
         if (state && state.modifiedAt <= winner.start) return;
-        if (!state && (cached === undefined || cached === null)) return;
         if (winner.files.has(filePath)) return;
         const session = this.sessions.get(winner.generation);
         if (!session) return;
@@ -343,34 +397,54 @@ export class ShellFileAttribution {
           timestamp,
           source: 'shell-hook-inferred',
         };
-        let outcome: ShellPersistenceOutcome = 'failed';
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            outcome = await this.deps.persist(evidence);
-          } catch {
-            outcome = 'failed';
+        if (winner.checkout) {
+          let defer: boolean;
+          try { defer = await winner.checkout.defer(filePath); }
+          catch { this.report(winner.generation, 'checkoutBaseline', winner.turnId, winner.id); return; }
+          if (defer) {
+            if (winner.deferred.size >= 16_384 && !winner.deferred.has(filePath)) {
+              winner.observation.lost = true;
+              this.report(winner.generation, 'overflow', winner.turnId);
+              return;
+            }
+            winner.deferred.set(filePath, { evidence, fingerprint, turnId: winner.turnId });
+            return;
           }
-          if (outcome !== 'failed' && outcome !== 'throttled') break;
-          if (attempt < 2)
-            await new Promise((r) => setTimeout(r, this.deps.retryDelayMs ?? 100 * (attempt + 1)));
         }
-        if (outcome === 'persisted') winner.files.add(filePath);
-        else {
-          this.cache.delete(filePath);
-          this.report(winner.generation, outcome === 'failed' ? 'persistence' : outcome, winner.turnId);
-        }
+        if (!state && (cached === undefined || cached === null)) return;
+        if (winner.observation.lost || this.disabled.has(winner.generation) || !this.sessions.has(winner.generation)) return;
+        await this.save(evidence, winner.generation, winner.turnId, winner.files);
       })
       .catch((error) => {
         for (const generation of new Set(candidates.map((w) => w.generation)))
           this.report(
             generation,
             error instanceof ExcludedShellCandidate ? 'excluded' : 'readFailure',
-            candidates.find((w) => w.generation === generation)?.turnId
+            candidates.find((w) => w.generation === generation)?.turnId,
+                candidates.find((w) => w.generation === generation)?.id
           );
         this.stats.suppressed++;
       })
       .finally(() => {
         this.pending--;
       });
+  }
+  private async save(evidence: ShellFileEvidence, generation: string, turnId: string | undefined, files: Set<string>): Promise<void> {
+    let outcome: ShellPersistenceOutcome = 'failed';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        outcome = await this.deps.persist(evidence);
+      } catch {
+        outcome = 'failed';
+      }
+      if (outcome !== 'failed' && outcome !== 'throttled') break;
+      if (attempt < 2)
+        await new Promise((r) => setTimeout(r, this.deps.retryDelayMs ?? 100 * (attempt + 1)));
+    }
+    if (outcome === 'persisted') files.add(evidence.filePath);
+    else {
+      this.cache.delete(evidence.filePath);
+      this.report(generation, outcome === 'failed' ? 'persistence' : outcome, turnId, evidence.toolUseId);
+    }
   }
 }

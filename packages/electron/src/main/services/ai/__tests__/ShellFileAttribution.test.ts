@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ShellFileAttribution, type ShellFileState, type ShellFileEvidence, type ShellPersistenceOutcome } from '../ShellFileAttribution';
 
-function fixture(beforeRead?: () => Promise<void>) {
+function fixture(beforeRead?: () => Promise<void>, prepareCheckout?: () => Promise<any>) {
   let now = 1000;
   let emit: (file: string) => void = () => {};
   const state = new Map<string, ShellFileState>();
@@ -15,6 +15,7 @@ function fixture(beforeRead?: () => Promise<void>) {
       emit = fn;
       return unsubscribe;
     },
+    prepareCheckout,
     read: async (f) => {
       await beforeRead?.();
       return state.get(f) ?? null;
@@ -39,7 +40,7 @@ function fixture(beforeRead?: () => Promise<void>) {
       emit(file);
     },
     event: (file: string) => emit(file),
-    advance: () => now++,
+    advance: (ms = 1) => now += ms,
   };
 }
 describe('shell hook attribution', () => {
@@ -97,6 +98,9 @@ describe('shell hook attribution', () => {
     await f.service.pre(a, 'one', 'Bash');
     f.write('/workspace/shared.ts', 'A');
     await f.service.post(a, 'one');
+    await f.service.pre(b, 'same-content-rewrite', 'Bash');
+    f.write('/workspace/shared.ts', 'A');
+    await f.service.post(b, 'same-content-rewrite');
     await f.service.pre(b, 'two', 'Bash');
     f.write('/workspace/shared.ts', 'B');
     await f.service.post(b, 'two');
@@ -261,10 +265,59 @@ it('reports watcher loss and recovers on the next turn without importing missed 
   expect(f.persist).not.toHaveBeenCalled();
   expect(f.report.mock.calls.map(([, r]) => r)).toContain('watcherLoss');
   f.service.endTurn(a);
+  f.service.watcherRecovered('/workspace');
   await f.service.pre(a, 'after', 'Bash');
   f.event('/workspace/lost.ts');
   f.write('/workspace/future.ts', 'observed');
   await f.service.post(a, 'after');
   expect(f.persist.mock.calls.map(([e]) => e.filePath)).toEqual(['/workspace/future.ts']);
+  await f.service.release(a);
+});
+
+
+it('does not blame idle sessions or turn a watcher outage into overlap; recovers within the turn', async () => {
+  const f = fixture(), a = await f.service.register('A', '/workspace');
+  const idle = await f.service.register('idle', '/workspace');
+  await f.service.pre(a, 'interrupted', 'Bash');
+  f.service.watcherLost('/workspace');
+  expect(f.report.mock.calls.map(([g, r]) => [g, r])).toEqual([[a, 'watcherLoss']]);
+  f.service.watcherRecovered('/workspace');
+  await f.service.pre(a, 'during-old-window', 'Bash');
+  f.write('/workspace/ambiguous.ts', 'unknown');
+  await f.service.post(a, 'during-old-window');
+  await f.service.post(a, 'interrupted');
+  expect(f.persist).not.toHaveBeenCalled();
+  expect(f.report.mock.calls.map(([, r]) => r)).not.toContain('overlap');
+  await f.service.pre(a, 'fresh-boundary', 'Bash');
+  f.write('/workspace/good.ts', 'owned');
+  await f.service.post(a, 'fresh-boundary');
+  expect(f.persist.mock.calls.map(([e]) => e.filePath)).toEqual(['/workspace/good.ts']);
+  await f.service.release(a);
+  await f.service.release(idle);
+});
+
+it('does not convert a long-running acknowledged tool into a permanent coverage gap', async () => {
+  const f = fixture(), a = await f.service.register('A', '/workspace');
+  await f.service.pre(a, 'long-build', 'Bash');
+  f.advance(6 * 60_000);
+  f.write('/workspace/real-edit.ts', 'owned');
+  await f.service.post(a, 'long-build');
+  expect(f.report.mock.calls.map(([, r]) => r)).not.toContain('suspiciousWindow');
+  expect(f.persist).toHaveBeenCalledTimes(1);
+  await f.service.release(a);
+});
+
+
+it('bounds authored links after reconciling a large checkout without charging initialization copies', async () => {
+  const f = fixture(undefined, async () => ({
+    defer: async () => true,
+    finish: async (candidates: Array<{filePath: string}>) => new Map(candidates.map(c => [c.filePath, 'edit'])),
+  }));
+  const a = await f.service.register('A', '/workspace');
+  await f.service.pre(a, 'checkout-many-edits', 'Bash');
+  for (let i = 0; i < 501; i++) f.write(`/workspace/file-${i}.ts`, `edit-${i}`);
+  await f.service.post(a, 'checkout-many-edits');
+  expect(f.persist).toHaveBeenCalledTimes(500);
+  expect(f.report.mock.calls.map(([, reason]) => reason)).toContain('overflow');
   await f.service.release(a);
 });

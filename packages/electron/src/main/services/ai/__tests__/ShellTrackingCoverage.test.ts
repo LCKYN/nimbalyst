@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi } from 'vitest';
+import { shellCoverageDetails } from '@nimbalyst/runtime/ai/shellTrackingCoverage';
 import { ShellTrackingCoverage } from '../ShellTrackingCoverage';
 
 describe('durable shell coverage', () => {
@@ -86,4 +87,24 @@ describe('durable shell coverage', () => {
     await hung.open('B', 'h');
     expect(await hung.flush(['B'], 5)).toBe(false);
   });
+});
+
+
+it('loads legacy age-only diagnostics without a false gap and preserves real history after recovery', async () => {
+  const disk: any = { version: 1, sessionId: 'A', state: 'degraded', reasons: { suspiciousWindow: 3 }, turns: [], active: [] };
+  const ledger = new ShellTrackingCoverage({ load: async () => disk, save: async () => {}, notify: () => {} });
+  expect(shellCoverageDetails(await ledger.readMany(['A']))).toEqual([]);
+  await ledger.open('A', 'g');
+  ledger.turn('g', 't');
+  ledger.observation('g', false);
+  ledger.record('g', 'watcherLoss', 't', 'interrupted-command');
+  expect(shellCoverageDetails(await ledger.readMany(['A']))).toContain('File observation is currently interrupted');
+  ledger.observation('g', true);
+  const [summary] = await ledger.readMany(['A']);
+  expect(summary).toMatchObject({ observation: 'watching', state: 'degraded', reasons: { suspiciousWindow: 3, watcherLoss: 1 } });
+  expect(summary.events).toEqual([expect.objectContaining({ reason: 'watcherLoss', toolUseId: 'interrupted-command', turnId: 't' })]);
+  expect(shellCoverageDetails([summary])).toEqual(['The workspace file watcher was interrupted']);
+  await ledger.close('g');
+  await ledger.unavailable('A');
+  expect(shellCoverageDetails(await ledger.readMany(['A']))).toContain('File observation is currently interrupted');
 });

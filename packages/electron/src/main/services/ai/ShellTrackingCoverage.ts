@@ -81,6 +81,9 @@ export class ShellTrackingCoverage {
         this.add(entry, 'interrupted');
         data.active = [];
       }
+      // Live handle state is never inferred from persisted state after restart.
+      delete data.observation;
+      data.state = hasShellCoverageGap(data.reasons) ? 'degraded' : stored ? 'no-detected-fault' : 'unknown';
       // Idle entries are reloadable. Never evict unsaved evidence or live owners.
       if (this.entries.size > 256)
         for (const [id, candidate] of this.entries) {
@@ -103,6 +106,7 @@ export class ShellTrackingCoverage {
   async open(sessionId: string, generation: string): Promise<void> {
     const entry = await this.load(sessionId);
     this.owners.set(generation, { sessionId });
+    entry.data.observation = 'watching';
     // Active means unfinished work, not merely an idle cached provider.
     entry.data.state = hasShellCoverageGap(entry.data.reasons) ? 'degraded' : 'no-detected-fault';
     this.touch(entry);
@@ -128,11 +132,11 @@ export class ShellTrackingCoverage {
     entry.data.active = entry.data.active.filter((id) => id !== generation);
     this.touch(entry);
   }
-  record(generation: string, reason: ShellCoverageReason, turnId?: string): void {
+  record(generation: string, reason: ShellCoverageReason, turnId?: string, toolUseId?: string): void {
     const owner = this.owners.get(generation);
     if (!owner) return;
     const entry = this.entries.get(owner.sessionId)!;
-    this.add(entry, reason, turnId ?? owner.turnId);
+    this.add(entry, reason, turnId ?? owner.turnId, toolUseId);
   }
   async reportSession(sessionId: string, reason: ShellCoverageReason): Promise<void> {
     this.add(await this.load(sessionId), reason);
@@ -140,10 +144,19 @@ export class ShellTrackingCoverage {
   currentTurn(generation: string): string | undefined {
     return this.owners.get(generation)?.turnId;
   }
-  async unavailable(sessionId: string): Promise<void> {
-    this.add(await this.load(sessionId), 'unavailable');
+  observation(generation: string, healthy: boolean): void {
+    const owner = this.owners.get(generation);
+    if (!owner) return;
+    const entry = this.entries.get(owner.sessionId)!;
+    entry.data.observation = healthy ? 'watching' : 'recovering';
+    this.touch(entry);
   }
-  private add(entry: Entry, reason: ShellCoverageReason, turnId?: string): void {
+  async unavailable(sessionId: string): Promise<void> {
+    const entry = await this.load(sessionId);
+    entry.data.observation = 'recovering';
+    this.add(entry, 'unavailable');
+  }
+  private add(entry: Entry, reason: ShellCoverageReason, turnId?: string, toolUseId?: string): void {
     const now = Date.now();
     const increment = (counts: ShellCoverageCounts) => {
       counts[reason] = Math.min(1_000_000, (counts[reason] ?? 0) + 1);
@@ -155,6 +168,12 @@ export class ShellTrackingCoverage {
         increment(turn.reasons);
         turn.lastAt = now;
       }
+    }
+    const events = entry.data.events ??= [];
+    const last = events.at(-1);
+    if (!last || last.reason !== reason || last.turnId !== turnId || last.toolUseId !== toolUseId) {
+      events.push({ reason, at: now, turnId, toolUseId });
+      if (events.length > 32) events.shift();
     }
     entry.data.firstAt ??= now;
     entry.data.lastAt = now;
@@ -197,6 +216,7 @@ export class ShellTrackingCoverage {
             entry.data.reasons[key] = Math.min(1_000_000, (entry.data.reasons[key] ?? 0) + (count ?? 0));
           }
           entry.data.turns = [...previous.turns, ...entry.data.turns].slice(-32);
+          entry.data.events = [...previous.events ?? [], ...entry.data.events ?? []].slice(-32);
           entry.data.firstAt = previous.firstAt ?? entry.data.firstAt;
           if (previous.active.some((id) => !this.owners.has(id))) this.add(entry, 'interrupted');
         }
