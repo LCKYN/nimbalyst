@@ -330,6 +330,7 @@ Companion app; pairs with a desktop over encrypted sync. Voice mode is not inclu
 
 - Browser access to team documents, shared folders, and trackers, with live collaboration with desktop clients
 - Shared trackers in list, table, board, timeline, and tag-board views, with search, filters, grouping, column selection, inline edits, comments, and drag-and-drop
+- Phone tracker browsing defaults to stacked rows with search and filter sheets; plan readers offer collapsed properties and explicit live editing, and retain list position and unsent comment drafts within the current project session
 - Supported shared custom editors include spreadsheets, mockups, Excalidraw diagrams, data models, and Canvas; editable source mode provides access when a document's editor cannot render it
 - Shared-document comments and replies with mentions delivered to the recipient's inbox
 - Organization invitations, pending-invite management, and a Requests inbox for feedback, mentions, replies, and discussions

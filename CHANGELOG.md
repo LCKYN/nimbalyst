@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Try GPT Live voice on iOS with on-screen session context, spoken answers to presented questions and approvals, audio selection, synced-file navigation, and desktop announcements.
 - Keep the computer picker focused and hide, restore, or rename paired computers with a compatible sync server.
 - Tab between the AI model, effort, and Actions menus after opening the model picker with Cmd/Ctrl+Shift+M.
@@ -79,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -100,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -118,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Jump to unanswered agent questions and automatically scroll to new ones.
 - Choose whether Agent mode opens file tabs above the transcript or in the right pane.
 - Pick one of your project's action prompts from the mobile composer's + menu to prefill it, or open a new session with it.
@@ -146,6 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Send document questions to teammates, collect private answers, and resume the agent after a human settles the outcome.
 - Open and play `.mp4` files in a tab with the new Media Viewer extension, including scrubbing through long recordings.
 - A session that launches another session can request the reasoning effort it runs at, rather than leaving it on the app-wide default.
@@ -173,6 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Project Graph adds Atlas, Pulse, and Evidence Trails with broader source coverage, saved views, and linked source exploration.
 - Session history marks sessions that launched other sessions with an icon and launch-count tooltip.
 - GPT-6 Astra can be selected for Codex sessions, with its Ultra reasoning level.
@@ -198,6 +204,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Database Settings can recover preserved database copies and explain migration blocks, while recovery and rollback keep the original data intact across restarts.
 - Radar gives shared trackers a since-you-left digest of teammate activity, status moves, bulk sweeps, and stalled work in desktop and the web console.
 - The Git panel's Changes tab can show every repository in the project at once, each with its own file list and commit box.
@@ -254,6 +261,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Claude Fable 5.1 is now available in the model picker, with Fable 5 kept as a selectable previous-generation option.
 - A project can span several folders: attach one from the File menu or quick open and it appears in the explorer, in search, and to your agents, with git status, branches and commits tracked per repository.
 - Quick open's Files tab can narrow to just your local files or just your team's shared documents, and remembers the choice.
@@ -295,6 +303,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - The macOS menu bar shows your session fleet: it names a session as it starts, finishes, blocks or fails, flags one that has stopped responding, and quiets to a single mark when nothing is running, with a settings row in the panel to turn any of it off.
 - Your session fleet also reaches the iPhone Lock Screen and Dynamic Island as a Live Activity, ranked by how long each session has been waiting on you; tap one to open it.
 - Quick Track (Cmd+Shift+I) files a tracker item of any type from anywhere in the app, offering similar existing items before you add a duplicate.
@@ -333,6 +342,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Grok Build and Cursor Agent as coding agents, each with settings, model picker, edited-file tracking and diff review.
 - AI sessions can read and edit a shared document without it being open in a tab, including mockups, drawings and data models.
 
@@ -355,6 +365,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Author step-based technical animations in `.anim.json` files, with a live stage, scrubbable timeline, retiming, frames that draw real product UI under a palette the document owns, and MP4 or GIF export.
 - An AI session can now build a Project Canvas board for you from a description, placing cards that reference real workspace files and shared documents.
 - Animation and Project Canvas are now installable from the Extensions marketplace.
@@ -388,6 +399,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Work your team's shared trackers from the web console in list, table, board, timeline and tag board, with search, filtering, grouping, column choice, inline editing, comments and drag-and-drop, converging live with the desktop app.
 - Invite people to your organization from the web console, see who has not accepted yet, and resend or revoke a pending invitation.
 - Open anything in the web console with Cmd+K, right-click a tracker row for its actions, and pick from the full set of Nimbalyst themes.
@@ -434,6 +446,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Commit with AI can stage individual hunks of a file, so parallel sessions editing the same file each commit only their own lines.
 - Browse and triage GitHub issues beside pull requests, keeping your investigation status and notes local until you decide to adopt an issue as a tracker item.
 
@@ -458,6 +471,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - OpenCode sessions gain slash commands, Compact, agent roles, and a live model picker listing the models you are signed in for.
 - Comment on a spot in a shared mockup: pins sync live, keep their place when an AI regenerates the mockup, and agents can read and reply.
 - Trackers record what an item is waiting on, with a built-in Ready view listing unblocked work most-unblocking first.
@@ -496,6 +510,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -512,6 +527,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Shared Docs navigation now shows an unread badge.
 
 ### Changed
@@ -536,6 +552,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -554,6 +571,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - The tracker sidebar collapses and reopens like every other mode's — the Tracker icon, Cmd+T, or the title-bar control.
 - Expand the active tab to fill the window from View > Toggle Expanded Tab or with Shift+Escape, in any view mode.
 - Your organization's inbox, rooms, and direct messages open in the project window as an Organization mode, with mentions, assigned work, and owed replies as their own rows.
@@ -578,6 +596,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Shared spreadsheets, mockups, and Excalidraw diagrams open and edit in the web console, with live presence between the desktop app and the browser.
 - Ask a teammate for structured feedback: your agent drafts the question, it lands in their inbox with the artifacts it is about, and anyone can answer in a browser.
 - Spreadsheets gain date-time, time, checkbox, link, and tracker columns, cell styling, accounting and scientific number formats, and date arithmetic in formulas.
@@ -646,6 +665,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -664,6 +684,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Group the tracker board into lanes by milestone, goal, or any other field, placing work by dragging a card, using the chip on it, or selecting several at once.
 - A Timeline view lays tracker work out over time, grouped the same way the board is.
 - Plans still marked draft after a linked session committed now carry a chip naming the commits that disagree.
@@ -690,6 +711,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Git Log shows which AI session produced each commit, with a click-through to open it.
 - The editor header shows the last AI session that worked on the open file, with a dropdown to jump to other sessions or start a new one.
 - Linked local files can pull the latest Shared Document content from the editor header.
@@ -729,6 +751,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -746,6 +769,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -762,6 +786,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -780,6 +805,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Open a shared project that is not a git repository by choosing a folder for it in your organization's project list.
 - A Renders tab in the Developer Dashboard that reports which components re-render, how often, and why.
 
@@ -811,6 +837,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Undo and redo in the tracker table with Cmd+Z and Cmd+Shift+Z, covering cell edits, paste, bulk status and priority changes, and archiving.
 
 ### Changed
@@ -830,6 +857,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Spreadsheets support find, replace, and per-column filters, opened with Cmd+F.
 - The AI can analyze a spreadsheet's columns for data-quality problems and apply a formula across a range.
 
@@ -860,6 +888,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Organizations can now be created from a released build, not only in development builds.
 - The organization inbox is reachable from any project: a title-bar button badges unread messages, and the account menu gains a Messages entry.
 - Spreadsheets can freeze columns and header rows again, and a selection now spans the frozen edge whether you drag it, select all, or copy it.
@@ -895,6 +924,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - The new-worktree dialog can now search branches, narrowing the local and remote lists as you type.
 - The organization window gains rooms and direct messages, a rich message composer with attachments and mentions, live chips for pasted plan and tracker links, unread badges, and desktop notifications for new messages.
 - Tracker items can now open as full documents with collaborative editing, inline comments, consistent editable field chips (including collection creation), keyboard-driven search and filters, shared-document navigation, a side-by-side AI chat panel, and a visible action to copy shareable reopen links.
@@ -957,6 +987,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - The organization window gains an Inbox with conversations plus mentions and replies from shared-document comments.
 
 ### Changed
@@ -981,6 +1012,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1003,6 +1035,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Pull request review mode gains a resizable AI session pane that carries the selected pull request into the conversation, with its linked sessions shown in the header.
 
 ### Changed
@@ -1034,6 +1067,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Claude Opus 5 is now the default Claude model and is selectable across all Claude providers, with the previous Opus 4.8 still selectable as a pinned choice.
 - Trackers now offer an editable grid, field-filter pills, shareable saved views, triage inboxes, release and review workflows, and expanded CLI commands.
 - Sharing a markdown document to your team now offers to share the documents it embeds, and teammates see those embeds live inline.
@@ -1074,6 +1108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - The onboarding survey now offers more discovery sources and asks what users searched for when they choose Search.
 
 ### Changed
@@ -1096,6 +1131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1117,6 +1153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Organizations now have their own management window with a switcher between them, and Account settings lists the organizations each signed-in account belongs to.
 - New agent sessions now include a contextual tip for launching background sessions from anywhere with Cmd+Shift+N without leaving the current view.
 - Extensions can contribute first-class Application or Project settings pages with per-repository context, and Memory now has its own Project settings page.
@@ -1150,6 +1187,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Launch a new AI session from any workspace mode with Cmd+Shift+N; the draggable composer runs it in the background without navigating away and resets for the next launch.
 - Agents can send local system notifications to get your attention when you step away.
 - Start a new AI review session from any pull request with the review command prefilled.
@@ -1190,6 +1228,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Shared spreadsheets now show live collaborator presence: each person's selected cell is outlined in their color, and the cell they're editing is highlighted with their name.
 
 ### Changed
@@ -1215,6 +1254,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - The AI chat now shows what you have selected as removable chips -- including multiple shapes at once from node-like editors such as Excalidraw -- and you can remove any selection so it is not sent to the model.
 - Claude Agent sessions expose an `Extended: On` / `Extended: Off` selector (developer mode) next to the effort selector for supported Opus/Sonnet variants, so you can turn off extended thinking per session to reduce latency and token use. It stays on by default.
 - Switch AI models from the keyboard directly in the chat input.
@@ -1275,6 +1315,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Shared documents now work offline: previously opened documents open instantly from an encrypted local copy, and edits and attachments made offline are queued durably and upload automatically when you reconnect.
 - In a shared document, typing `@` now suggests other shared documents and inserts a team-styled link that opens the referenced shared document.
 - Settings now separates Application, Personal, Organizations, and Project management, including per-account mobile-sync profiles, organization administration without an open workspace, explicit project access controls, and project-level MCP server configuration.
@@ -1336,6 +1377,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1355,6 +1397,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - OpenCode presets now include GLM 5.2 through the Z.AI and Z.AI Coding Plan providers.
 - GPT-5.6 (Sol, Terra, and Luna) is available for the OpenAI and Codex agents, with Sol as the new default.
 
@@ -1380,6 +1423,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1396,6 +1440,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Shared folders are now first-class: right-click a folder in Shared Items to rename, move, copy a link, or delete it (with a count-based confirmation), drag folders and documents to reorganize, and let an AI agent create or reorganize shared files and folders — reorganizing never breaks a document's local link.
 - Advanced setting to route Claude Code CLI (Subscription) traffic through a custom local API proxy (e.g. a token-compression or caching layer).
 - Shared Docs discovery home: search, favorites, recently opened, and docs new or changed since you last viewed them, with a sidebar filter (All / Favorites / Updated) and controls to hide or clear unread markers.
@@ -1427,6 +1472,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Double-click an editor tab to maximize the editor area in Files, Agent, and Shared Docs modes, then double-click again to restore the previous layout.
 - Customize the navigation gutter: hide or show any icon and drag to reorder them via a Customize Gutter popover (right-click the gutter), with preferences applied across all projects.
 - The Pull Requests view now connects to trackers and sessions: review-status badges and filter chips, one-click jumps between a PR, its tracker item, and its review session, linking any tracker item to a PR, and merges update linked tracker items automatically.
@@ -1456,6 +1502,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Sync settings now show a per-project document-sync status (connected, file count, or an error) so you can tell whether mobile document sync is working.
 
 ### Changed
@@ -1482,6 +1529,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1500,6 +1548,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1521,6 +1570,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Memory recall/search tool calls now show a transcript card with the query and matched source documents, with click-to-open.
 
 ### Changed
@@ -1613,6 +1663,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1628,6 +1679,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Share a plan with your team straight from the tracker — a Share toggle in the tracker item view publishes the plan to the team's shared tracker.
 - Team admins can re-share the current encryption key with all members from Settings → Security & encryption, fixing teammates who saw "Encrypted document (key unavailable)".
 
@@ -1647,6 +1699,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1662,6 +1715,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Updated the bundled Electron runtime to 41.8.0 (security fixes).
@@ -1730,6 +1784,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1751,6 +1806,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1770,6 +1826,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1792,6 +1849,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 - Claude Fable 5 is now selectable across all Claude providers, including a Fable 5 (1M) variant; existing Fable defaults migrate to 1M automatically.
 - Switch models mid-session on Claude Code CLI sessions from the model picker.
 - Claude Code CLI sessions receive your active document and selection as context, support workspace slash commands and the memory widget, and auto-name themselves from the first prompt.
@@ -1875,6 +1933,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1896,6 +1955,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1912,6 +1972,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1928,6 +1989,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1976,6 +2038,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -1994,6 +2057,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -2020,6 +2084,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -2037,6 +2102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -2052,6 +2118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -2068,6 +2135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Canonical transcript events kept in-memory per session and rebuilt from raw messages on demand instead of persisted to disk.
@@ -2087,6 +2155,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -2817,6 +2886,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -2836,6 +2906,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Remove Claude Code SDK prewarm end to end: prewarm was gated behind `PREWARM_ENABLED=false` after it was found to interfere with session resume and required a `canUseTool` shim to keep tool permissions working. Remove the dead path (provider fields, `prewarm`/`discardWarmQuery` methods, `ai:prewarm` IPC handler, preload bridge, type, and renderer `useEffect`), collapsing `sendMessage` to a single `query()` call and removing the warm-query shim entirely. Does not fix NIM-838 -- prewarm was already inert -- but shrinks the surface to reason about while chasing the real resume-mismatch bug.
@@ -2851,6 +2922,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -2866,6 +2938,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -2952,6 +3025,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -2971,6 +3045,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Upgrade Claude Agent SDK 0.2.114 -> 0.2.116 (permission dialog crash fix, session resume perf, API 400 race condition fix) and `@anthropic-ai/sdk` 0.71.2 -> 0.81.0 (deduped with the agent SDK dependency)
@@ -2991,6 +3066,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Upgrade Claude Agent SDK 0.2.114 -> 0.2.116 (permission dialog crash fix, session resume perf, API 400 race condition fix) and `@anthropic-ai/sdk` 0.71.2 -> 0.81.0 (deduped with the agent SDK dependency)
@@ -3011,6 +3087,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Upgrade Claude Agent SDK 0.2.114 -> 0.2.116 (permission dialog crash fix, session resume perf, API 400 race condition fix) and `@anthropic-ai/sdk` 0.71.2 -> 0.81.0 (deduped with the agent SDK dependency)
@@ -3030,6 +3107,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -3045,6 +3123,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Gate SDK prewarm behind `PREWARM_ENABLED=false` temporarily while the session resume and canUseTool plumbing bakes
@@ -3062,6 +3141,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Gate SDK prewarm behind `PREWARM_ENABLED=false` temporarily while the session resume and canUseTool plumbing bakes
@@ -3118,6 +3198,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Consolidate iOS CI from 3 sequential macOS jobs to 1, cutting roughly two-thirds of runner time by removing redundant npm ci/simulator boot/Xcode setup and no-op UI test plan check
@@ -3135,6 +3216,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Upgrade Claude Agent SDK to 0.2.114 for Zod 4 compatibility; bump zod to ^4.0.0 across the workspace
@@ -3157,6 +3239,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Upgrade Claude Agent SDK to 0.2.114 for Zod 4 compatibility; bump zod to ^4.0.0 across the workspace
@@ -3458,6 +3541,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -3604,6 +3688,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -3632,6 +3717,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -3715,6 +3801,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4052,6 +4139,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4119,6 +4207,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4156,6 +4245,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4366,6 +4456,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4381,6 +4472,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4396,6 +4488,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Consolidated file watchers into single WorkspaceEventBus per workspace, halving file descriptor usage
@@ -4413,6 +4506,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4471,6 +4565,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4491,6 +4586,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Codex moved back behind beta feature flag (reverted public visibility)
@@ -4506,6 +4602,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Codex moved back behind beta feature flag
@@ -4535,6 +4632,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4550,6 +4648,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4589,6 +4688,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4630,6 +4730,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -4851,6 +4952,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -5122,6 +5224,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -5177,6 +5280,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Reverted parallel initialization startup optimization
@@ -5194,6 +5298,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Restored 'Use Standalone Binary' option for bun runtime
@@ -5209,6 +5314,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Faster app startup via parallel initialization
@@ -5239,6 +5345,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -5254,6 +5361,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -5288,6 +5396,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -5329,6 +5438,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -5359,6 +5469,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -5374,6 +5485,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Use bash explicitly for claude-helper build scripts on Windows
@@ -5456,6 +5568,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -5565,6 +5678,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -5750,6 +5864,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -6064,6 +6179,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -6236,6 +6352,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -6253,6 +6370,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - macOS artifacts now use user-friendly architecture names (Apple Silicon, Intel)
@@ -6271,6 +6389,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -6332,6 +6451,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -6500,6 +6620,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Updated extension release channel restrictions
@@ -6588,6 +6709,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -6618,6 +6740,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Fixed all high and moderate npm audit vulnerabilities
@@ -6714,6 +6837,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -6731,6 +6855,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Improved MCP OAuth error messages for missing commands
@@ -6746,6 +6871,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Replaced node-pty fork with official package for Windows compatibility
@@ -6764,6 +6890,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -6832,6 +6959,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Extension SDK now exports complete EditorHost types
@@ -6852,6 +6980,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Simplified diff header UI
@@ -6875,6 +7004,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -6914,6 +7044,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Added guidance for users to start a new session when using chat models
@@ -6972,6 +7103,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Split CLAUDE.md into per-package documentation
@@ -7013,6 +7145,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -7028,6 +7161,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -7261,6 +7395,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -7353,6 +7488,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -7369,6 +7505,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -7556,6 +7693,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Improved git availability detection with more comprehensive checking
@@ -7648,6 +7786,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -7691,6 +7830,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Reverted node-pty for Windows Claude login due to stability issues
@@ -8021,6 +8161,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -8241,6 +8382,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -8256,6 +8398,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Disable sourcemaps in production builds
@@ -8271,6 +8414,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Switch from accept/reject to undo/keep for clarity in diff approval actions
@@ -8312,6 +8456,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -8328,6 +8473,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 - Disabled red/green color coding by default
@@ -8408,6 +8554,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -8469,6 +8616,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -8527,6 +8675,7 @@ intended changes plus that fix.
 
 ### Added
 <!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and a plan reader with deliberate editing.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
