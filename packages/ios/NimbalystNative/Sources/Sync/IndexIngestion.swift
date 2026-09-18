@@ -297,11 +297,13 @@ private struct IndexIngestionConsumer: Sendable {
             _ state: IndexReplicationCursorState,
             pendingRunId: String? = nil,
             missingAncestors: [String] = [],
+            skippedRowCount: Int = 0,
             failure: String? = nil
         ) -> IndexMaintenanceOutcome {
             IndexMaintenanceOutcome(
                 generation: generation, id: id, request: request, cursorState: state,
                 pendingFinalizationRunId: pendingRunId, missingAncestorIds: missingAncestors,
+                skippedRowCount: skippedRowCount,
                 ranOffMainActor: offMain, failure: failure
             )
         }
@@ -313,15 +315,16 @@ private struct IndexIngestionConsumer: Sendable {
                     try store.ensureSchema(db)
                     let state = try store.cursorState(db)
                     let pending = try store.pendingFinalization(db)
-                    return outcome(state, pendingRunId: pending?.runId)
+                    return outcome(state, pendingRunId: pending?.runId, skippedRowCount: try store.skippedRowCount(db))
                 }
             case .resumeFinalization(let runId):
                 logger.info("Resuming interrupted bootstrap finalization")
                 _ = try IndexReplicationApplier.finalizeBootstrap(
                     runId: runId, store: store, database: database, cancellation: cancellation
                 )
-                let state = try database.writer.write { db in try store.cursorState(db) }
-                return outcome(state)
+                return try database.writer.read { db in
+                    outcome(try store.cursorState(db), skippedRowCount: try store.skippedRowCount(db))
+                }
             case .resetCursor:
                 let state: IndexReplicationCursorState = try database.writer.write { db in
                     try store.ensureSchema(db)
@@ -355,8 +358,8 @@ private struct IndexIngestionConsumer: Sendable {
         request: IndexPageWork,
         bytes: Int
     ) -> IndexPageOutcome {
-        func outcome(_ result: IndexPageOutcome.Result) -> IndexPageOutcome {
-            IndexPageOutcome(generation: generation, requestId: request.requestId, mode: request.mode, result: result)
+        func outcome(_ result: IndexPageOutcome.Result, skippedRowCount: Int = 0) -> IndexPageOutcome {
+            IndexPageOutcome(generation: generation, requestId: request.requestId, mode: request.mode, result: result, skippedRowCount: skippedRowCount)
         }
         if isCancelled { return outcome(.failed("cancelled")) }
 
@@ -404,13 +407,15 @@ private struct IndexIngestionConsumer: Sendable {
             metrics.batches = result.batches
             metrics.transactionMs = result.outcome.transactionMs
             logger.info("Index page applied (\(request.mode.rawValue)): \(metrics.summaryLine) stale=\(result.outcome.staleRejected) retained=\(result.outcome.retainedTombstones)")
+            let skippedRowCount = try database.writer.read { try store.skippedRowCount($0) }
+            logger.info("Index unreadable rows skipped: \(skippedRowCount)")
             return outcome(.applied(
                 nextPageToken: page.nextPageToken,
                 complete: page.complete,
                 committedCursor: result.committedCursor,
                 historyComplete: historyComplete,
                 entries: page.operations.count
-            ))
+            ), skippedRowCount: skippedRowCount)
         } catch {
             logger.error("Index page storage failure: \(error.localizedDescription)")
             return outcome(.failed(error.localizedDescription))

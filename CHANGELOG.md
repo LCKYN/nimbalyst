@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cloudflare sandbox connection failures show clearer errors and refresh their status before retrying.
 - Workspace windows no longer reopen off-screen after disconnecting or rearranging monitors (#1535).
 - Claude plugins no longer load a second, unconfigured copy alongside their marketplace installation (#1465).
+- Personal session sync keeps publishing when the server index holds entries written under another device's sync key, and the iPhone skips those entries instead of stalling; the sync status shows how many were skipped (#1545, #1542).
+- Selecting the Stable release channel while running a newer build no longer rolls the app back to the older version on every launch (#1545).
+- A sync credential file that cannot be read keeps the existing key instead of silently generating a new one (#1542).
 
 ### Removed
 <!-- Removed features go here -->
