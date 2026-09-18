@@ -65,6 +65,7 @@ export const shellFileAttribution = new ShellFileAttribution({
     return () => unsubscribe(workspace, id);
   },
   prepareCheckout: prepareShellCheckoutBaseline,
+  activity: (generation, id, active) => shellTrackingCoverage.tool(generation, id, active),
   drainEvents: drainWorkspaceEvents,
   observation: (generation, healthy) => shellTrackingCoverage.observation(generation, healthy),
   read: async (file) => {

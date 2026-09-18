@@ -21,6 +21,7 @@ export interface ShellAttributionDependencies {
   subscribe(workspace: string, changed: (file: string, observedAt?: number) => void): Promise<() => void>;
   prepareCheckout?(workspace: string): Promise<ShellCheckoutBaseline | undefined>;
   drainEvents?(workspace: string): Promise<void>;
+  activity?(generation: string, id: string, active: boolean): Promise<void>;
   observation?(generation: string, healthy: boolean): void;
   read(file: string): Promise<ShellFileState | null>;
   knownWrite(file: string, state: ShellFileState | null): boolean;
@@ -31,7 +32,10 @@ export interface ShellAttributionDependencies {
   retryDelayMs?: number;
   now?: () => number;
   settleMs?: number;
+  /** How long a pre-hook waits for earlier windows to retire before this command abstains alone. */
+  preDrainMs?: number;
 }
+const mayWriteFiles = (tool: string) => tool === 'Bash' || tool === 'apply_patch' || tool === 'Uninstrumented';
 export class ShellFileAttribution {
   private readonly sessions = new Map<string, { sessionId: string; workspace: string }>();
   private readonly workspaces = new Map<string, Promise<() => void>>();
@@ -45,7 +49,7 @@ export class ShellFileAttribution {
       files: Set<string>;
       observation: { lost: boolean };
       checkout?: ShellCheckoutBaseline;
-      deferred: Map<string, { evidence: ShellFileEvidence; fingerprint: string | null; turnId?: string }>;
+      deferred: Map<string, { evidence: ShellFileEvidence; fingerprint: string | null; turnId?: string; ambiguity?: ShellCoverageReason }>;
     }
   >();
   private readonly terminal = new Map<string, Set<string>>();
@@ -88,11 +92,10 @@ export class ShellFileAttribution {
     if (!this.sessions.has(generation) || !id || id.length > 256) return;
     // Terminal app-server notifications do not wait for our watcher drain.
     // Finish retiring those tools before allowing another command to execute.
-    const drained = await this.drain([this.sessions.get(generation)?.sessionId ?? ''], 1500);
-    if (!drained) {
-      this.disabled.add(generation);
-      return;
-    }
+    // If a large burst is still being hashed when the budget expires, only this
+    // command abstains: disabling the whole turn turned one slow build into a
+    // missing-edits warning for every command that followed it.
+    const drained = await this.drain([this.sessions.get(generation)?.sessionId ?? ''], this.deps.preDrainMs ?? 1500);
     if (!this.sessions.has(generation) || !id || id.length > 256) return;
     if (this.terminal.get(generation)?.has(id)) {
       this.report(generation, 'staleEvent');
@@ -107,8 +110,8 @@ export class ShellFileAttribution {
       return;
     }
     let checkout: ShellCheckoutBaseline | undefined;
-    const captured = tool !== 'Bash' || await boundedDrain(
-      Promise.resolve(this.deps.prepareCheckout?.(this.sessions.get(generation)!.workspace)).then(value => { checkout = value; }), 750);
+    const captured = tool !== 'Bash' || !drained || await boundedDrain(
+      Promise.resolve(this.deps.prepareCheckout?.(this.sessions.get(generation)!.workspace)).then(value => { checkout = value; }), 1250);
     if (!this.sessions.has(generation) || this.terminal.get(generation)?.has(id)) return;
     if (!captured) this.report(generation, 'checkoutBaseline', undefined, id);
     if (this.unhealthy.has(this.sessions.get(generation)!.workspace)) this.report(generation, 'watcherLoss');
@@ -121,10 +124,15 @@ export class ShellFileAttribution {
         tool,
         start: this.now(),
         files: new Set(),
-        observation: { lost: !captured || this.unhealthy.has(this.sessions.get(generation)!.workspace) },
+        observation: { lost: !drained || !captured || this.unhealthy.has(this.sessions.get(generation)!.workspace) },
         checkout,
         deferred: new Map(),
       });
+    await this.activity(generation, id, mayWriteFiles(tool));
+  }
+  private async activity(generation: string, id: string, active: boolean): Promise<void> {
+    try { await this.deps.activity?.(generation, id, active); }
+    catch { this.disabled.add(generation); this.report(generation, 'coveragePersistence', undefined, id); }
   }
   watcherLost(workspace: string): void {
     this.unhealthy.add(workspace);
@@ -170,6 +178,7 @@ export class ShellFileAttribution {
       observation: { lost: this.unhealthy.has(this.sessions.get(generation)!.workspace) },
       deferred: new Map(),
     });
+    void this.activity(generation, id, true);
   }
   completed(generation: string, id: string): Promise<void> {
     if (!this.sessions.has(generation) || this.terminal.get(generation)?.has(id)) return Promise.resolve();
@@ -226,6 +235,11 @@ export class ShellFileAttribution {
           for (const candidate of candidates) {
             if (window.observation.lost || this.disabled.has(generation) || !this.sessions.has(generation)) break;
             const result = results.get(candidate.evidence.filePath);
+            if (result === 'unchanged') continue;
+            if (candidate.ambiguity) {
+              this.report(generation, candidate.ambiguity, candidate.turnId, id);
+              continue;
+            }
             if (result === 'edit') {
               if (window.files.size >= 500) {
                 this.report(generation, 'overflow', candidate.turnId, id);
@@ -240,6 +254,7 @@ export class ShellFileAttribution {
         }
       }
       if (this.windows.get(key) === window) this.windows.delete(key);
+      await this.activity(generation, id, false);
     })().finally(() => this.closing.delete(key));
     this.closing.set(key, drain);
     return drain;
@@ -256,16 +271,21 @@ export class ShellFileAttribution {
       if (w.generation === generation) {
         if (!this.closing.has(key)) {
           w.observation.lost = true;
-          this.report(generation, 'unmatchedTool', undefined, w.id);
+          if (mayWriteFiles(w.tool)) this.report(generation, 'unmatchedTool', undefined, w.id);
         }
         this.rememberTerminal(generation, w.id);
         this.windows.delete(key);
+        if (!this.closing.has(key)) void this.activity(generation, w.id, false);
       }
     this.observed.get(generation)?.clear();
     this.disabled.delete(generation);
   }
   async release(generation: string): Promise<void> {
     const s = this.sessions.get(generation);
+    // A completion still draining must persist its deferred links and clear its
+    // durable tool marker before the owner disappears; otherwise a quit right
+    // after a command finishes reports an interruption on the next launch.
+    await boundedDrain(Promise.all([...this.closing.values()]), 1500);
     this.endTurn(generation);
     this.sessions.delete(generation);
     this.terminal.delete(generation);
@@ -357,22 +377,33 @@ export class ShellFileAttribution {
         if (candidates.length === 0) return;
         const owners = new Set(candidates.map((w) => w.sessionId));
         if (
-          hasUninstrumentedSession ||
           disabledAtArrival ||
           owners.size !== 1 ||
           candidates.some((w) => w.tool !== 'Bash' || w.observation.lost || this.disabled.has(w.generation))
         ) {
           this.stats.ambiguous++;
+          const reason =
+            disabledAtArrival || candidates.some(w => w.observation.lost || this.disabled.has(w.generation)) ? 'observationGap' :
+            owners.size !== 1 ? 'competingOwners' : 'toolOverlap';
           if (candidates.some((w) => w.tool === 'Bash' || w.tool === 'Uninstrumented'))
-            for (const generation of new Set(candidates.map((w) => w.generation)))
-              this.report(
-                generation,
-                hasUninstrumentedSession ? 'uninstrumented' :
-                  disabledAtArrival || candidates.some(w => w.observation.lost || this.disabled.has(w.generation)) ? 'observationGap' :
-                  owners.size !== 1 ? 'competingOwners' : 'toolOverlap',
-                candidates.find((w) => w.generation === generation)?.turnId,
-                candidates.find((w) => w.generation === generation)?.id
-              );
+            for (const generation of new Set(candidates.map((w) => w.generation))) {
+              const candidate = candidates.find(w => w.generation === generation && w.checkout) ?? candidates.find(w => w.generation === generation)!;
+              // Ownership is irrelevant when final bytes equal the pre-command
+              // baseline. Defer the warning, but never promote ambiguous evidence
+              // into an authored link if the competing tool finishes first.
+              if (!disabledAtArrival && candidate.checkout && !candidate.observation.lost && !this.disabled.has(generation)) {
+                try {
+                  if (await candidate.checkout.defer(filePath) && (candidate.deferred.has(filePath) || candidate.deferred.size < 16_384)) {
+                    candidate.deferred.set(filePath, {
+                      evidence: { sessionId: candidate.sessionId, workspacePath: workspace, filePath, toolUseId: candidate.id, timestamp, source: 'shell-hook-inferred' },
+                      fingerprint, turnId: candidate.turnId, ambiguity: reason,
+                    });
+                    continue;
+                  }
+                } catch { /* An unavailable baseline cannot suppress the warning. */ }
+              }
+              this.report(generation, reason, candidate.turnId, candidate.id);
+            }
           return;
         }
         const winner = candidates.find((w) => this.sessions.has(w.generation));
@@ -397,6 +428,11 @@ export class ShellFileAttribution {
           timestamp,
           source: 'shell-hook-inferred',
         };
+        // Another agent's turn in this workspace is weaker evidence than a
+        // hook-bounded shell window. Links are inferred and non-exclusive, so
+        // note the overlap for diagnostics without withholding the link;
+        // suppressing it made every parallel session a permanent warning.
+        if (hasUninstrumentedSession) this.report(winner.generation, 'uninstrumented', winner.turnId, winner.id);
         if (winner.checkout) {
           let defer: boolean;
           try { defer = await winner.checkout.defer(filePath); }
@@ -407,7 +443,7 @@ export class ShellFileAttribution {
               this.report(winner.generation, 'overflow', winner.turnId);
               return;
             }
-            winner.deferred.set(filePath, { evidence, fingerprint, turnId: winner.turnId });
+            winner.deferred.set(filePath, { evidence, fingerprint, turnId: winner.turnId, ambiguity: winner.deferred.get(filePath)?.ambiguity });
             return;
           }
         }

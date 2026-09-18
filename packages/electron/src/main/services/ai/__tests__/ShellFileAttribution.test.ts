@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, vi } from 'vitest';
-import { ShellFileAttribution, type ShellFileState, type ShellFileEvidence, type ShellPersistenceOutcome } from '../ShellFileAttribution';
+import { ShellFileAttribution, type ShellAttributionDependencies, type ShellFileState, type ShellFileEvidence, type ShellPersistenceOutcome } from '../ShellFileAttribution';
 
-function fixture(beforeRead?: () => Promise<void>, prepareCheckout?: () => Promise<any>) {
+function fixture(beforeRead?: () => Promise<void>, prepareCheckout?: () => Promise<any>, overrides: Partial<ShellAttributionDependencies> = {}) {
   let now = 1000;
   let emit: (file: string) => void = () => {};
   const state = new Map<string, ShellFileState>();
@@ -27,6 +27,7 @@ function fixture(beforeRead?: () => Promise<void>, prepareCheckout?: () => Promi
     retryDelayMs: 0,
     now: () => now,
     settleMs: 0,
+    ...overrides,
   });
   return {
     service,
@@ -255,6 +256,62 @@ it('bounds commit drains and preserves uncertainty when both completion signals 
   await f.service.release(a);
 });
 
+
+it('abstains for one command when the pre-hook drain times out, not for the rest of the turn', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let gated = true;
+  const f = fixture(() => gated ? gate : Promise.resolve(), undefined, { preDrainMs: 5 });
+  const a = await f.service.register('A', '/workspace');
+  await f.service.pre(a, 'big-build', 'Bash');
+  f.write('/workspace/slow-hash.ts', 'A');
+  await f.service.pre(a, 'during-backlog', 'Bash');
+  expect(f.report.mock.calls.map(([, r]) => r)).toContain('drainTimeout');
+  gated = false;
+  f.write('/workspace/unattributable.ts', 'B');
+  release();
+  await f.service.post(a, 'during-backlog');
+  await f.service.post(a, 'big-build');
+  await f.service.pre(a, 'after-backlog', 'Bash');
+  f.write('/workspace/recovered.ts', 'C');
+  await f.service.post(a, 'after-backlog');
+  expect(f.persist.mock.calls.map(([e]) => [e.filePath, e.toolUseId])).toEqual([
+    ['/workspace/slow-hash.ts', 'big-build'],
+    ['/workspace/recovered.ts', 'after-backlog'],
+  ]);
+  await f.service.release(a);
+});
+
+it('shares links with a concurrent uninstrumented session instead of withholding them', async () => {
+  const f = fixture(undefined, undefined, { otherSessions: () => ['claude-session'] });
+  const a = await f.service.register('A', '/workspace');
+  await f.service.pre(a, 'shell', 'Bash');
+  f.write('/workspace/shared.ts', 'codex');
+  await f.service.post(a, 'shell');
+  expect(f.persist.mock.calls.map(([e]) => e.filePath)).toEqual(['/workspace/shared.ts']);
+  expect(f.report.mock.calls.map(([, r]) => r)).toEqual(['uninstrumented']);
+  expect(f.service.getStats().ambiguous).toBe(0);
+  await f.service.release(a);
+});
+
+it('lets an in-flight completion persist and clear its tool marker before release', async () => {
+  let finish!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const activity = vi.fn(async () => {});
+  const f = fixture(undefined, async () => ({
+    defer: async () => true,
+    finish: async (candidates: Array<{ filePath: string }>) => { await gate; return new Map(candidates.map(c => [c.filePath, 'edit'])); },
+  }), { activity });
+  const a = await f.service.register('A', '/workspace');
+  await f.service.pre(a, 'last-command', 'Bash');
+  f.write('/workspace/deferred.ts', 'A');
+  const completing = f.service.post(a, 'last-command');
+  const released = f.service.release(a);
+  setTimeout(finish, 5);
+  await Promise.all([completing, released]);
+  expect(f.persist.mock.calls.map(([e]) => e.filePath)).toEqual(['/workspace/deferred.ts']);
+  expect(activity.mock.calls.at(-1)).toEqual([a, 'last-command', false]);
+});
 
 it('reports watcher loss and recovers on the next turn without importing missed changes', async () => {
   const f = fixture(), a = await f.service.register('A', '/workspace');

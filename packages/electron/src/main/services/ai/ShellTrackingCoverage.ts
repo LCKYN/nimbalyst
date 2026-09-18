@@ -8,6 +8,7 @@ import {
 export interface StoredShellCoverage extends ShellCoverageSummary {
   version: 1;
   active: string[];
+  pendingTools?: Record<string, string[]>;
 }
 interface Dependencies {
   load(sessionId: string): Promise<StoredShellCoverage | undefined>;
@@ -73,14 +74,17 @@ export class ShellTrackingCoverage {
               reasons: {},
               turns: [],
               active: [],
+              pendingTools: {},
             };
       const entry: Entry = { data, dirty: false, loadFailed: failed };
       this.entries.set(sessionId, entry);
       if (failed) this.add(entry, 'coveragePersistence');
-      if (data.active.length) {
+      const unfinished = data.pendingTools === undefined ? data.active.length > 0 : Object.values(data.pendingTools).some(ids => ids.length);
+      if (unfinished) {
         this.add(entry, 'interrupted');
-        data.active = [];
       }
+      data.active = [];
+      data.pendingTools = {};
       // Live handle state is never inferred from persisted state after restart.
       delete data.observation;
       data.state = hasShellCoverageGap(data.reasons) ? 'degraded' : stored ? 'no-detected-fault' : 'unknown';
@@ -107,7 +111,7 @@ export class ShellTrackingCoverage {
     const entry = await this.load(sessionId);
     this.owners.set(generation, { sessionId });
     entry.data.observation = 'watching';
-    // Active means unfinished work, not merely an idle cached provider.
+    // Turn activity and pending file tools are separate durable evidence.
     entry.data.state = hasShellCoverageGap(entry.data.reasons) ? 'degraded' : 'no-detected-fault';
     this.touch(entry);
   }
@@ -121,8 +125,24 @@ export class ShellTrackingCoverage {
     entry.data.turns.push({ turnId, firstAt: now, lastAt: now, reasons: {} });
     if (entry.data.turns.length > 32) entry.data.turns.shift();
     this.touch(entry);
-    // Persist the unfinished marker promptly so restart can reveal interruption.
+    // Keep turn history durable; only pending tool evidence establishes file interruption.
     void this.write(entry);
+  }
+  async tool(generation: string, id: string, active: boolean): Promise<void> {
+    const owner = this.owners.get(generation);
+    if (!owner) return;
+    const entry = this.entries.get(owner.sessionId)!;
+    const pending = entry.data.pendingTools ??= {};
+    const ids = new Set(pending[generation] ?? []);
+    // Non-writing hooks (every MCP pre/post) must not cost a durable write.
+    if (ids.has(id) === active) return;
+    if (active) ids.add(id); else ids.delete(id);
+    if (ids.size) pending[generation] = [...ids]; else delete pending[generation];
+    this.touch(entry);
+    // Only an unpersisted "active" marker can hide an interruption after a
+    // crash. A slow clear is retried by the background timer; failing it must
+    // not disable tracking for the rest of the turn.
+    if (!(await this.flush([owner.sessionId])) && active) throw new Error('Could not persist shell tool boundary');
   }
   endTurn(generation: string, turnId?: string): void {
     const owner = this.owners.get(generation);
@@ -218,7 +238,10 @@ export class ShellTrackingCoverage {
           entry.data.turns = [...previous.turns, ...entry.data.turns].slice(-32);
           entry.data.events = [...previous.events ?? [], ...entry.data.events ?? []].slice(-32);
           entry.data.firstAt = previous.firstAt ?? entry.data.firstAt;
-          if (previous.active.some((id) => !this.owners.has(id))) this.add(entry, 'interrupted');
+          const unfinished = previous.pendingTools === undefined
+            ? previous.active.some(id => !this.owners.has(id))
+            : Object.entries(previous.pendingTools).some(([id, tools]) => !this.owners.has(id) && tools.length);
+          if (unfinished) this.add(entry, 'interrupted');
         }
         entry.loadFailed = false;
       }
@@ -282,7 +305,9 @@ export class ShellTrackingCoverage {
   async close(generation: string): Promise<void> {
     const owner = this.owners.get(generation);
     if (!owner) return;
-    if (owner.turnId) this.record(generation, 'interrupted');
+    const entry = this.entries.get(owner.sessionId)!;
+    if (entry.data.pendingTools?.[generation]?.length) this.record(generation, 'interrupted');
+    if (entry.data.pendingTools) delete entry.data.pendingTools[generation];
     this.endTurn(generation);
     this.owners.delete(generation);
     await this.flush([owner.sessionId]);

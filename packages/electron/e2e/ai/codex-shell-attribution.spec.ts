@@ -30,17 +30,19 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
   await fs.mkdir(path.join(workspace, '.claude'));
   for (let i = 0; i < 7500; i += 64) await Promise.all(Array.from({ length: Math.min(64, 7500 - i) }, (_, j) =>
     fs.writeFile(path.join(workspace, '.claude', `command-${i + j}.md`), 'checkout baseline\n')));
+  await fs.writeFile(path.join(workspace, 'rebuild.cjs'), `const fs = require('fs'); fs.rmSync('types', {recursive: true, force: true}); fs.mkdirSync('types'); for (let i=0;i<300;i++) fs.writeFileSync('types/generated-'+i+'.d.ts', 'export declare const value: string;\\n');`);
+  execFileSync(process.execPath, ['rebuild.cjs'], { cwd: workspace });
   git('add', '.');
   git('commit', '-qm', 'Fixture baseline');
   let app: Awaited<ReturnType<typeof launchElectronApp>> | undefined;
   const evidence: any = { root, owners: [] };
   try {
-    app = await launchElectronApp({
+    const launchOptions = {
       mainPath: process.env.NIMBALYST_E2E_MAIN_PATH,
       workspace,
       preserveTestDatabase: true,
       // This disposable fixture creates Git worktrees; workspace-write protects .git.
-      permissionMode: 'none',
+      permissionMode: 'none' as const,
       recordVideo: { dir: path.join(testInfo.outputDir, 'video') },
       env: {
         NIMBALYST_PERMISSION_MODE: 'bypass-all',
@@ -49,7 +51,8 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
         NIMBALYST_CDP_PORT: '0',
         CODEX_HOME: codexHome,
       },
-    });
+    };
+    app = await launchElectronApp(launchOptions);
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
     await waitForAppReady(page);
@@ -68,6 +71,9 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
         (window as any).__fileLinkEvents.push(args)
       );
     });
+    await expect.poll(async () => page.evaluate(async () =>
+      (await (window as any).electronAPI.invoke('openai-codex:check-login')).isLoggedIn
+    ), { timeout: 15_000, message: 'Isolated Codex auth must be ready before exercising tracking' }).toBe(true);
     for (const marker of ['first', 'second']) {
       const session = await page.evaluate(
         async ({ workspace }) =>
@@ -83,7 +89,7 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
       );
       expect(session.id).toBeTruthy();
       evidence.owners.push(session.id);
-      const checkoutStep = marker === 'first' ? 'First create the fixture worktree by running `git worktree add --detach scratch-checkout HEAD`. If this fails, stop and report its full error. Then run `printf \'// authored\\n\' > scratch-checkout/shared.ts`. This checkout is a required part of the test. ' : '';
+      const checkoutStep = marker === 'first' ? 'First run `node rebuild.cjs` to delete and regenerate identical tracked declarations. Then create the fixture worktree by running `git worktree add --detach scratch-checkout HEAD`. If this fails, stop and report its full error. Then run `printf \'// authored\\n\' > scratch-checkout/shared.ts`. This checkout is a required part of the test. ' : '';
       const result = await page.evaluate(
         async ({ workspace, id, marker, checkoutStep }) =>
           (window as any).electronAPI.invoke(
@@ -98,6 +104,7 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
       evidence[marker] = result;
       evidence[marker + 'Raw'] = await page.evaluate(async id =>
         (window as any).electronAPI.invoke('test:query-db', 'SELECT content FROM ai_agent_messages WHERE session_id=$1 AND direction=$2 ORDER BY id', [id, 'output']), session.id);
+      expect(result.content, 'Codex must finish the fixture commands before file assertions').toContain('DONE');
       if (marker === 'first') expect(await fs.readFile(path.join(workspace, 'scratch-checkout', 'shared.ts'), 'utf8')).toBe('// authored\n');
       await expect
         .poll(() => fs.readFile(path.join(workspace, 'shared.ts'), 'utf8'), { timeout: 60_000 })
@@ -129,11 +136,12 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
       );
       const commitContext = await page.evaluate(async ({ workspace, id }) =>
         (window as any).electronAPI.invoke('git:get-commit-context', workspace, id), { workspace, id: session.id });
+      evidence[marker + 'Coverage'] = commitContext.coverage;
       expect(commitContext.coverage).toEqual([expect.objectContaining({ sessionId: session.id, state: 'no-detected-fault' })]);
       const durableCoverage = await page.evaluate(async id =>
         (window as any).electronAPI.invoke('test:query-db', 'SELECT data FROM shell_tracking_coverage WHERE session_id = $1', [id]), session.id);
       expect(JSON.parse(durableCoverage.rows[0].data).active).toEqual([]);
-      evidence[marker + 'Coverage'] = commitContext.coverage;
+      expect(JSON.parse(durableCoverage.rows[0].data).pendingTools).toEqual({});
       evidence[marker + 'AfterFailure'] = afterFailure;
       expect(afterFailure).toEqual({ failedLookup: true, owners: [...evidence.owners].sort() });
     }
@@ -164,8 +172,35 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
       { workspace }
     );
     expect(evidence.rows.rows.filter((row: any) => row.file_path.includes('/scratch-checkout/.claude/'))).toEqual([]);
+    expect(evidence.rows.rows.filter((row: any) => row.file_path.includes('/types/generated-'))).toEqual([]);
+    expect(git('diff', '--name-only', 'HEAD', '--', 'types')).toBe('');
     evidence.notifications = await page.evaluate(() => (window as any).__fileLinkEvents);
     expect(evidence.notifications.length).toBeGreaterThan(0);
+    // A waiting, acknowledged MCP call keeps the turn active without an unfinished shell write.
+    const waitingId = await page.evaluate(async ({ workspace }) => {
+      const api = (window as any).electronAPI;
+      const session = await api.invoke('ai:createSession', 'openai-codex', undefined, workspace, 'openai-codex:gpt-6-astra', 'agent');
+      void api.invoke('ai:sendMessage', 'Use the nimbalyst AskUserQuestion MCP tool to ask "Proceed with the fixture?" with Yes and No options. Wait for the answer. Do not run any shell commands or other tools.', undefined, session.id, workspace).catch(() => {});
+      return session.id;
+    }, { workspace });
+    await expect.poll(async () => page.evaluate(async id => {
+      const result = await (window as any).electronAPI.invoke('test:query-db', 'SELECT content FROM ai_agent_messages WHERE session_id = $1 AND direction = $2', [id, 'output']);
+      return result.rows.some((row: any) => { try { const value = JSON.parse(row.content); return value.method === 'item/started' && value.params?.item?.tool === 'AskUserQuestion'; } catch { return false; } });
+    }, waitingId), { timeout: 60_000 }).toBe(true);
+    await expect.poll(async () => page.evaluate(async id => {
+      const result = await (window as any).electronAPI.invoke('test:query-db', 'SELECT data FROM shell_tracking_coverage WHERE session_id = $1', [id]);
+      return result.rows[0] ? JSON.parse(result.rows[0].data).pendingTools : null;
+    }, waitingId)).toEqual({});
+    evidence.waitingSession = waitingId;
+    await app.close();
+    app = await launchElectronApp(launchOptions);
+    const restartedPage = await app.firstWindow();
+    await restartedPage.waitForLoadState('domcontentloaded');
+    await waitForAppReady(restartedPage);
+    const restored = await restartedPage.evaluate(async id => (window as any).electronAPI.invoke('session-files:coverage', [id]), waitingId);
+    evidence.afterRestart = restored;
+    expect(restored).toEqual([expect.objectContaining({ sessionId: waitingId, state: 'no-detected-fault', reasons: {} })]);
+
   } finally {
     await app?.close();
     await fs.rm(codexHome, { recursive: true, force: true });

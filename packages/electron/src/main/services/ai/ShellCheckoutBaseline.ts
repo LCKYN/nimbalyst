@@ -1,12 +1,13 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { prepareShellContentBaseline } from './ShellContentBaseline';
 import { contentFingerprint } from '../../file/knownFileWrites';
 
 export interface CheckoutCandidate { filePath: string; fingerprint: string | null }
 export interface ShellCheckoutBaseline {
   defer(filePath: string): Promise<boolean>;
-  finish(candidates: CheckoutCandidate[]): Promise<Map<string, 'edit' | 'initialization'>>;
+  finish(candidates: CheckoutCandidate[]): Promise<Map<string, 'edit' | 'initialization' | 'unchanged'>>;
 }
 
 function git(cwd: string, args: string[]): Promise<string> {
@@ -36,6 +37,11 @@ export async function prepareShellCheckoutBaseline(workspace: string): Promise<S
     try { return await fs.realpath(root); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return root; throw error; }
   })));
+  const canonicalWorkspace = await fs.realpath(workspace);
+  const content = new Map<string, Awaited<ReturnType<typeof prepareShellContentBaseline>>>();
+  await Promise.all([...knownRoots].filter(root => inside(canonicalWorkspace, root)).map(async root => {
+    content.set(root, await prepareShellContentBaseline(root, git));
+  }));
   const common = await fs.realpath((await git(workspace, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim());
   const directories = new Map<string, Promise<string | undefined>>();
   const initial = new Map<string, Promise<string | undefined>>();
@@ -83,15 +89,25 @@ export async function prepareShellCheckoutBaseline(workspace: string): Promise<S
       if (!root) return false;
       let existing = known.get(root);
       if (!existing) { existing = fs.realpath(root).then(value => knownRoots.has(value)); known.set(root, existing); }
-      if (await existing) return false;
+      if (await existing) {
+        const canonical = await fs.realpath(root);
+        if (!content.has(canonical)) return false;
+        staged.set(filePath, root);
+        return true;
+      }
       const revision = await initialRevision(root);
       if (!revision) return false; // An unrelated nested repository is not a new worktree.
       staged.set(filePath, root);
       return true;
     },
     async finish(candidates) {
-      const result = new Map<string, 'edit' | 'initialization'>();
+      const result = new Map<string, 'edit' | 'initialization' | 'unchanged'>();
       for (const root of new Set(candidates.map(c => staged.get(c.filePath)).filter((r): r is string => !!r))) {
+        const existing = content.get(await fs.realpath(root));
+        if (existing) {
+          for (const [file, outcome] of await existing(candidates.filter(c => staged.get(c.filePath) === root), root)) result.set(file, outcome);
+          continue;
+        }
         const revision = await initialRevision(root);
         if (!revision) throw new Error('Lost worktree initialization revision');
         const [tree, diff] = await Promise.all([

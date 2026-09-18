@@ -14,7 +14,7 @@ export const shellCoverageReasons = {
   observationGap: 'Events arrived during an interrupted tracking window',
   checkoutBaseline: 'Repository initialization could not be reconciled',
   initialization: 'Repository checkout files were excluded',
-  uninstrumented: 'Another active session was not instrumented',
+  uninstrumented: 'Another agent session was active; links are shared, not exclusive',
   overflow: 'Tracking exceeded its bounded capacity',
   throttled: 'File links could not be saved within the rate limit',
   quota: 'The session reached its file tracking limit',
@@ -60,5 +60,6 @@ export function shellCoverageDetails(coverage: ShellCoverageSummary[]): string[]
 }
 
 export function isShellCoverageFault(reason: string): boolean {
-  return !['excluded', 'knownWrite', 'initialization', 'suspiciousWindow'].includes(reason);
+  // A concurrent agent session does not lose edits; it only makes links non-exclusive.
+  return !['excluded', 'knownWrite', 'initialization', 'suspiciousWindow', 'uninstrumented'].includes(reason);
 }
