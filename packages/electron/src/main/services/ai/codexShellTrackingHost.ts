@@ -186,7 +186,7 @@ export async function prepareShellTracking(sessionId: string, workspace: string)
     env: {
       NIMBALYST_SHELL_HOOK_URL: `http://127.0.0.1:${address.port}/${token}`,
     },
-    toolStarted: (id: string) => shellFileAttribution.started(generation, id),
+    toolStarted: (id: string, kind: 'shell' | 'patch' | 'mcp') => shellFileAttribution.started(generation, id, kind),
     turnStarted: (id: string) => shellTrackingCoverage.turn(generation, id),
     unavailable: () => {
       void shellTrackingCoverage.unavailable(sessionId);

@@ -102,7 +102,7 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
     };
     const assertDiagnostics = (captured: Awaited<ReturnType<typeof recordTurn>>) => {
       for (const summary of captured.coverage) for (const event of summary.events ?? []) {
-        if (!['unmatchedTool', 'missingPre', 'staleEvent'].includes(event.reason)) continue;
+        if (!['unmatchedTool', 'missingPre', 'staleEvent', 'foreignTool'].includes(event.reason)) continue;
         expect(event.tool).toEqual(expect.any(String));
         if (event.hookTurnId !== undefined) expect(event.turnMatched).toEqual(expect.any(Boolean));
         if (event.agentType !== undefined) expect(event.agentType).toEqual(expect.any(String));
@@ -223,13 +223,14 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
     evidence.notifications = await page.evaluate(() => (window as any).__fileLinkEvents);
     expect(evidence.notifications.length).toBeGreaterThan(0);
     expect(evidence.hookLog.some((hook: any) => hook.tool === 'Bash'), 'Debug capture must observe the baseline shell hooks').toBe(true);
-    // Diagnostic fixtures: faults remain permitted until the later fencing/typing slice.
-    const questionId = await page.evaluate(async ({ workspace }) => {
+    // Questions are non-writers; native subagent hooks must be fenced at the root host.
+    const questionPrompt = `Call the nimbalyst AskUserQuestion MCP tool exactly once with this exact argument object: ${JSON.stringify({ questions: [{ header: 'Fixture', question: 'Proceed with the fixture?', options: [{ label: 'Yes', description: 'Proceed with the fixture.' }, { label: 'No', description: 'Do not proceed with the fixture.' }], multiSelect: false }] })}. Wait for the answer. Do not run shell commands or other tools.`;
+    const questionId = await page.evaluate(async ({ workspace, questionPrompt }) => {
       const api = (window as any).electronAPI;
       const session = await api.invoke('ai:createSession', 'openai-codex', undefined, workspace, 'openai-codex:gpt-6-astra', 'agent');
-      (window as any).__sliceQuestion = api.invoke('ai:sendMessage', 'Use the nimbalyst AskUserQuestion MCP tool to ask "Proceed with the fixture?" with Yes and No options. Wait for the answer, then end with DONE. Do not run shell commands or other tools.', undefined, session.id, workspace);
+      (window as any).__sliceQuestion = api.invoke('ai:sendMessage', questionPrompt + ' After the answer, end with DONE.', undefined, session.id, workspace);
       return session.id;
-    }, { workspace });
+    }, { workspace, questionPrompt });
     let promptId = '';
     evidence.questionSession = questionId;
     await expect.poll(async () => {
@@ -246,6 +247,8 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
     evidence.questionTurn = await recordTurn(questionId);
     expect(evidence.questionResult.content).toContain('DONE');
     assertDiagnostics(evidence.questionTurn);
+    expect(evidence.questionTurn.coverage).toEqual([expect.objectContaining({ sessionId: questionId, state: 'no-detected-fault' })]);
+    expect(evidence.questionTurn.coverage[0].reasons.unmatchedTool ?? 0).toBe(0);
     const subagentId = await page.evaluate(async ({ workspace }) => {
       const api = (window as any).electronAPI;
       const session = await api.invoke('ai:createSession', 'openai-codex', undefined, workspace, 'openai-codex:gpt-6-astra', 'agent');
@@ -262,13 +265,19 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
       try { const item = JSON.parse(row.content)?.params?.item; return item?.type === 'subAgentActivity' && item.kind === kind && item.agentThreadId; } catch { return false; }
     }), `The fixture must observe a native Codex subagent ${kind}`).toBe(true);
     assertDiagnostics(evidence.subagentTurn);
+    evidence.subagentLinks = await page.evaluate(async ({ workspace, filePath }) =>
+      (window as any).electronAPI.invoke('sessions:get-by-file', workspace, filePath),
+    { workspace, filePath: path.join(workspace, 'subagent.ts') });
+    expect(evidence.subagentLinks.map((session: any) => session.id)).not.toContain(subagentId);
+    expect(evidence.subagentTurn.coverage).toEqual([expect.objectContaining({ sessionId: subagentId, state: 'no-detected-fault' })]);
+    expect(evidence.subagentTurn.coverage[0].reasons.foreignTool ?? 0).toBeGreaterThanOrEqual(1);
     // A waiting, acknowledged MCP call keeps the turn active without an unfinished shell write.
-    const waitingId = await page.evaluate(async ({ workspace }) => {
+    const waitingId = await page.evaluate(async ({ workspace, questionPrompt }) => {
       const api = (window as any).electronAPI;
       const session = await api.invoke('ai:createSession', 'openai-codex', undefined, workspace, 'openai-codex:gpt-6-astra', 'agent');
-      void api.invoke('ai:sendMessage', 'Use the nimbalyst AskUserQuestion MCP tool to ask "Proceed with the fixture?" with Yes and No options. Wait for the answer. Do not run any shell commands or other tools.', undefined, session.id, workspace).catch(() => {});
+      void api.invoke('ai:sendMessage', questionPrompt, undefined, session.id, workspace).catch(() => {});
       return session.id;
-    }, { workspace });
+    }, { workspace, questionPrompt });
     await expect.poll(async () => page.evaluate(async id => {
       const result = await (window as any).electronAPI.invoke('test:query-db', 'SELECT content FROM ai_agent_messages WHERE session_id = $1 AND direction = $2', [id, 'output']);
       return result.rows.some((row: any) => { try { const value = JSON.parse(row.content); return value.method === 'item/started' && value.params?.item?.tool === 'AskUserQuestion'; } catch { return false; } });

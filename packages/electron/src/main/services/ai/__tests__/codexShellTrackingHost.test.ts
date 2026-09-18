@@ -36,7 +36,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-it('forwards only hook identity through the executable hook and records a foreign turn without fencing', async () => {
+it('fences foreign identity through the executable hook and loopback host without a coverage fault', async () => {
   registration = await prepareShellTracking('host-test', '/workspace');
   registration!.turnStarted('root-turn');
   const pre = vi.spyOn(shellFileAttribution, 'pre');
@@ -51,13 +51,15 @@ it('forwards only hook identity through the executable hook and records a foreig
   });
   await hook('PreToolUse');
   expect(pre).toHaveBeenCalledWith(expect.any(String), 'foreign', 'Bash', { sessionId: 'child-session', turnId: 'child-turn', agentType: 'worker' });
-  expect(shellFileAttribution.getStats().activeWindows).toBe(1);
+  expect(shellFileAttribution.getStats().activeWindows).toBe(0);
   fixture.observed!('change', '/workspace/excluded.ts', Date.now() + 1);
   await shellFileAttribution.flush();
+  await hook('PostToolUse');
   registration!.endTurn();
   const [coverage] = await shellTrackingCoverage.readMany(['host-test']);
-  expect(coverage.events).toContainEqual(expect.objectContaining({ reason: 'unmatchedTool', tool: 'Bash', hookTurnId: 'child-turn', turnMatched: false, agentType: 'worker', hookSessionId: 'child-session' }));
-  await hook('PostToolUse');
+  expect(coverage.events).toContainEqual(expect.objectContaining({ reason: 'foreignTool', tool: 'Bash', hookTurnId: 'child-turn', turnMatched: false, agentType: 'worker', hookSessionId: 'child-session' }));
+  expect(coverage.reasons).toEqual({ foreignTool: 2 });
+  expect(coverage.state).toBe('no-detected-fault');
   expect(post).toHaveBeenCalledWith(expect.any(String), 'foreign', { sessionId: 'child-session', turnId: 'child-turn', agentType: 'worker', tool: 'Bash' });
 });
 
@@ -72,4 +74,16 @@ it('accepts legacy hooks and rejects invalid optional identities at the HTTP bou
     expect((await send({ [field]: 'x'.repeat(257) })).status).toBe(400);
   }
   await shellTrackingCoverage.flush(['validation-test']);
+});
+
+it('passes MCP start typing to attribution without marking a pending writer', async () => {
+  registration = await prepareShellTracking('mcp-test', '/workspace');
+  registration!.turnStarted('question-turn');
+  const activity = vi.spyOn(shellTrackingCoverage, 'tool');
+  registration!.toolStarted('question', 'mcp');
+  expect(activity).not.toHaveBeenCalled();
+  registration!.endTurn();
+  await shellFileAttribution.drain(['mcp-test']);
+  const [coverage] = await shellTrackingCoverage.readMany(['mcp-test']);
+  expect(coverage.reasons).toEqual({});
 });

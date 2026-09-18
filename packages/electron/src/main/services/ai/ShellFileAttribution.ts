@@ -1,4 +1,5 @@
 import type { ShellCoverageReason } from '@nimbalyst/runtime/ai/shellTrackingCoverage';
+import type { CodexShellToolKind } from '@nimbalyst/runtime/ai/server/protocols/codexAppServer/shellTracking';
 import type { ShellCheckoutBaseline } from './ShellCheckoutBaseline';
 import { boundedDrain, type ShellHookDiagnostics } from './ShellTrackingCoverage';
 import path from 'node:path';
@@ -93,6 +94,7 @@ export class ShellFileAttribution {
   async pre(generation: string, id: string, tool: string, identity: ShellHookIdentity = {}): Promise<void> {
     if (!this.sessions.has(generation) || !id || id.length > 256) return;
     const hook = this.hookDiagnostics(generation, tool, identity);
+    if (this.foreignHook(generation, id, hook)) return;
     // Terminal app-server notifications do not wait for our watcher drain.
     // Finish retiring those tools before allowing another command to execute.
     // If a large burst is still being hashed when the budget expires, only this
@@ -116,11 +118,17 @@ export class ShellFileAttribution {
     const captured = tool !== 'Bash' || !drained || await boundedDrain(
       Promise.resolve(this.deps.prepareCheckout?.(this.sessions.get(generation)!.workspace)).then(value => { checkout = value; }), 1250);
     if (!this.sessions.has(generation) || this.terminal.get(generation)?.has(id)) return;
+    // A baseline read can outlive the turn that admitted the hook. Preserve the
+    // arrival diagnostics, but recheck ownership before installing its window.
+    if (identity.turnId !== undefined && identity.turnId !== this.deps.currentTurn?.(generation)) {
+      this.report(generation, 'foreignTool', undefined, id, hook);
+      return;
+    }
     if (!captured) this.report(generation, 'checkoutBaseline', undefined, id);
     if (this.unhealthy.has(this.sessions.get(generation)!.workspace)) this.report(generation, 'watcherLoss');
     this.observed.get(generation)?.add(id);
     const key = generation + '|' + id;
-    if (!this.windows.has(key) || this.windows.get(key)?.tool === 'Uninstrumented')
+    if (!this.windows.has(key) || ['Uninstrumented', 'MCP'].includes(this.windows.get(key)!.tool))
       this.windows.set(key, {
         generation,
         id,
@@ -171,7 +179,12 @@ export class ShellFileAttribution {
     const window = toolUseId ? this.windows.get(generation + '|' + toolUseId) : undefined;
     this.deps.report?.(generation, reason, turnId, toolUseId, hook ?? (window && (window.hook ?? { tool: window.tool })));
   }
-  started(generation: string, id: string): void {
+  private foreignHook(generation: string, id: string, hook: ShellHookDiagnostics): boolean {
+    if (hook.turnMatched !== false && hook.agentType === undefined) return false;
+    this.report(generation, 'foreignTool', undefined, id, hook);
+    return true;
+  }
+  started(generation: string, id: string, kind: CodexShellToolKind): void {
     if (!this.sessions.has(generation) || this.terminal.get(generation)?.has(id)) return;
     const key = generation + '|' + id;
     if (this.windows.has(key)) return;
@@ -185,13 +198,13 @@ export class ShellFileAttribution {
     this.windows.set(key, {
       generation,
       id,
-      tool: 'Uninstrumented',
+      tool: kind === 'mcp' ? 'MCP' : 'Uninstrumented',
       start: this.now(),
       files: new Set(),
       observation: { lost: this.unhealthy.has(this.sessions.get(generation)!.workspace) },
       deferred: new Map(),
     });
-    void this.activity(generation, id, true);
+    if (kind !== 'mcp') void this.activity(generation, id, true);
   }
   completed(generation: string, id: string): Promise<void> {
     if (!this.sessions.has(generation) || this.terminal.get(generation)?.has(id)) return Promise.resolve();
@@ -210,7 +223,7 @@ export class ShellFileAttribution {
     }
     this.observed.get(generation)?.delete(id);
   }
-  async drain(sessionIds: string[], timeoutMs = 1500): Promise<boolean> {
+  async drain(sessionIds: string[], timeoutMs = 1500, report = true): Promise<boolean> {
     const work = async () => {
       do {
         await Promise.all([...new Set([...this.sessions.values()].map(s => s.workspace))].map(w => this.deps.drainEvents?.(w)));
@@ -221,13 +234,14 @@ export class ShellFileAttribution {
       } while (true);
     };
     const success = await boundedDrain(work(), timeoutMs);
-    if (!success)
+    if (!success && report)
       for (const [generation, session] of this.sessions) {
         if (sessionIds.includes(session.sessionId)) this.report(generation, 'drainTimeout');
       }
     return success;
   }
   post(generation: string, id: string, identity?: ShellHookIdentity & { tool: string }): Promise<void> {
+    if (identity && this.foreignHook(generation, id, this.hookDiagnostics(generation, identity.tool, identity))) return Promise.resolve();
     // Shared bus delivery includes atomic-write/debounce delays on Linux.
     // Keep the window open while draining; this is inference, not an OS barrier.
     const key = generation + '|' + id;
@@ -285,10 +299,16 @@ export class ShellFileAttribution {
     for (const [key, w] of this.windows)
       if (w.generation === generation) {
         if (!this.closing.has(key)) {
-          w.observation.lost = true;
           const eventFree = !w.observation.events && w.files.size === 0 && w.deferred.size === 0;
           if (mayWriteFiles(w.tool) && (w.tool === 'Uninstrumented' || !eventFree))
             this.report(generation, 'unmatchedTool', undefined, w.id);
+          // Queue the same reconciliation as a completion, including candidates
+          // whose observed events are still waiting for a read. Detach below so
+          // later writes cannot enter this ended turn while persistence drains.
+          if (w.tool === 'Bash' && w.checkout && !eventFree) {
+            if (this.disabled.has(generation)) w.observation.lost = true;
+            void this.post(generation, w.id);
+          } else w.observation.lost = true;
         }
         this.rememberTerminal(generation, w.id);
         this.windows.delete(key);
@@ -302,8 +322,9 @@ export class ShellFileAttribution {
     // A completion still draining must persist its deferred links and clear its
     // durable tool marker before the owner disappears; otherwise a quit right
     // after a command finishes reports an interruption on the next launch.
-    await boundedDrain(Promise.all([...this.closing.values()]), 1500);
     this.endTurn(generation);
+    // Bounded wait for turn-end reconciliation; a slow quit is not a coverage fault.
+    await this.drain(s ? [s.sessionId] : [], 1500, false);
     this.sessions.delete(generation);
     this.terminal.delete(generation);
     this.observed.delete(generation);

@@ -3,6 +3,7 @@ export const shellCoverageReasons = {
   missingPre: 'Tool ran without an acknowledged tracking hook',
   unmatchedTool: 'Tool tracking ended without a completion signal',
   staleEvent: 'Late or contradictory tool events were ignored',
+  foreignTool: 'Hooks from another turn or a subagent were ignored',
   suspiciousWindow: 'A tool exceeded the previous age threshold',
   interrupted: 'Tracking was interrupted before its turn finished',
   unavailable: 'Shell tracking could not start',
@@ -64,5 +65,5 @@ export function shellCoverageDetails(coverage: ShellCoverageSummary[]): string[]
 
 export function isShellCoverageFault(reason: string): boolean {
   // A concurrent agent session does not lose edits; it only makes links non-exclusive.
-  return !['excluded', 'knownWrite', 'initialization', 'suspiciousWindow', 'uninstrumented'].includes(reason);
+  return !['excluded', 'knownWrite', 'initialization', 'suspiciousWindow', 'uninstrumented', 'foreignTool'].includes(reason);
 }

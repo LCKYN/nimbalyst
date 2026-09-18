@@ -45,6 +45,23 @@ function fixture(beforeRead?: () => Promise<void>, prepareCheckout?: () => Promi
   };
 }
 describe('shell hook attribution', () => {
+  it('keeps an MCP start ambiguous without a pending writer or unmatched-tool fault', async () => {
+    const activity = vi.fn(async () => {});
+    const f = fixture(undefined, undefined, { activity });
+    const a = await f.service.register('A', '/workspace');
+    f.service.started(a, 'question', 'mcp');
+    expect(activity).not.toHaveBeenCalled();
+    await f.service.pre(a, 'shell', 'Bash');
+    f.write('/workspace/overlap.ts', 'ambiguous');
+    await f.service.post(a, 'shell');
+    expect(f.persist).not.toHaveBeenCalled();
+    expect(f.report.mock.calls.map(([, reason]) => reason)).toEqual(['toolOverlap']);
+    f.report.mockClear();
+    f.service.endTurn(a);
+    expect(f.report).not.toHaveBeenCalled();
+    expect(f.service.getStats().activeWindows).toBe(0);
+    await f.service.release(a);
+  });
   it.each(['Bash', 'apply_patch'])('silently retires event-free %s windows and clears their durable marker', async tool => {
     const activity = vi.fn(async () => {});
     const f = fixture(undefined, undefined, { activity });
@@ -59,35 +76,55 @@ describe('shell hook attribution', () => {
     await f.service.release(a);
   });
 
-  it('retains deferred evidence and hook identity at arrival without fencing a foreign turn', async () => {
-    let turn = 'root-turn';
-    const finish = vi.fn(async () => new Map());
-    const f = fixture(undefined, async () => ({ defer: async () => true, finish }), { currentTurn: () => turn });
+  it.each([{ turnId: 'child-turn' }, { turnId: 'root-turn', agentType: '' }, { agentType: 'worker' }])('fences foreign pre and post hooks without disturbing a root window: %j', async identity => {
+    const activity = vi.fn(async () => {});
+    const f = fixture(undefined, undefined, { currentTurn: () => 'root-turn', activity });
     const a = await f.service.register('A', '/workspace');
-    await f.service.pre(a, 'orphan', 'Bash', { sessionId: 'child', turnId: 'child-turn', agentType: 'worker' });
-    expect(f.service.getStats().activeWindows).toBe(1);
-    f.write('/workspace/deferred.ts', 'candidate');
+    await f.service.pre(a, 'foreign', 'Bash', { sessionId: 'root-session', ...identity });
+    expect(f.service.getStats().activeWindows).toBe(0);
+    expect(activity).not.toHaveBeenCalled();
+    f.write('/workspace/subagent.ts', 'candidate');
     await f.service.flush();
-    turn = 'child-turn';
-    f.service.endTurn(a);
-    expect(f.report).toHaveBeenCalledWith(a, 'unmatchedTool', undefined, 'orphan', {
-      tool: 'Bash', hookSessionId: 'child', hookTurnId: 'child-turn', turnMatched: false, agentType: 'worker',
-    });
-    expect(finish).not.toHaveBeenCalled();
     expect(f.persist).not.toHaveBeenCalled();
+    // Session identity is diagnostic only; old hooks without turn_id still work.
+    await f.service.pre(a, 'root', 'Bash', { sessionId: 'another-session' });
+    await f.service.post(a, 'root', { tool: 'Bash', ...identity });
+    expect(f.service.getStats().activeWindows).toBe(1);
+    f.write('/workspace/root.ts', 'owned');
+    await f.service.post(a, 'root');
+    expect(f.persist.mock.calls.map(([e]) => e.filePath)).toEqual(['/workspace/root.ts']);
+    expect(f.report.mock.calls.map(([, reason]) => reason)).toEqual(['foreignTool', 'foreignTool']);
     await f.service.release(a);
   });
 
   it('records missing-pre and stale-pre context without inventing absent hook identity', async () => {
     const f = fixture(undefined, undefined, { currentTurn: () => 'root' });
     const a = await f.service.register('A', '/workspace');
-    f.service.started(a, 'missing');
+    f.service.started(a, 'missing', 'shell');
     await f.service.completed(a, 'missing');
     expect(f.report).toHaveBeenCalledWith(a, 'missingPre', undefined, 'missing', { tool: 'Uninstrumented' });
-    await f.service.pre(a, 'missing', 'Bash', { turnId: 'root', agentType: 'main' });
+    await f.service.pre(a, 'missing', 'Bash', { turnId: 'root' });
     expect(f.report).toHaveBeenLastCalledWith(a, 'staleEvent', undefined, 'missing', {
-      tool: 'Bash', hookTurnId: 'root', turnMatched: true, agentType: 'main',
+      tool: 'Bash', hookTurnId: 'root', turnMatched: true,
     });
+    await f.service.release(a);
+  });
+
+  it('does not open an old-turn hook after checkout preparation crosses a turn boundary', async () => {
+    let turn = 'old';
+    let finish!: () => void;
+    const gate = new Promise<void>(resolve => { finish = resolve; });
+    const preparing = vi.fn(async () => { await gate; return undefined; });
+    const f = fixture(undefined, preparing, { currentTurn: () => turn });
+    const a = await f.service.register('A', '/workspace');
+    const pre = f.service.pre(a, 'slow-pre', 'Bash', { turnId: 'old' });
+    await vi.waitFor(() => expect(preparing).toHaveBeenCalled());
+    f.service.endTurn(a);
+    turn = 'new';
+    finish();
+    await pre;
+    expect(f.service.getStats().activeWindows).toBe(0);
+    expect(f.report.mock.calls.map(([, reason]) => reason)).toEqual(['foreignTool']);
     await f.service.release(a);
   });
 
@@ -259,7 +296,7 @@ it('keeps an overlapping event ambiguous when one candidate exits before the que
 
 it('reports lost pre-hooks and rejects delayed pre-hooks after terminal cleanup', async () => {
   const f = fixture(), a = await f.service.register('A', '/workspace');
-  f.service.started(a, 'no-hook');
+  f.service.started(a, 'no-hook', 'shell');
   f.write('/workspace/missed.ts', 'unknown');
   await f.service.completed(a, 'no-hook');
   await f.service.pre(a, 'no-hook', 'Bash');
@@ -370,6 +407,47 @@ it('lets an in-flight completion persist and clear its tool marker before releas
   await Promise.all([completing, released]);
   expect(f.persist.mock.calls.map(([e]) => e.filePath)).toEqual(['/workspace/deferred.ts']);
   expect(activity.mock.calls.at(-1)).toEqual([a, 'last-command', false]);
+});
+
+it.each(['drain', 'release', 'queued'] as const)('reconciles turn-end checkout evidence before %s completes and ignores later writes', async boundary => {
+  let finish!: () => void;
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const activity = vi.fn(async () => {});
+  const reconcile = vi.fn(async () => {
+    await gate;
+    return new Map([['/workspace/edit.ts', 'edit'], ['/workspace/same.ts', 'unchanged'], ['/workspace/copy.ts', 'initialization']]);
+  });
+  const f = fixture(boundary === 'queued' ? () => gate : undefined, async () => ({ defer: async () => true, finish: reconcile }), { activity });
+  const a = await f.service.register('A', '/workspace');
+  await f.service.pre(a, 'orphan', 'Bash');
+  for (const name of ['edit', 'same', 'copy']) f.write(`/workspace/${name}.ts`, name);
+  if (boundary !== 'queued') await f.service.flush();
+  if (boundary !== 'release') expect(f.service.endTurn(a)).toBeUndefined();
+  let settled = false;
+  const done = (boundary === 'release' ? f.service.release(a) : f.service.drain(['A'])).then(() => { settled = true; });
+  await new Promise(resolve => setTimeout(resolve, 5));
+  expect(settled).toBe(false);
+  expect(activity).toHaveBeenLastCalledWith(a, 'orphan', true);
+  f.write('/workspace/after-turn.ts', 'unrelated');
+  finish();
+  await done;
+  expect(reconcile).toHaveBeenCalledTimes(1);
+  expect(f.persist.mock.calls.map(([e]) => e.filePath)).toEqual(['/workspace/edit.ts']);
+  expect(f.report.mock.calls.map(([, reason]) => reason)).toEqual(['unmatchedTool', 'initialization']);
+  expect(activity).toHaveBeenLastCalledWith(a, 'orphan', false);
+  await f.service.release(a);
+});
+
+it('does not turn a slow quit-time drain into a coverage fault', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const f = fixture(() => gate), a = await f.service.register('A', '/workspace');
+  await f.service.pre(a, 'last', 'Bash');
+  f.write('/workspace/pending.ts', 'A');
+  // The read never resolves inside the bounded quit wait; release must still return without a fault.
+  await f.service.release(a);
+  expect(f.report.mock.calls.map(([, r]) => r)).not.toContain('drainTimeout');
+  release();
 });
 
 it('reports watcher loss and recovers on the next turn without importing missed changes', async () => {
