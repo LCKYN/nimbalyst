@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Pasting multiple tracker values across grouped rows keeps every value aligned with its intended record (#1548).
 - Organizations recover after startup sign-in delays instead of appearing empty.
 - Codex file tracking excludes worktree checkout copies and recovers after large file bursts without misleading warnings.
 - Cloudflare sandbox connection failures show clearer errors and refresh their status before retrying.
