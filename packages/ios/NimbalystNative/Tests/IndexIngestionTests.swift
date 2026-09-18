@@ -485,8 +485,8 @@ final class IndexIngestionTests: XCTestCase {
             try store.recordRevision(db, entity: .session, id: "deleted", revision: 3, deleted: true, unreadable: true)
         }
         var received: [IndexMaintenanceOutcome] = []
-        let published = expectation(description: "Coverage load, reset, and reload published")
-        published.expectedFulfillmentCount = 3
+        let published = expectation(description: "Coverage load, async read, reset, and reload published")
+        published.expectedFulfillmentCount = 4
         let ingestion = IndexIngestion(
             generation: 1, crypto: crypto, database: db,
             onOutcome: { _ in },
@@ -496,11 +496,13 @@ final class IndexIngestionTests: XCTestCase {
             }
         )
         ingestion.submit(.maintenance(.loadCoverage, id: 1), byteCount: 0)
-        ingestion.submit(.maintenance(.resetCursor, id: 2), byteCount: 0)
-        ingestion.submit(.maintenance(.loadCoverage, id: 3), byteCount: 0)
+        ingestion.submit(.maintenance(.missingAncestors(of: []), id: 2), byteCount: 0)
+        ingestion.submit(.maintenance(.resetCursor, id: 3), byteCount: 0)
+        ingestion.submit(.maintenance(.loadCoverage, id: 4), byteCount: 0)
         await fulfillment(of: [published], timeout: 5)
         ingestion.cancel()
-        XCTAssertEqual(received.map(\.skippedRowCount), [1, 0, 0])
+        XCTAssertEqual(received.map(\.id), [1, 2, 3, 4], "The async read must not let later maintenance overtake it")
+        XCTAssertEqual(received.map(\.skippedRowCount), [1, 0, 0, 0])
         XCTAssertTrue(received.allSatisfy { $0.failure == nil && $0.ranOffMainActor })
     }
 

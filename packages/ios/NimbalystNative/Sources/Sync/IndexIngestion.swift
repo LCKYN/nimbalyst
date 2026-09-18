@@ -166,11 +166,11 @@ private struct IndexIngestionConsumer: Sendable {
                 // Ordered with everything around it: a page cannot overtake a
                 // legacy entry submitted before it.
                 flushLive()
-                let outcome = applyPage(response, request: request, bytes: item.byteCount)
+                let outcome = await applyPage(response, request: request, bytes: item.byteCount)
                 await MainActor.run { onPageOutcome(outcome) }
             case .maintenance(let request, let id):
                 flushLive()
-                let outcome = runMaintenance(request, id: id)
+                let outcome = await runMaintenance(request, id: id)
                 await MainActor.run { onMaintenanceOutcome(outcome) }
             }
         }
@@ -291,8 +291,8 @@ private struct IndexIngestionConsumer: Sendable {
     /// running it where the driver lives would block the UI for as long as that
     /// takes. It runs here, in the same ordered queue as the pages, and its
     /// result reaches the driver as an outcome like any other.
-    private func runMaintenance(_ request: IndexReplicationMaintenance, id: Int) -> IndexMaintenanceOutcome {
-        let offMain = !Thread.isMainThread
+    private func runMaintenance(_ request: IndexReplicationMaintenance, id: Int) async -> IndexMaintenanceOutcome {
+        let offMain = { !Thread.isMainThread }()
         func outcome(
             _ state: IndexReplicationCursorState,
             pendingRunId: String? = nil,
@@ -311,29 +311,31 @@ private struct IndexIngestionConsumer: Sendable {
         do {
             switch request {
             case .loadCoverage:
-                return try database.writer.write { db in
+                let (state, pendingRunId, skippedRowCount) = try await database.writer.write { db in
                     try store.ensureSchema(db)
                     let state = try store.cursorState(db)
                     let pending = try store.pendingFinalization(db)
-                    return outcome(state, pendingRunId: pending?.runId, skippedRowCount: try store.skippedRowCount(db))
+                    return (state, pending?.runId, try store.skippedRowCount(db))
                 }
+                return outcome(state, pendingRunId: pendingRunId, skippedRowCount: skippedRowCount)
             case .resumeFinalization(let runId):
                 logger.info("Resuming interrupted bootstrap finalization")
                 _ = try IndexReplicationApplier.finalizeBootstrap(
                     runId: runId, store: store, database: database, cancellation: cancellation
                 )
-                return try database.writer.read { db in
-                    outcome(try store.cursorState(db), skippedRowCount: try store.skippedRowCount(db))
+                let (state, skippedRowCount) = try await database.readOnDatabaseQueue { db in
+                    (try store.cursorState(db), try store.skippedRowCount(db))
                 }
+                return outcome(state, skippedRowCount: skippedRowCount)
             case .resetCursor:
-                let state: IndexReplicationCursorState = try database.writer.write { db in
+                let state: IndexReplicationCursorState = try await database.writer.write { db in
                     try store.ensureSchema(db)
                     try store.resetReplicationEpoch(db)
                     return try store.cursorState(db)
                 }
                 return outcome(state)
             case .missingAncestors(let sessionIds):
-                let missing: [String] = try database.writer.read { db in
+                let missing: [String] = try await database.readOnDatabaseQueue { db in
                     var wanted: Set<String> = []
                     for session in try Session.filter(ids: Set(sessionIds)).fetchAll(db) {
                         if let parent = session.parentSessionId { wanted.insert(parent) }
@@ -357,7 +359,7 @@ private struct IndexIngestionConsumer: Sendable {
         _ response: IndexPageResponse,
         request: IndexPageWork,
         bytes: Int
-    ) -> IndexPageOutcome {
+    ) async -> IndexPageOutcome {
         func outcome(_ result: IndexPageOutcome.Result, skippedRowCount: Int = 0) -> IndexPageOutcome {
             IndexPageOutcome(generation: generation, requestId: request.requestId, mode: request.mode, result: result, skippedRowCount: skippedRowCount)
         }
@@ -407,7 +409,7 @@ private struct IndexIngestionConsumer: Sendable {
             metrics.batches = result.batches
             metrics.transactionMs = result.outcome.transactionMs
             logger.info("Index page applied (\(request.mode.rawValue)): \(metrics.summaryLine) stale=\(result.outcome.staleRejected) retained=\(result.outcome.retainedTombstones)")
-            let skippedRowCount = try database.writer.read { try store.skippedRowCount($0) }
+            let skippedRowCount = try await database.readOnDatabaseQueue { try store.skippedRowCount($0) }
             logger.info("Index unreadable rows skipped: \(skippedRowCount)")
             return outcome(.applied(
                 nextPageToken: page.nextPageToken,
