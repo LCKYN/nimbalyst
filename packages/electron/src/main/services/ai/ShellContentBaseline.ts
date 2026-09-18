@@ -4,16 +4,17 @@ import { contentFingerprint } from '../../file/knownFileWrites';
 import type { CheckoutCandidate } from './ShellCheckoutBaseline';
 
 type Git = (cwd: string, args: string[]) => Promise<string>;
+export const SHELL_BASELINE_CAPTURE_MS = 1250;
 
 /** Pin clean files to an immutable revision; hash only already-dirty/untracked files. */
-export async function prepareShellContentBaseline(root: string, git: Git) {
-  const revision = await git(root, ['rev-parse', '--verify', '--quiet', 'HEAD']).then(value => value.trim(), error => {
+export async function prepareShellContentBaseline(root: string, captureGit: Git, git: Git = captureGit) {
+  const revision = await captureGit(root, ['rev-parse', '--verify', '--quiet', 'HEAD']).then(value => value.trim(), error => {
     if (error.code === 1) return undefined; // An unborn repository has no clean tracked baseline.
     throw error;
   });
   const [dirty, untracked] = await Promise.all([
-    revision ? git(root, ['diff', '--no-ext-diff', '--no-textconv', '--name-only', '-z', revision, '--']) : git(root, ['ls-files', '--cached', '-z']),
-    git(root, ['ls-files', '--others', '--exclude-standard', '-z']),
+    revision ? captureGit(root, ['diff', '--no-ext-diff', '--no-textconv', '--name-only', '-z', revision, '--']) : captureGit(root, ['ls-files', '--cached', '-z']),
+    captureGit(root, ['ls-files', '--others', '--exclude-standard', '-z']),
   ]);
   // No hard cap here: paths past the fingerprint budget abstain individually
   // below, whereas throwing turned a large untracked tree into a fault on every command.

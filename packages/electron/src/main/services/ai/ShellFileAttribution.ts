@@ -1,6 +1,7 @@
 import type { ShellCoverageReason } from '@nimbalyst/runtime/ai/shellTrackingCoverage';
 import type { CodexShellToolKind } from '@nimbalyst/runtime/ai/server/protocols/codexAppServer/shellTracking';
 import type { ShellCheckoutBaseline } from './ShellCheckoutBaseline';
+import { SHELL_BASELINE_CAPTURE_MS } from './ShellContentBaseline';
 import { boundedDrain, type ShellHookDiagnostics } from './ShellTrackingCoverage';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -38,6 +39,8 @@ export interface ShellAttributionDependencies {
   preDrainMs?: number;
 }
 const mayWriteFiles = (tool: string) => tool === 'Bash' || tool === 'apply_patch' || tool === 'Uninstrumented';
+const baselineFailure = (hook: ShellHookDiagnostics | undefined, site: string, error: unknown): ShellHookDiagnostics =>
+  ({ ...hook, error: `${site}: ${error instanceof Error ? error.message : String(error)}`.slice(0, 200) });
 export class ShellFileAttribution {
   private readonly sessions = new Map<string, { sessionId: string; workspace: string }>();
   private readonly workspaces = new Map<string, Promise<() => void>>();
@@ -115,8 +118,11 @@ export class ShellFileAttribution {
       return;
     }
     let checkout: ShellCheckoutBaseline | undefined;
+    let captureFailure: ShellHookDiagnostics | undefined;
     const captured = tool !== 'Bash' || !drained || await boundedDrain(
-      Promise.resolve(this.deps.prepareCheckout?.(this.sessions.get(generation)!.workspace)).then(value => { checkout = value; }), 1250);
+      Promise.resolve().then(() => this.deps.prepareCheckout?.(this.sessions.get(generation)!.workspace))
+        .then(value => { checkout = value; }, error => { captureFailure = baselineFailure(hook, 'capture failed', error); throw error; }),
+      SHELL_BASELINE_CAPTURE_MS);
     if (!this.sessions.has(generation) || this.terminal.get(generation)?.has(id)) return;
     // A baseline read can outlive the turn that admitted the hook. Preserve the
     // arrival diagnostics, but recheck ownership before installing its window.
@@ -124,7 +130,8 @@ export class ShellFileAttribution {
       this.report(generation, 'foreignTool', undefined, id, hook);
       return;
     }
-    if (!captured) this.report(generation, 'checkoutBaseline', undefined, id);
+    if (!captured) this.report(generation, 'checkoutBaseline', undefined, id,
+      captureFailure ?? baselineFailure(hook, 'capture timeout', `${SHELL_BASELINE_CAPTURE_MS} ms budget exceeded`));
     if (this.unhealthy.has(this.sessions.get(generation)!.workspace)) this.report(generation, 'watcherLoss');
     this.observed.get(generation)?.add(id);
     const key = generation + '|' + id;
@@ -136,6 +143,8 @@ export class ShellFileAttribution {
         hook,
         start: this.now(),
         files: new Set(),
+        // Missing capture evidence abstains for this command, including every
+        // known worktree root; never fall back to cold-cache inferred links.
         observation: { lost: !drained || !captured || this.unhealthy.has(this.sessions.get(generation)!.workspace) },
         checkout,
         deferred: new Map(),
@@ -276,10 +285,11 @@ export class ShellFileAttribution {
               }
               await this.save(candidate.evidence, generation, candidate.turnId, window.files);
             }
-            else this.report(generation, result === 'initialization' ? 'initialization' : 'checkoutBaseline', candidate.turnId);
+            else this.report(generation, result === 'initialization' ? 'initialization' : 'checkoutBaseline', candidate.turnId, id,
+              result === 'initialization' ? window.hook : baselineFailure(window.hook, 'finish', 'candidate baseline unavailable or unstable'));
           }
-        } catch {
-          this.report(generation, 'checkoutBaseline', undefined, id);
+        } catch (error) {
+          this.report(generation, 'checkoutBaseline', undefined, id, baselineFailure(window.hook, 'finish failed', error));
         }
       }
       if (this.windows.get(key) === window) this.windows.delete(key);
@@ -440,7 +450,9 @@ export class ShellFileAttribution {
                     });
                     continue;
                   }
-                } catch { /* An unavailable baseline cannot suppress the warning. */ }
+                } catch (error) {
+                  this.report(generation, 'checkoutBaseline', candidate.turnId, candidate.id, baselineFailure(candidate.hook, 'defer failed', error));
+                }
               }
               this.report(generation, reason, candidate.turnId, candidate.id);
             }
@@ -476,7 +488,10 @@ export class ShellFileAttribution {
         if (winner.checkout) {
           let defer: boolean;
           try { defer = await winner.checkout.defer(filePath); }
-          catch { this.report(winner.generation, 'checkoutBaseline', winner.turnId, winner.id); return; }
+          catch (error) {
+            this.report(winner.generation, 'checkoutBaseline', winner.turnId, winner.id, baselineFailure(winner.hook, 'defer failed', error));
+            return;
+          }
           if (defer) {
             if (winner.deferred.size >= 16_384 && !winner.deferred.has(filePath)) {
               winner.observation.lost = true;

@@ -45,6 +45,50 @@ function fixture(beforeRead?: () => Promise<void>, prepareCheckout?: () => Promi
   };
 }
 describe('shell hook attribution', () => {
+  it('distinguishes the capture deadline from a rejection and cannot adopt a late baseline', async () => {
+    vi.useFakeTimers();
+    let finish!: (baseline: any) => void;
+    const preparing = vi.fn(() => new Promise<any>(resolve => { finish = resolve; }));
+    const f = fixture(undefined, preparing);
+    const a = await f.service.register('A', '/workspace');
+    try {
+      const pre = f.service.pre(a, 'timeout', 'Bash');
+      await vi.advanceTimersByTimeAsync(1250);
+      await pre;
+      expect(f.report).toHaveBeenCalledWith(a, 'checkoutBaseline', undefined, 'timeout', {
+        tool: 'Bash', error: 'capture timeout: 1250 ms budget exceeded',
+      });
+      finish({ defer: async () => true, finish: async () => new Map([['/workspace/rebuilt.d.ts', 'edit']]) });
+      await Promise.resolve();
+      f.write('/workspace/rebuilt.d.ts', 'identical');
+      const completed = f.service.completed(a, 'timeout');
+      await vi.advanceTimersByTimeAsync(1);
+      await completed;
+      expect(f.persist).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      await f.service.release(a);
+    }
+  });
+
+  it.each(['defer', 'ambiguous defer', 'finish'] as const)('retains bounded %s failures and abstains', async site => {
+    const error = new Error('git failed ' + 'x'.repeat(300));
+    const f = fixture(undefined, async () => ({
+      defer: async () => { if (site !== 'finish') throw error; return true; },
+      finish: async () => { throw error; },
+    }));
+    const a = await f.service.register('A', '/workspace');
+    await f.service.pre(a, 'failure', 'Bash', { sessionId: 'root' });
+    if (site === 'ambiguous defer') f.service.started(a, 'competing', 'mcp');
+    f.write('/workspace/rebuilt.d.ts', 'identical');
+    await f.service.completed(a, 'failure');
+    expect(f.persist).not.toHaveBeenCalled();
+    expect(f.report).toHaveBeenCalledWith(a, 'checkoutBaseline', undefined, 'failure', {
+      tool: 'Bash', hookSessionId: 'root', error: `${site === 'finish' ? 'finish' : 'defer'} failed: ${error.message}`.slice(0, 200),
+    });
+    await f.service.release(a);
+  });
+
   it('keeps an MCP start ambiguous without a pending writer or unmatched-tool fault', async () => {
     const activity = vi.fn(async () => {});
     const f = fixture(undefined, undefined, { activity });

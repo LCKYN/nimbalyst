@@ -3,10 +3,127 @@ import { it, expect, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync, type ExecFileOptionsWithStringEncoding } from 'node:child_process';
 import { ShellFileAttribution, type ShellFileEvidence } from '../ShellFileAttribution';
 import { prepareShellCheckoutBaseline } from '../ShellCheckoutBaseline';
+import { SHELL_BASELINE_CAPTURE_MS } from '../ShellContentBaseline';
 import { contentFingerprint } from '../../../file/knownFileWrites';
+import { ShellTrackingCoverage } from '../ShellTrackingCoverage';
+
+type GitExec = (command: string, args: readonly string[], options: ExecFileOptionsWithStringEncoding,
+  callback: (error: Error | null, stdout: string, stderr: string) => void) => ReturnType<typeof execFile>;
+
+vi.mock('node:child_process', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, execFile: vi.fn(actual.execFile) };
+});
+
+it.each(['retry', 'exhausted', 'non-timeout'] as const)('keeps Git attempts inside the capture budget: %s', async mode => {
+  let now = 0;
+  const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+  const realExec = vi.mocked(execFile).getMockImplementation()!;
+  const timeouts: number[] = [];
+  vi.mocked(execFile).mockImplementation(((_command, _args, options, callback) => {
+    timeouts.push(options.timeout!);
+    now += mode === 'exhausted' ? SHELL_BASELINE_CAPTURE_MS : options.timeout!;
+    callback(Object.assign(new Error(mode === 'non-timeout' ? 'git permission denied' : 'git stalled'), {
+      code: mode === 'non-timeout' ? 'EACCES' : 'ETIMEDOUT',
+    }), '', '');
+    return null!;
+  }) as GitExec as typeof execFile);
+  try {
+    await expect(prepareShellCheckoutBaseline('/workspace')).rejects.toThrow(mode === 'non-timeout' ? 'permission denied' : 'timed out');
+    expect(timeouts).toEqual(mode === 'retry' ? [625, 625] : [625]);
+    expect(timeouts.reduce((sum, timeout) => sum + timeout, 0)).toBeLessThanOrEqual(SHELL_BASELINE_CAPTURE_MS);
+  } finally {
+    clock.mockRestore();
+    vi.mocked(execFile).mockImplementation(realExec);
+  }
+});
+
+it('shares one decreasing deadline across inventory, content and common-directory capture', async () => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'nim-baseline-budget-')));
+  let now = 0;
+  const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+  const realExec = vi.mocked(execFile).getMockImplementation()!;
+  const timeouts: number[] = [];
+  vi.mocked(execFile).mockImplementation(((_command, args, options, callback) => {
+    timeouts.push(options.timeout!);
+    now += 100;
+    const stdout = args[2] === 'worktree' ? `worktree ${root}\0` :
+      args.includes('--git-common-dir') ? root : args.includes('HEAD') ? 'a'.repeat(40) : '';
+    callback(null, stdout, '');
+    return null!;
+  }) as GitExec as typeof execFile);
+  try {
+    expect(await prepareShellCheckoutBaseline(root)).toBeDefined();
+    expect(timeouts).toEqual([625, 575, 525, 475, 425]);
+  } finally {
+    clock.mockRestore();
+    vi.mocked(execFile).mockImplementation(realExec);
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each(['inventory', 'content'])('reports a timed-out %s git call and abstains from identical rebuild links', async site => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'nim-baseline-timeout-')));
+  const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' });
+  const file = path.join(root, 'generated.d.ts');
+  const persist = vi.fn(async (_e: ShellFileEvidence) => 'persisted' as const);
+  const coverage = new ShellTrackingCoverage({ load: async () => undefined, save: async () => {}, notify: () => {} });
+  let emit!: (file: string) => void;
+  let now = Date.now();
+  const service = new ShellFileAttribution({
+    subscribe: async (_root, changed) => { emit = changed; return () => {}; },
+    prepareCheckout: prepareShellCheckoutBaseline,
+    read: async file => ({ fingerprint: contentFingerprint(await fs.readFile(file)), modifiedAt: now }),
+    knownWrite: () => false, otherSessions: () => [], persist,
+    report: (...args) => coverage.record(...args), now: () => now, settleMs: 0,
+  });
+  const realExec = vi.mocked(execFile).getMockImplementation()!;
+  let generation: string | undefined;
+  try {
+    git('init', '-q'); git('config', 'user.email', 'fixture@example.invalid'); git('config', 'user.name', 'Fixture');
+    expect(await fs.realpath(git('rev-parse', '--show-toplevel').trim())).toBe(root);
+    await fs.writeFile(file, 'baseline\n'); git('add', '.'); git('commit', '-qm', 'baseline');
+    vi.mocked(execFile).mockImplementation(((command, args, options, callback) => {
+      if (args[2] === (site === 'inventory' ? 'worktree' : 'rev-parse')) {
+        callback(Object.assign(new Error('git capture timed out: injected load'), { killed: true, signal: 'SIGTERM' }), '', '');
+        return null!;
+      }
+      return (realExec as GitExec)(command, args, options, callback);
+    }) as GitExec as typeof execFile);
+    generation = await service.register('writer', root);
+    await coverage.open('writer', generation);
+    await service.pre(generation, 'rebuild', 'Bash');
+    now++;
+    await fs.unlink(file); await fs.writeFile(file, 'baseline\n'); emit(file);
+    await service.completed(generation, 'rebuild');
+    expect(persist).not.toHaveBeenCalled();
+    expect((await coverage.readMany(['writer']))[0].events).toContainEqual(expect.objectContaining({
+      reason: 'checkoutBaseline', toolUseId: 'rebuild', tool: 'Bash',
+      error: expect.stringContaining('git capture timed out: injected load'),
+    }));
+    // Failure is command-local; a transient timeout on the next capture retries
+    // successfully, and reconciliation remains usable after its deadline passes.
+    vi.mocked(execFile).mockImplementation(realExec);
+    vi.mocked(execFile).mockImplementationOnce(((_command, _args, _options, callback) => {
+      callback(Object.assign(new Error('transient timeout'), { killed: true, signal: 'SIGTERM' }), '', '');
+      return null!;
+    }) as GitExec as typeof execFile);
+    await service.pre(generation, 'edit', 'Bash');
+    now++; await fs.writeFile(file, 'authored\n'); emit(file);
+    const later = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + SHELL_BASELINE_CAPTURE_MS + 1);
+    try { await service.completed(generation, 'edit'); }
+    finally { later.mockRestore(); }
+    expect(persist.mock.calls.map(([e]) => e.toolUseId)).toEqual(['edit']);
+  } finally {
+    vi.mocked(execFile).mockImplementation(realExec);
+    if (generation) await service.release(generation);
+    await coverage.flush(['writer']);
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 it('excludes checkout copies but retains edits committed by the creating tool and subsequent shell edits', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'nim-checkout-regression-'));

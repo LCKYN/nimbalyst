@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { prepareShellContentBaseline } from './ShellContentBaseline';
+import { prepareShellContentBaseline, SHELL_BASELINE_CAPTURE_MS } from './ShellContentBaseline';
 import { contentFingerprint } from '../../file/knownFileWrites';
 
 export interface CheckoutCandidate { filePath: string; fingerprint: string | null }
@@ -10,11 +10,26 @@ export interface ShellCheckoutBaseline {
   finish(candidates: CheckoutCandidate[]): Promise<Map<string, 'edit' | 'initialization' | 'unchanged'>>;
 }
 
-function git(cwd: string, args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile('git', ['-C', cwd, ...args], { timeout: 1000, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8' },
-      (error, stdout) => error ? reject(error) : resolve(stdout));
-  });
+async function git(cwd: string, args: string[], deadline = Date.now() + SHELL_BASELINE_CAPTURE_MS): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error(`git ${args[0]}: baseline budget exhausted`);
+    // Reserve half the remaining budget for one retry, without extending the
+    // shared capture deadline across sequential or parallel Git queries.
+    const timeout = Math.max(1, Math.floor(remaining / (attempt === 0 ? 2 : 1)));
+    try {
+      return await new Promise<string>((resolve, reject) => {
+        execFile('git', ['-C', cwd, ...args], { timeout, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8' },
+          (error, stdout) => error ? reject(error) : resolve(stdout));
+      });
+    } catch (error) {
+      const failure = error as NodeJS.ErrnoException & { killed?: boolean; signal?: string };
+      const timedOut = failure.code === 'ETIMEDOUT' || (failure.killed && failure.signal === 'SIGTERM');
+      if (!timedOut) throw error;
+      if (attempt === 0 && Date.now() < deadline) continue;
+      throw new Error(`git ${args[0]} timed out (${attempt + 1} attempts): ${failure.message}`);
+    }
+  }
 }
 function inside(root: string, file: string): boolean {
   const rel = path.relative(root, file);
@@ -23,8 +38,10 @@ function inside(root: string, file: string): boolean {
 
 /** Per-tool inventory; Git supplies repository identity, never session ownership. */
 export async function prepareShellCheckoutBaseline(workspace: string): Promise<ShellCheckoutBaseline | undefined> {
+  const deadline = Date.now() + SHELL_BASELINE_CAPTURE_MS;
+  const captureGit = (cwd: string, args: string[]) => git(cwd, args, deadline);
   let inventory: string;
-  try { inventory = await git(workspace, ['worktree', 'list', '--porcelain', '-z']); }
+  try { inventory = await captureGit(workspace, ['worktree', 'list', '--porcelain', '-z']); }
   catch (error) {
     if (String((error as { stderr?: string }).stderr ?? error).includes('not a git repository')) return undefined;
     // execFile's error message includes stderr. Other failures must not invent a baseline.
@@ -40,9 +57,9 @@ export async function prepareShellCheckoutBaseline(workspace: string): Promise<S
   const canonicalWorkspace = await fs.realpath(workspace);
   const content = new Map<string, Awaited<ReturnType<typeof prepareShellContentBaseline>>>();
   await Promise.all([...knownRoots].filter(root => inside(canonicalWorkspace, root)).map(async root => {
-    content.set(root, await prepareShellContentBaseline(root, git));
+    content.set(root, await prepareShellContentBaseline(root, captureGit, git));
   }));
-  const common = await fs.realpath((await git(workspace, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim());
+  const common = await fs.realpath((await captureGit(workspace, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim());
   const directories = new Map<string, Promise<string | undefined>>();
   const initial = new Map<string, Promise<string | undefined>>();
   const staged = new Map<string, string>();

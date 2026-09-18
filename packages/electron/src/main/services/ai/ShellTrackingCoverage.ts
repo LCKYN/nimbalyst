@@ -6,7 +6,7 @@ import {
 } from '@nimbalyst/runtime/ai/shellTrackingCoverage';
 
 export type ShellHookDiagnostics = Pick<NonNullable<ShellCoverageSummary['events']>[number],
-  'tool' | 'hookSessionId' | 'hookTurnId' | 'turnMatched' | 'agentType'>;
+  'tool' | 'hookSessionId' | 'hookTurnId' | 'turnMatched' | 'agentType' | 'error'>;
 
 export interface StoredShellCoverage extends ShellCoverageSummary {
   version: 1;
@@ -180,6 +180,7 @@ export class ShellTrackingCoverage {
     this.add(entry, 'unavailable');
   }
   private add(entry: Entry, reason: ShellCoverageReason, turnId?: string, toolUseId?: string, hook?: ShellHookDiagnostics): void {
+    if (hook?.error !== undefined) hook = { ...hook, error: hook.error.slice(0, 200) };
     const now = Date.now();
     const increment = (counts: ShellCoverageCounts) => {
       counts[reason] = Math.min(1_000_000, (counts[reason] ?? 0) + 1);
@@ -196,7 +197,7 @@ export class ShellTrackingCoverage {
     const last = events.at(-1);
     if (!last || last.reason !== reason || last.turnId !== turnId || last.toolUseId !== toolUseId ||
         last.tool !== hook?.tool || last.hookSessionId !== hook?.hookSessionId || last.hookTurnId !== hook?.hookTurnId ||
-        last.turnMatched !== hook?.turnMatched || last.agentType !== hook?.agentType) {
+        last.turnMatched !== hook?.turnMatched || last.agentType !== hook?.agentType || last.error !== hook?.error) {
       events.push({ reason, at: now, turnId, toolUseId, ...hook });
       if (events.length > 32) events.shift();
     }

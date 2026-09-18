@@ -41,6 +41,7 @@ export interface ShellCoverageSummary {
   events?: Array<{
     reason: ShellCoverageReason; at: number; turnId?: string; toolUseId?: string;
     tool?: string; hookSessionId?: string; hookTurnId?: string; turnMatched?: boolean; agentType?: string;
+    error?: string;
   }>;
   observation?: 'watching' | 'recovering';
   firstAt?: number;

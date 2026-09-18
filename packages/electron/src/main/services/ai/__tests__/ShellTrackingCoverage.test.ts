@@ -13,6 +13,9 @@ describe('durable shell coverage', () => {
     const context = { tool: 'Bash', hookSessionId: 'child', hookTurnId: 'foreign', turnMatched: false, agentType: 'worker' };
     ledger.record('g', 'unmatchedTool', undefined, 'orphan', context);
     ledger.record('g', 'unmatchedTool', undefined, 'orphan', { ...context, turnMatched: true });
+    ledger.record('g', 'checkoutBaseline', undefined, 'baseline', { ...context, error: 'capture failed: ' + 'x'.repeat(300) });
+    ledger.record('g', 'checkoutBaseline', undefined, 'baseline', { ...context, error: 'finish failed: git timed out' });
+    ledger.record('g', 'checkoutBaseline', undefined, 'baseline', { ...context, error: 'finish failed: git timed out' });
     await ledger.close('g');
     const [summary] = await new ShellTrackingCoverage(deps).readMany(['A']);
     expect(disk.version).toBe(1);
@@ -20,6 +23,8 @@ describe('durable shell coverage', () => {
       { reason: 'missingPre', at: 1 },
       expect.objectContaining({ ...context, turnId: 'root', toolUseId: 'orphan' }),
       expect.objectContaining({ ...context, turnMatched: true }),
+      expect.objectContaining({ ...context, error: ('capture failed: ' + 'x'.repeat(300)).slice(0, 200) }),
+      expect.objectContaining({ ...context, error: 'finish failed: git timed out' }),
     ]);
     expect(shellCoverageDetails([summary])).toEqual(shellCoverageDetails([{ ...summary, events: undefined }]));
     await ledger.open('A', 'g2');
