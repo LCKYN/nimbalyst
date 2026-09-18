@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Codex honors additional writable directories, detects unexpected read-only sessions, and offers Windows sandbox setup in settings (#1544).
 - Reduce iOS database contention while syncing session history.
 - Browser pages no longer remain over the app when switching tabs while a preview is opening (#1547).
 - Claude usage consistently shows percent used for all quotas, matching their progress bars (#1546).
