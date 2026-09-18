@@ -132,10 +132,12 @@ export async function prepareShellTracking(sessionId: string, workspace: string)
       return;
     }
     let raw = '';
+    let bytes = 0;
     try {
       for await (const chunk of req) {
         raw += chunk;
-        if (raw.length > 4096) {
+        bytes += Buffer.byteLength(chunk);
+        if (bytes > 8192) {
           res.writeHead(413).end();
           return;
         }
@@ -146,6 +148,8 @@ export async function prepareShellTracking(sessionId: string, workspace: string)
       for (const field of ['session_id', 'turn_id', 'agent_type'])
         if (p[field] !== undefined && (typeof p[field] !== 'string' || p[field].length > 256))
           throw new Error('Invalid hook context');
+      if (p.command !== undefined && (typeof p.command !== 'string' || p.command.length > 2000))
+        throw new Error('Invalid hook command');
       const identity = { sessionId: p.session_id, turnId: p.turn_id, agentType: p.agent_type };
       // Off by default; the real-Codex E2E and manual hook tracing set this.
       if (process.env.NIMBALYST_SHELL_HOOK_TRACE)
@@ -153,7 +157,7 @@ export async function prepareShellTracking(sessionId: string, workspace: string)
           sessionId, event: p.event, tool: p.tool, toolUseId: p.id, hookSessionId: p.session_id,
           hookTurnId: p.turn_id, currentTurnId: shellTrackingCoverage.currentTurn(generation), agentType: p.agent_type,
         }));
-      if (p.event === 'PreToolUse') await shellFileAttribution.pre(generation, p.id, p.tool, identity);
+      if (p.event === 'PreToolUse') await shellFileAttribution.pre(generation, p.id, p.tool, identity, p.command);
       else if (p.event === 'PostToolUse') await shellFileAttribution.post(generation, p.id, { ...identity, tool: p.tool });
       else throw new Error('Unsupported event');
       res.end('{}');

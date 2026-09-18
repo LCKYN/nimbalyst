@@ -6,8 +6,8 @@ import { execFileSync } from 'node:child_process';
 import { launchElectronApp, waitForAppReady } from '../helpers';
 import { dismissAPIKeyDialog } from '../utils/testHelpers';
 test.skip(() => !process.env.RUN_REAL_CODEX, 'Requires Codex CLI auth + RUN_REAL_CODEX=1');
-test.setTimeout(360_000);
-test('production Codex shell hooks persist sequential owners after a failed MCP lookup', async ({}, testInfo) => {
+test.setTimeout(480_000);
+test('production Codex shell hooks resolve overlapping and sequential owners after a failed MCP lookup', async ({}, testInfo) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nim-shell-implementation-')),
     workspace = path.join(root, 'workspace'),
     database = path.join(root, 'database'),
@@ -25,6 +25,7 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
   await fs.writeFile(path.join(workspace, 'shared.ts'), '// baseline\n');
   await fs.writeFile(path.join(workspace, 'readonly.ts'), '// unchanged\n');
   await fs.writeFile(path.join(workspace, 'after-failure.ts'), '// baseline\n');
+  await fs.writeFile(path.join(workspace, 'overlap-writer.ts'), '// baseline\n');
   const git = (...args: string[]) => execFileSync('git', ['-C', workspace, ...args], { encoding: 'utf8' });
   git('init', '-q');
   git('config', 'user.name', 'Tracking Fixture');
@@ -120,6 +121,44 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
     await expect.poll(async () => page.evaluate(async () =>
       (await (window as any).electronAPI.invoke('openai-codex:check-login')).isLoggedIn
     ), { timeout: 15_000, message: 'Isolated Codex auth must be ready before exercising tracking' }).toBe(true);
+    // An external readiness marker proves the sleeper passed its acknowledged
+    // pre-hook before starting the writer. It is outside the watched workspace.
+    const readyPath = path.join(root, 'overlap-ready');
+    const overlap = await page.evaluate(async ({ workspace, readyPath }) => {
+      const api = (window as any).electronAPI;
+      const sleeper = await api.invoke('ai:createSession', 'openai-codex', undefined, workspace, 'openai-codex:gpt-6-astra', 'agent');
+      const writer = await api.invoke('ai:createSession', 'openai-codex', undefined, workspace, 'openai-codex:gpt-6-astra', 'agent');
+      (window as any).__overlapSleeper = api.invoke('ai:sendMessage',
+        `This is an isolated tracking fixture. Execute exactly one normal shell command: printf ready > '${readyPath}'; sleep 45; touch ./overlap-sleep.ts . Wait for it to finish, then say DONE. Do not use patches, MCP, subagents, or any other command.`,
+        undefined, sleeper.id, workspace);
+      return { sleeper: sleeper.id, writer: writer.id };
+    }, { workspace, readyPath });
+    evidence.overlap = overlap;
+    await expect.poll(() => fs.readFile(readyPath, 'utf8').catch(() => ''), { timeout: 60_000 }).toBe('ready');
+    evidence.overlapWriterResult = await page.evaluate(async ({ workspace, id }) =>
+      (window as any).electronAPI.invoke('ai:sendMessage',
+        "This is an isolated tracking fixture. Execute exactly one normal shell command: printf '// overlap writer\\n' > ./overlap-writer.ts . Then say DONE. Do not use patches, MCP, subagents, or any other command.",
+        undefined, id, workspace), { workspace, id: overlap.writer });
+    expect(evidence.overlapWriterResult.content).toContain('DONE');
+    evidence.overlapSleeperResult = await page.evaluate(() => (window as any).__overlapSleeper);
+    expect(evidence.overlapSleeperResult.content).toContain('DONE');
+    evidence.overlapTurns = [await recordTurn(overlap.sleeper), await recordTurn(overlap.writer)];
+    const overlapHooks = evidence.hookLog.filter((hook: any) =>
+      [overlap.sleeper, overlap.writer].includes(hook.sessionId) && hook.tool === 'Bash');
+    evidence.overlapHooks = overlapHooks;
+    expect(overlapHooks.map((hook: any) => [hook.sessionId, hook.event])).toEqual([
+      [overlap.sleeper, 'PreToolUse'], [overlap.writer, 'PreToolUse'],
+      [overlap.writer, 'PostToolUse'], [overlap.sleeper, 'PostToolUse'],
+    ]);
+    expect(await fs.readFile(path.join(workspace, 'overlap-writer.ts'), 'utf8')).toBe('// overlap writer\n');
+    evidence.overlapWriterLinks = await page.evaluate(async ({ workspace, filePath }) =>
+      (window as any).electronAPI.invoke('sessions:get-by-file', workspace, filePath),
+      { workspace, filePath: path.join(workspace, 'overlap-writer.ts') });
+    expect(evidence.overlapWriterLinks.map((owner: any) => owner.id)).toEqual([overlap.writer]);
+    for (const turn of evidence.overlapTurns) {
+      expect(turn.coverage).toEqual([expect.objectContaining({ sessionId: turn.sessionId, state: 'no-detected-fault' })]);
+      expect(JSON.parse(turn.durable.rows[0].data).pendingTools).toEqual({});
+    }
     for (const marker of ['first', 'second']) {
       const session = await page.evaluate(
         async ({ workspace }) =>

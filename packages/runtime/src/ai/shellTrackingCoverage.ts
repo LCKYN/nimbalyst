@@ -65,6 +65,6 @@ export function shellCoverageDetails(coverage: ShellCoverageSummary[]): string[]
 }
 
 export function isShellCoverageFault(reason: string): boolean {
-  // A concurrent agent session does not lose edits; it only makes links non-exclusive.
-  return !['excluded', 'knownWrite', 'initialization', 'suspiciousWindow', 'uninstrumented', 'foreignTool'].includes(reason);
+  // Cross-session ownership uncertainty is informational, not an instrumentation fault.
+  return !['excluded', 'knownWrite', 'initialization', 'suspiciousWindow', 'uninstrumented', 'foreignTool', 'competingOwners'].includes(reason);
 }

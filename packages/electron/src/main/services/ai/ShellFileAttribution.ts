@@ -5,6 +5,7 @@ import { SHELL_BASELINE_CAPTURE_MS } from './ShellContentBaseline';
 import { boundedDrain, type ShellHookDiagnostics } from './ShellTrackingCoverage';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { extractFilePathsFromCommand } from './extractFilePathsFromCommand';
 export interface ShellFileState {
   fingerprint: string;
   modifiedAt: number;
@@ -50,6 +51,7 @@ export class ShellFileAttribution {
       generation: string;
       id: string;
       tool: string;
+      command?: string;
       start: number;
       files: Set<string>;
       observation: { lost: boolean; events?: boolean };
@@ -94,7 +96,7 @@ export class ShellFileAttribution {
     }
     return generation;
   }
-  async pre(generation: string, id: string, tool: string, identity: ShellHookIdentity = {}): Promise<void> {
+  async pre(generation: string, id: string, tool: string, identity: ShellHookIdentity = {}, command?: string): Promise<void> {
     if (!this.sessions.has(generation) || !id || id.length > 256) return;
     const hook = this.hookDiagnostics(generation, tool, identity);
     if (this.foreignHook(generation, id, hook)) return;
@@ -140,6 +142,7 @@ export class ShellFileAttribution {
         generation,
         id,
         tool,
+        command,
         hook,
         start: this.now(),
         files: new Set(),
@@ -383,6 +386,7 @@ export class ShellFileAttribution {
       .map((w) => ({
         ...w,
         sessionId: this.sessions.get(w.generation)!.sessionId,
+        workspacePath: this.sessions.get(w.generation)!.workspace,
         turnId: this.deps.currentTurn?.(w.generation),
       }));
     // Idle cached providers must not hash every workspace event. Invalidate a
@@ -425,7 +429,20 @@ export class ShellFileAttribution {
           return;
         }
         if (candidates.length === 0) return;
-        const owners = new Set(candidates.map((w) => w.sessionId));
+        let eligible = candidates;
+        let owners = new Set(eligible.map((w) => w.sessionId));
+        if (owners.size !== 1 && candidates.every(w => w.tool === 'Bash')) {
+          const named = candidates.filter(w => w.command !== undefined &&
+            extractFilePathsFromCommand(w.command, w.workspacePath)
+              .some(candidate => path.resolve(candidate) === filePath));
+          // Select a window, not merely a session. Observation loss anywhere in
+          // the frozen overlap still abstains, and checkout reconciliation below
+          // remains authoritative for whether the changed bytes are an edit.
+          if (named.length === 1) {
+            eligible = named;
+            owners = new Set(named.map(w => w.sessionId));
+          }
+        }
         if (
           disabledAtArrival ||
           owners.size !== 1 ||
@@ -458,7 +475,7 @@ export class ShellFileAttribution {
             }
           return;
         }
-        const winner = candidates.find((w) => this.sessions.has(w.generation));
+        const winner = eligible.find((w) => this.sessions.has(w.generation));
         if (!winner) return;
         // A metadata-only notification for an old file is not a new edit. An
         // uncached disappearance might be a directory; only known files qualify.

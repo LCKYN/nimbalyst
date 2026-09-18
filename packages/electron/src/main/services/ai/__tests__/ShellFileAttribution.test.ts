@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi } from 'vitest';
 import { ShellFileAttribution, type ShellAttributionDependencies, type ShellFileState, type ShellFileEvidence, type ShellPersistenceOutcome } from '../ShellFileAttribution';
+import { ShellTrackingCoverage } from '../ShellTrackingCoverage';
 
 function fixture(beforeRead?: () => Promise<void>, prepareCheckout?: () => Promise<any>, overrides: Partial<ShellAttributionDependencies> = {}) {
   let now = 1000;
@@ -45,6 +46,53 @@ function fixture(beforeRead?: () => Promise<void>, prepareCheckout?: () => Promi
   };
 }
 describe('shell hook attribution', () => {
+  it.each(['one', 'neither', 'both'] as const)('resolves overlapping Bash commands when %s names the changed path', async names => {
+    const coverage = new ShellTrackingCoverage({ load: async () => undefined, save: async () => {}, notify: () => {} });
+    const f = fixture(undefined, async () => ({
+      defer: async () => true,
+      finish: async () => new Map([['/workspace/named.ts', 'edit']]),
+    }), { report: (...args) => coverage.record(...args) });
+    const a = await f.service.register('A', '/workspace');
+    const b = await f.service.register('B', '/workspace');
+    await coverage.open('A', a);
+    await coverage.open('B', b);
+    await f.service.pre(a, 'sleep', 'Bash', {}, names === 'both' ? 'cat /workspace/named.ts' : 'sleep 30; touch ./other.ts');
+    await f.service.pre(b, 'writer', 'Bash', {}, names === 'neither' ? 'npm test' : "printf edit > ./nested/../named.ts");
+    f.write('/workspace/named.ts', 'changed');
+    await f.service.flush();
+    expect(f.persist).not.toHaveBeenCalled(); // The winner must still await checkout reconciliation.
+    await f.service.post(b, 'writer');
+    await f.service.post(a, 'sleep');
+    if (names === 'one') {
+      expect(f.persist.mock.calls.map(([e]) => [e.sessionId, e.toolUseId, e.filePath])).toEqual([['B', 'writer', '/workspace/named.ts']]);
+    } else expect(f.persist).not.toHaveBeenCalled();
+    const summaries = await coverage.readMany(['A', 'B']);
+    for (const summary of summaries) {
+      expect(summary.reasons).toEqual(names === 'one' ? {} : { competingOwners: 1 });
+      expect(summary.state).toBe('no-detected-fault');
+    }
+    await f.service.release(a);
+    await f.service.release(b);
+    await coverage.close(a);
+    await coverage.close(b);
+  });
+
+  it.each(['lost observation', 'mixed tools'] as const)('does not override %s with a unique command match', async kind => {
+    const f = fixture();
+    const a = await f.service.register('A', '/workspace');
+    const b = await f.service.register('B', '/workspace');
+    await f.service.pre(a, 'other', kind === 'mixed tools' ? 'apply_patch' : 'Bash');
+    await f.service.pre(b, 'writer', 'Bash', {}, 'printf edit > ./named.ts');
+    if (kind === 'lost observation') f.service.watcherLost('/workspace');
+    f.write('/workspace/named.ts', 'edit');
+    await f.service.post(b, 'writer');
+    await f.service.post(a, 'other');
+    expect(f.persist).not.toHaveBeenCalled();
+    expect(f.report.mock.calls.map(([, reason]) => reason)).toContain(kind === 'mixed tools' ? 'competingOwners' : 'observationGap');
+    await f.service.release(a);
+    await f.service.release(b);
+  });
+
   it('distinguishes the capture deadline from a rejection and cannot adopt a late baseline', async () => {
     vi.useFakeTimers();
     let finish!: (baseline: any) => void;
