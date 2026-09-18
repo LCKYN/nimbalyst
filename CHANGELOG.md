@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Image previews refresh after external edits and recover from failed loads (#1543).
 - Pasting multiple tracker values across grouped rows keeps every value aligned with its intended record (#1548).
 - Organizations recover after startup sign-in delays instead of appearing empty.
 - Codex file tracking no longer lists identically rebuilt files as edits, keeps tracking after a slow build or when another agent session is active in the same workspace, no longer reports an interruption after a normal restart, no longer warns about a command that ended without touching any file, ignores tool activity from Codex subagents instead of attributing their writes to the parent session, and retries a slow git check instead of losing rebuild protection while a heavy build or test run is going.
