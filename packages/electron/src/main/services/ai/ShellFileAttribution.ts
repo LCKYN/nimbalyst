@@ -1,6 +1,6 @@
 import type { ShellCoverageReason } from '@nimbalyst/runtime/ai/shellTrackingCoverage';
 import type { ShellCheckoutBaseline } from './ShellCheckoutBaseline';
-import { boundedDrain } from './ShellTrackingCoverage';
+import { boundedDrain, type ShellHookDiagnostics } from './ShellTrackingCoverage';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 export interface ShellFileState {
@@ -17,6 +17,7 @@ export interface ShellFileEvidence {
 }
 export type ShellPersistenceOutcome = 'persisted' | 'excluded' | 'throttled' | 'quota' | 'failed';
 export class ExcludedShellCandidate extends Error {}
+export interface ShellHookIdentity { sessionId?: string; turnId?: string; agentType?: string }
 export interface ShellAttributionDependencies {
   subscribe(workspace: string, changed: (file: string, observedAt?: number) => void): Promise<() => void>;
   prepareCheckout?(workspace: string): Promise<ShellCheckoutBaseline | undefined>;
@@ -27,7 +28,7 @@ export interface ShellAttributionDependencies {
   knownWrite(file: string, state: ShellFileState | null): boolean;
   otherSessions(workspace: string, filePath: string): string[];
   persist(evidence: ShellFileEvidence): Promise<ShellPersistenceOutcome>;
-  report?(generation: string, reason: ShellCoverageReason, turnId?: string, toolUseId?: string): void;
+  report?(generation: string, reason: ShellCoverageReason, turnId?: string, toolUseId?: string, hook?: ShellHookDiagnostics): void;
   currentTurn?(generation: string): string | undefined;
   retryDelayMs?: number;
   now?: () => number;
@@ -47,7 +48,8 @@ export class ShellFileAttribution {
       tool: string;
       start: number;
       files: Set<string>;
-      observation: { lost: boolean };
+      observation: { lost: boolean; events?: boolean };
+      hook?: ShellHookDiagnostics;
       checkout?: ShellCheckoutBaseline;
       deferred: Map<string, { evidence: ShellFileEvidence; fingerprint: string | null; turnId?: string; ambiguity?: ShellCoverageReason }>;
     }
@@ -88,8 +90,9 @@ export class ShellFileAttribution {
     }
     return generation;
   }
-  async pre(generation: string, id: string, tool: string): Promise<void> {
+  async pre(generation: string, id: string, tool: string, identity: ShellHookIdentity = {}): Promise<void> {
     if (!this.sessions.has(generation) || !id || id.length > 256) return;
+    const hook = this.hookDiagnostics(generation, tool, identity);
     // Terminal app-server notifications do not wait for our watcher drain.
     // Finish retiring those tools before allowing another command to execute.
     // If a large burst is still being hashed when the budget expires, only this
@@ -98,7 +101,7 @@ export class ShellFileAttribution {
     const drained = await this.drain([this.sessions.get(generation)?.sessionId ?? ''], this.deps.preDrainMs ?? 1500);
     if (!this.sessions.has(generation) || !id || id.length > 256) return;
     if (this.terminal.get(generation)?.has(id)) {
-      this.report(generation, 'staleEvent');
+      this.report(generation, 'staleEvent', undefined, id, hook);
       return;
     }
     // A bounded per-generation registry. Missing post hooks never grow it
@@ -122,6 +125,7 @@ export class ShellFileAttribution {
         generation,
         id,
         tool,
+        hook,
         start: this.now(),
         files: new Set(),
         observation: { lost: !drained || !captured || this.unhealthy.has(this.sessions.get(generation)!.workspace) },
@@ -155,8 +159,17 @@ export class ShellFileAttribution {
       this.deps.observation?.(generation, true);
     // Interrupted windows remain ineligible until their own terminal boundary.
   }
-  private report(generation: string, reason: ShellCoverageReason, turnId?: string, toolUseId?: string): void {
-    this.deps.report?.(generation, reason, turnId, toolUseId);
+  private hookDiagnostics(generation: string, tool: string, identity: ShellHookIdentity): ShellHookDiagnostics {
+    return {
+      tool,
+      ...(identity.sessionId !== undefined && { hookSessionId: identity.sessionId }),
+      ...(identity.turnId !== undefined && { hookTurnId: identity.turnId, turnMatched: identity.turnId === this.deps.currentTurn?.(generation) }),
+      ...(identity.agentType !== undefined && { agentType: identity.agentType }),
+    };
+  }
+  private report(generation: string, reason: ShellCoverageReason, turnId?: string, toolUseId?: string, hook?: ShellHookDiagnostics): void {
+    const window = toolUseId ? this.windows.get(generation + '|' + toolUseId) : undefined;
+    this.deps.report?.(generation, reason, turnId, toolUseId, hook ?? (window && (window.hook ?? { tool: window.tool })));
   }
   started(generation: string, id: string): void {
     if (!this.sessions.has(generation) || this.terminal.get(generation)?.has(id)) return;
@@ -214,7 +227,7 @@ export class ShellFileAttribution {
       }
     return success;
   }
-  post(generation: string, id: string): Promise<void> {
+  post(generation: string, id: string, identity?: ShellHookIdentity & { tool: string }): Promise<void> {
     // Shared bus delivery includes atomic-write/debounce delays on Linux.
     // Keep the window open while draining; this is inference, not an OS barrier.
     const key = generation + '|' + id;
@@ -222,6 +235,8 @@ export class ShellFileAttribution {
     if (closing) return closing;
     const window = this.windows.get(key);
     if (!window) return Promise.resolve();
+    // A post-only identity is diagnostic evidence, never a pre-execution boundary.
+    if (!window.hook && identity) window.hook = this.hookDiagnostics(generation, window.tool, identity);
     this.rememberTerminal(generation, id);
     const drain = (async () => {
       await new Promise((r) => setTimeout(r, this.deps.settleMs ?? 150));
@@ -271,7 +286,9 @@ export class ShellFileAttribution {
       if (w.generation === generation) {
         if (!this.closing.has(key)) {
           w.observation.lost = true;
-          if (mayWriteFiles(w.tool)) this.report(generation, 'unmatchedTool', undefined, w.id);
+          const eventFree = !w.observation.events && w.files.size === 0 && w.deferred.size === 0;
+          if (mayWriteFiles(w.tool) && (w.tool === 'Uninstrumented' || !eventFree))
+            this.report(generation, 'unmatchedTool', undefined, w.id);
         }
         this.rememberTerminal(generation, w.id);
         this.windows.delete(key);
@@ -343,6 +360,8 @@ export class ShellFileAttribution {
       this.cache.delete(filePath);
       return;
     }
+    // Capture arrival before queued reads, exclusions, or failed persistence.
+    for (const candidate of candidates) candidate.observation.events = true;
     const disabledAtArrival = this.unhealthy.has(workspace) || candidates.some(w => w.observation.lost) || [...this.disabled].some((g) => {
       const s = this.sessions.get(g);
       return s && this.contains(s.workspace, filePath);

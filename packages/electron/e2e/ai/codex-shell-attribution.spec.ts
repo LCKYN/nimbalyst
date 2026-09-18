@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { launchElectronApp, waitForAppReady } from '../helpers';
 import { dismissAPIKeyDialog } from '../utils/testHelpers';
 test.skip(() => !process.env.RUN_REAL_CODEX, 'Requires Codex CLI auth + RUN_REAL_CODEX=1');
-test.setTimeout(240_000);
+test.setTimeout(360_000);
 test('production Codex shell hooks persist sequential owners after a failed MCP lookup', async ({}, testInfo) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nim-shell-implementation-')),
     workspace = path.join(root, 'workspace'),
@@ -14,6 +14,9 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
     userData = path.join(root, 'user-data'),
     codexHome = path.join(root, 'codex-home');
   for (const dir of [workspace, database, userData, codexHome]) await fs.mkdir(dir, { mode: 0o700 });
+  await fs.writeFile(path.join(userData, 'logger-config.json'), JSON.stringify({ loggerConfig: {
+    globalLevel: 'debug', fileLogging: true, consoleLogging: true, components: { MAIN: { enabled: true, level: 'debug' } },
+  } }));
   await fs.copyFile(
     path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'auth.json'),
     path.join(codexHome, 'auth.json')
@@ -35,10 +38,16 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
   git('add', '.');
   git('commit', '-qm', 'Fixture baseline');
   let app: Awaited<ReturnType<typeof launchElectronApp>> | undefined;
-  const evidence: any = { root, owners: [] };
+  const evidence: any = { root, owners: [], hookLog: [] };
   try {
+    // Set isolation before the bundle evaluates static imports that create stores.
+    // The normal bootstrap sets userData later; logger configuration is read earlier.
+    const mainPath = process.env.NIMBALYST_E2E_MAIN_PATH ?? path.resolve(__dirname, '../../out/main/index.js');
+    const entry = path.join(root, 'isolated-main.cjs');
+    await fs.writeFile(entry, `const { app } = require('electron');\napp.setPath('userData', ${JSON.stringify(userData)});\napp.setAppPath(${JSON.stringify(path.dirname(mainPath))});\nrequire(${JSON.stringify(mainPath)});\n`);
+    evidence.mainPath = mainPath;
     const launchOptions = {
-      mainPath: process.env.NIMBALYST_E2E_MAIN_PATH,
+      mainPath: entry,
       workspace,
       preserveTestDatabase: true,
       // This disposable fixture creates Git worktrees; workspace-write protects .git.
@@ -49,10 +58,27 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
         NIMBALYST_USER_DATA_PATH: database,
         NIMBALYST_USER_DATA_DIR: userData,
         NIMBALYST_CDP_PORT: '0',
+        NIMBALYST_SHELL_HOOK_TRACE: '1',
         CODEX_HOME: codexHome,
       },
     };
     app = await launchElectronApp(launchOptions);
+    // autoUpdater resets the file transport to info. Capture the debug console
+    // transport directly so absent file-log entries cannot imply absent hooks.
+    for (const stream of [app.process().stdout, app.process().stderr]) {
+      let pending = '';
+      stream?.on('data', chunk => {
+        const lines = (pending + String(chunk)).split('\n');
+        pending = lines.pop() ?? '';
+        for (const line of lines) {
+          const marker = '[CodexShellTracking] Hook ';
+          const offset = line.indexOf(marker);
+          if (offset < 0) continue;
+          const json = line.slice(offset + marker.length).replace(/\u001b\[[0-9;]*m/g, '');
+          try { evidence.hookLog.push(JSON.parse(json)); } catch { /* Other console output is not evidence. */ }
+        }
+      });
+    }
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
     await waitForAppReady(page);
@@ -62,6 +88,26 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
       database: process.env.NIMBALYST_USER_DATA_PATH,
     }));
     expect(evidence.isolation).toEqual({ userData, database });
+    const logPath = path.join(userData, 'logs', 'main.log');
+    const recordTurn = async (id: string) => {
+      const captured = await page.evaluate(async ({ id, workspace }) => {
+        const api = (window as any).electronAPI;
+        const context = await api.invoke('git:get-commit-context', workspace, id);
+        const raw = await api.invoke('test:query-db', 'SELECT content FROM ai_agent_messages WHERE session_id=$1 AND direction=$2 ORDER BY id', [id, 'output']);
+        const durable = await api.invoke('test:query-db', 'SELECT data FROM shell_tracking_coverage WHERE session_id=$1', [id]);
+        return { sessionId: id, coverage: context.coverage, raw, durable };
+      }, { id, workspace });
+      const hooks = evidence.hookLog.filter((hook: any) => hook.sessionId === id);
+      return { ...captured, hooks };
+    };
+    const assertDiagnostics = (captured: Awaited<ReturnType<typeof recordTurn>>) => {
+      for (const summary of captured.coverage) for (const event of summary.events ?? []) {
+        if (!['unmatchedTool', 'missingPre', 'staleEvent'].includes(event.reason)) continue;
+        expect(event.tool).toEqual(expect.any(String));
+        if (event.hookTurnId !== undefined) expect(event.turnMatched).toEqual(expect.any(Boolean));
+        if (event.agentType !== undefined) expect(event.agentType).toEqual(expect.any(String));
+      }
+    };
     await page.evaluate(async () => {
       await (window as any).electronAPI.invoke('ai:saveSettings', {
         providerSettings: { 'openai-codex': { enabled: true } },
@@ -176,6 +222,46 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
     expect(git('diff', '--name-only', 'HEAD', '--', 'types')).toBe('');
     evidence.notifications = await page.evaluate(() => (window as any).__fileLinkEvents);
     expect(evidence.notifications.length).toBeGreaterThan(0);
+    expect(evidence.hookLog.some((hook: any) => hook.tool === 'Bash'), 'Debug capture must observe the baseline shell hooks').toBe(true);
+    // Diagnostic fixtures: faults remain permitted until the later fencing/typing slice.
+    const questionId = await page.evaluate(async ({ workspace }) => {
+      const api = (window as any).electronAPI;
+      const session = await api.invoke('ai:createSession', 'openai-codex', undefined, workspace, 'openai-codex:gpt-6-astra', 'agent');
+      (window as any).__sliceQuestion = api.invoke('ai:sendMessage', 'Use the nimbalyst AskUserQuestion MCP tool to ask "Proceed with the fixture?" with Yes and No options. Wait for the answer, then end with DONE. Do not run shell commands or other tools.', undefined, session.id, workspace);
+      return session.id;
+    }, { workspace });
+    let promptId = '';
+    evidence.questionSession = questionId;
+    await expect.poll(async () => {
+      const waiting = (await fs.readFile(logPath, 'utf8')).split('\n').find(line =>
+        line.includes('AskUserQuestion waiting for response: questionId=') && line.includes(`sessionId=${questionId}`));
+      promptId = waiting?.split('questionId=')[1]?.split(', sessionId=')[0] ?? '';
+      return !!promptId;
+    }, { timeout: 60_000 }).toBe(true);
+    const answer = await page.evaluate(async ({ id, promptId }) => (window as any).electronAPI.invoke('messages:respond-to-prompt', {
+      sessionId: id, promptId, promptType: 'ask_user_question_request', response: { answers: { 'Proceed with the fixture?': 'Yes' } }, respondedBy: 'desktop',
+    }), { id: questionId, promptId });
+    expect(answer.success).toBe(true);
+    evidence.questionResult = await page.evaluate(() => (window as any).__sliceQuestion);
+    evidence.questionTurn = await recordTurn(questionId);
+    expect(evidence.questionResult.content).toContain('DONE');
+    assertDiagnostics(evidence.questionTurn);
+    const subagentId = await page.evaluate(async ({ workspace }) => {
+      const api = (window as any).electronAPI;
+      const session = await api.invoke('ai:createSession', 'openai-codex', undefined, workspace, 'openai-codex:gpt-6-astra', 'agent');
+      return session.id;
+    }, { workspace });
+    evidence.subagentSession = subagentId;
+    evidence.subagentResult = await page.evaluate(async ({ id, workspace }) => (window as any).electronAPI.invoke('ai:sendMessage',
+      `Use Codex's native spawn_agent tool (not Nimbalyst spawn_session) to create exactly one worker. Tell the worker to run exactly this shell command in ${workspace}: printf '// subagent\\n' > subagent.ts . The worker must use its shell tool and then finish. Wait for the worker to finish, close it, and end with DONE. The parent must not execute any shell command, patch, or write itself. Do not commit or change any other file.`,
+      undefined, id, workspace), { id: subagentId, workspace });
+    evidence.subagentTurn = await recordTurn(subagentId);
+    expect(evidence.subagentResult.content).toContain('DONE');
+    expect(await fs.readFile(path.join(workspace, 'subagent.ts'), 'utf8')).toBe('// subagent\n');
+    for (const kind of ['started', 'completed']) expect(evidence.subagentTurn.raw.rows.some((row: any) => {
+      try { const item = JSON.parse(row.content)?.params?.item; return item?.type === 'subAgentActivity' && item.kind === kind && item.agentThreadId; } catch { return false; }
+    }), `The fixture must observe a native Codex subagent ${kind}`).toBe(true);
+    assertDiagnostics(evidence.subagentTurn);
     // A waiting, acknowledged MCP call keeps the turn active without an unfinished shell write.
     const waitingId = await page.evaluate(async ({ workspace }) => {
       const api = (window as any).electronAPI;
@@ -192,12 +278,16 @@ test('production Codex shell hooks persist sequential owners after a failed MCP 
       return result.rows[0] ? JSON.parse(result.rows[0].data).pendingTools : null;
     }, waitingId)).toEqual({});
     evidence.waitingSession = waitingId;
+    evidence.waitingQuestionTurn = await recordTurn(waitingId);
     await app.close();
     app = await launchElectronApp(launchOptions);
     const restartedPage = await app.firstWindow();
     await restartedPage.waitForLoadState('domcontentloaded');
-    await waitForAppReady(restartedPage);
-    const restored = await restartedPage.evaluate(async id => (window as any).electronAPI.invoke('session-files:coverage', [id]), waitingId);
+    // A restored Agent view can keep the file sidebar hidden. Readiness here is
+    // the coverage IPC, independent of which workspace mode was restored.
+    const readRestored = () => restartedPage.evaluate(async id => (window as any).electronAPI.invoke('session-files:coverage', [id]), waitingId);
+    await expect.poll(readRestored, { timeout: 15_000 }).toEqual([expect.objectContaining({ sessionId: waitingId, state: 'no-detected-fault', reasons: {} })]);
+    const restored = await readRestored();
     evidence.afterRestart = restored;
     expect(restored).toEqual([expect.objectContaining({ sessionId: waitingId, state: 'no-detected-fault', reasons: {} })]);
 

@@ -4,6 +4,30 @@ import { shellCoverageDetails } from '@nimbalyst/runtime/ai/shellTrackingCoverag
 import { ShellTrackingCoverage } from '../ShellTrackingCoverage';
 
 describe('durable shell coverage', () => {
+  it('round-trips bounded hook diagnostics in version 1 without changing coverage details', async () => {
+    let disk: any = { version: 1, sessionId: 'A', state: 'degraded', reasons: { missingPre: 1 }, turns: [], active: [], events: [{ reason: 'missingPre', at: 1 }] };
+    const deps = { load: async () => structuredClone(disk), save: async (_: string, data: any) => { disk = structuredClone(data); }, notify: () => {} };
+    const ledger = new ShellTrackingCoverage(deps);
+    await ledger.open('A', 'g');
+    ledger.turn('g', 'root');
+    const context = { tool: 'Bash', hookSessionId: 'child', hookTurnId: 'foreign', turnMatched: false, agentType: 'worker' };
+    ledger.record('g', 'unmatchedTool', undefined, 'orphan', context);
+    ledger.record('g', 'unmatchedTool', undefined, 'orphan', { ...context, turnMatched: true });
+    await ledger.close('g');
+    const [summary] = await new ShellTrackingCoverage(deps).readMany(['A']);
+    expect(disk.version).toBe(1);
+    expect(summary.events).toEqual([
+      { reason: 'missingPre', at: 1 },
+      expect.objectContaining({ ...context, turnId: 'root', toolUseId: 'orphan' }),
+      expect.objectContaining({ ...context, turnMatched: true }),
+    ]);
+    expect(shellCoverageDetails([summary])).toEqual(shellCoverageDetails([{ ...summary, events: undefined }]));
+    await ledger.open('A', 'g2');
+    for (let i = 0; i < 40; i++) ledger.record('g2', 'staleEvent', undefined, String(i), context);
+    await ledger.close('g2');
+    expect(disk.events).toHaveLength(32);
+  });
+
   it('preserves gaps and interrupted turns across restart without overwriting earlier totals', async () => {
     let disk: any;
     const deps = {

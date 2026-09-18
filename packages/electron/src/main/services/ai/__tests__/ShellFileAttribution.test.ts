@@ -45,6 +45,65 @@ function fixture(beforeRead?: () => Promise<void>, prepareCheckout?: () => Promi
   };
 }
 describe('shell hook attribution', () => {
+  it.each(['Bash', 'apply_patch'])('silently retires event-free %s windows and clears their durable marker', async tool => {
+    const activity = vi.fn(async () => {});
+    const f = fixture(undefined, undefined, { activity });
+    const a = await f.service.register('A', '/workspace');
+    await f.service.pre(a, 'empty', tool);
+    f.service.endTurn(a);
+    expect(f.report).not.toHaveBeenCalled();
+    expect(f.service.getStats().activeWindows).toBe(0);
+    expect(activity).toHaveBeenLastCalledWith(a, 'empty', false);
+    await f.service.pre(a, 'empty', tool);
+    expect(f.service.getStats().activeWindows).toBe(0);
+    await f.service.release(a);
+  });
+
+  it('retains deferred evidence and hook identity at arrival without fencing a foreign turn', async () => {
+    let turn = 'root-turn';
+    const finish = vi.fn(async () => new Map());
+    const f = fixture(undefined, async () => ({ defer: async () => true, finish }), { currentTurn: () => turn });
+    const a = await f.service.register('A', '/workspace');
+    await f.service.pre(a, 'orphan', 'Bash', { sessionId: 'child', turnId: 'child-turn', agentType: 'worker' });
+    expect(f.service.getStats().activeWindows).toBe(1);
+    f.write('/workspace/deferred.ts', 'candidate');
+    await f.service.flush();
+    turn = 'child-turn';
+    f.service.endTurn(a);
+    expect(f.report).toHaveBeenCalledWith(a, 'unmatchedTool', undefined, 'orphan', {
+      tool: 'Bash', hookSessionId: 'child', hookTurnId: 'child-turn', turnMatched: false, agentType: 'worker',
+    });
+    expect(finish).not.toHaveBeenCalled();
+    expect(f.persist).not.toHaveBeenCalled();
+    await f.service.release(a);
+  });
+
+  it('records missing-pre and stale-pre context without inventing absent hook identity', async () => {
+    const f = fixture(undefined, undefined, { currentTurn: () => 'root' });
+    const a = await f.service.register('A', '/workspace');
+    f.service.started(a, 'missing');
+    await f.service.completed(a, 'missing');
+    expect(f.report).toHaveBeenCalledWith(a, 'missingPre', undefined, 'missing', { tool: 'Uninstrumented' });
+    await f.service.pre(a, 'missing', 'Bash', { turnId: 'root', agentType: 'main' });
+    expect(f.report).toHaveBeenLastCalledWith(a, 'staleEvent', undefined, 'missing', {
+      tool: 'Bash', hookTurnId: 'root', turnMatched: true, agentType: 'main',
+    });
+    await f.service.release(a);
+  });
+
+  it.each(['Bash', 'apply_patch'])('does not silently retire %s with a queued file event', async tool => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const f = fixture(() => gate);
+    const a = await f.service.register('A', '/workspace');
+    await f.service.pre(a, 'queued', tool);
+    f.write('/workspace/queued.ts', 'candidate');
+    f.service.endTurn(a);
+    expect(f.report.mock.calls.map(([, reason]) => reason)).toContain('unmatchedTool');
+    release();
+    await f.service.release(a);
+  });
+
   it('waits for terminal cleanup that arrives while the next pre-hook is flushing', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });

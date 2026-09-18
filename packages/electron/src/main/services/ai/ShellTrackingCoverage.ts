@@ -5,6 +5,9 @@ import {
   type ShellCoverageSummary,
 } from '@nimbalyst/runtime/ai/shellTrackingCoverage';
 
+export type ShellHookDiagnostics = Pick<NonNullable<ShellCoverageSummary['events']>[number],
+  'tool' | 'hookSessionId' | 'hookTurnId' | 'turnMatched' | 'agentType'>;
+
 export interface StoredShellCoverage extends ShellCoverageSummary {
   version: 1;
   active: string[];
@@ -152,11 +155,11 @@ export class ShellTrackingCoverage {
     entry.data.active = entry.data.active.filter((id) => id !== generation);
     this.touch(entry);
   }
-  record(generation: string, reason: ShellCoverageReason, turnId?: string, toolUseId?: string): void {
+  record(generation: string, reason: ShellCoverageReason, turnId?: string, toolUseId?: string, hook?: ShellHookDiagnostics): void {
     const owner = this.owners.get(generation);
     if (!owner) return;
     const entry = this.entries.get(owner.sessionId)!;
-    this.add(entry, reason, turnId ?? owner.turnId, toolUseId);
+    this.add(entry, reason, turnId ?? owner.turnId, toolUseId, hook);
   }
   async reportSession(sessionId: string, reason: ShellCoverageReason): Promise<void> {
     this.add(await this.load(sessionId), reason);
@@ -176,7 +179,7 @@ export class ShellTrackingCoverage {
     entry.data.observation = 'recovering';
     this.add(entry, 'unavailable');
   }
-  private add(entry: Entry, reason: ShellCoverageReason, turnId?: string, toolUseId?: string): void {
+  private add(entry: Entry, reason: ShellCoverageReason, turnId?: string, toolUseId?: string, hook?: ShellHookDiagnostics): void {
     const now = Date.now();
     const increment = (counts: ShellCoverageCounts) => {
       counts[reason] = Math.min(1_000_000, (counts[reason] ?? 0) + 1);
@@ -191,8 +194,10 @@ export class ShellTrackingCoverage {
     }
     const events = entry.data.events ??= [];
     const last = events.at(-1);
-    if (!last || last.reason !== reason || last.turnId !== turnId || last.toolUseId !== toolUseId) {
-      events.push({ reason, at: now, turnId, toolUseId });
+    if (!last || last.reason !== reason || last.turnId !== turnId || last.toolUseId !== toolUseId ||
+        last.tool !== hook?.tool || last.hookSessionId !== hook?.hookSessionId || last.hookTurnId !== hook?.hookTurnId ||
+        last.turnMatched !== hook?.turnMatched || last.agentType !== hook?.agentType) {
+      events.push({ reason, at: now, turnId, toolUseId, ...hook });
       if (events.length > 32) events.shift();
     }
     entry.data.firstAt ??= now;

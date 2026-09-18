@@ -85,7 +85,7 @@ export const shellFileAttribution = new ShellFileAttribution({
   },
   knownWrite: (file, state) => isKnownFileWrite(file, state?.fingerprint),
   otherSessions: (workspace, filePath) => workspaceFileAttributionPolicy.getSessionIds(workspace, filePath),
-  report: (generation, reason, turnId, toolUseId) => shellTrackingCoverage.record(generation, reason, turnId, toolUseId),
+  report: (generation, reason, turnId, toolUseId, hook) => shellTrackingCoverage.record(generation, reason, turnId, toolUseId, hook),
   currentTurn: (generation) => shellTrackingCoverage.currentTurn(generation),
   persist: async (evidence) => {
     if (!workspaceAttributionThrottle.tryAcquire(evidence.workspacePath)) return 'throttled';
@@ -143,8 +143,18 @@ export async function prepareShellTracking(sessionId: string, workspace: string)
       const p = JSON.parse(raw);
       if (typeof p.id !== 'string' || p.id.length > 256 || typeof p.tool !== 'string' || p.tool.length > 256)
         throw new Error('Invalid hook identity');
-      if (p.event === 'PreToolUse') await shellFileAttribution.pre(generation, p.id, p.tool);
-      else if (p.event === 'PostToolUse') await shellFileAttribution.post(generation, p.id);
+      for (const field of ['session_id', 'turn_id', 'agent_type'])
+        if (p[field] !== undefined && (typeof p[field] !== 'string' || p[field].length > 256))
+          throw new Error('Invalid hook context');
+      const identity = { sessionId: p.session_id, turnId: p.turn_id, agentType: p.agent_type };
+      // Off by default; the real-Codex E2E and manual hook tracing set this.
+      if (process.env.NIMBALYST_SHELL_HOOK_TRACE)
+        logger.main.debug('[CodexShellTracking] Hook', JSON.stringify({
+          sessionId, event: p.event, tool: p.tool, toolUseId: p.id, hookSessionId: p.session_id,
+          hookTurnId: p.turn_id, currentTurnId: shellTrackingCoverage.currentTurn(generation), agentType: p.agent_type,
+        }));
+      if (p.event === 'PreToolUse') await shellFileAttribution.pre(generation, p.id, p.tool, identity);
+      else if (p.event === 'PostToolUse') await shellFileAttribution.post(generation, p.id, { ...identity, tool: p.tool });
       else throw new Error('Unsupported event');
       res.end('{}');
     } catch {

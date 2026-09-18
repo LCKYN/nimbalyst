@@ -20,7 +20,10 @@ process.stdin.on('end', () => {
     });
     req.on('timeout', () => req.destroy());
     req.on('error', () => {});
-    req.end(JSON.stringify({ event: p.hook_event_name, id: p.tool_use_id, tool: p.tool_name }));
+    req.end(JSON.stringify({
+      event: p.hook_event_name, id: p.tool_use_id, tool: p.tool_name,
+      session_id: p.session_id, turn_id: p.turn_id, agent_type: p.agent_type,
+    }));
   } catch {
     /* Missing/invalid observation is not permission to block a command. */
   }

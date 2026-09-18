@@ -37,7 +37,10 @@ export interface ShellCoverageSummary {
   sessionId: string;
   state: 'unknown' | 'no-detected-fault' | 'degraded' | 'unavailable';
   reasons: ShellCoverageCounts;
-  events?: Array<{ reason: ShellCoverageReason; at: number; turnId?: string; toolUseId?: string }>;
+  events?: Array<{
+    reason: ShellCoverageReason; at: number; turnId?: string; toolUseId?: string;
+    tool?: string; hookSessionId?: string; hookTurnId?: string; turnMatched?: boolean; agentType?: string;
+  }>;
   observation?: 'watching' | 'recovering';
   firstAt?: number;
   lastAt?: number;

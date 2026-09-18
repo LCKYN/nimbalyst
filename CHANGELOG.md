@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Bug fixes go here -->
 - Pasting multiple tracker values across grouped rows keeps every value aligned with its intended record (#1548).
 - Organizations recover after startup sign-in delays instead of appearing empty.
-- Codex file tracking no longer lists identically rebuilt files as edits, keeps tracking after a slow build or when another agent session is active in the same workspace, and no longer reports an interruption after a normal restart.
+- Codex file tracking no longer lists identically rebuilt files as edits, keeps tracking after a slow build or when another agent session is active in the same workspace, no longer reports an interruption after a normal restart, and no longer warns about a command that ended without touching any file.
 - Cloudflare sandbox connection failures show clearer errors and refresh their status before retrying.
 - Workspace windows no longer reopen off-screen after disconnecting or rearranging monitors (#1535).
 - Claude plugins no longer load a second, unconfigured copy alongside their marketplace installation (#1465).
