@@ -10,31 +10,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
-- Open shared documents in the browser from their document menu.
-- Share Namenym naming projects for collaborative editing and individual favorites on desktop and the web.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
 <!-- Bug fixes go here -->
-- Codex honors additional writable directories, detects unexpected read-only sessions, and offers Windows sandbox setup in settings (#1544).
-- Reduce iOS database contention while syncing session history and prevent session groups briefly disappearing during list updates.
-- Browser pages no longer remain over the app when switching tabs while a preview is opening (#1547).
-- Claude usage consistently shows percent used for all quotas, matching their progress bars (#1546).
-- Image previews refresh after external edits and recover from failed loads (#1543).
-- Pasting multiple tracker values across grouped rows keeps every value aligned with its intended record (#1548).
-- Organizations recover after startup sign-in delays instead of appearing empty.
-- Codex file tracking no longer lists identically rebuilt files as edits, keeps tracking after a slow build or when another agent session is active in the same workspace, no longer reports an interruption after a normal restart, no longer warns about a command that ended without touching any file, ignores tool activity from Codex subagents instead of attributing their writes to the parent session, retries a slow git check instead of losing rebuild protection while a heavy build or test run is going, and credits a file edited while two Codex sessions overlap to the session whose command named it.
-- Cloudflare sandbox connection failures show clearer errors and refresh their status before retrying.
-- Workspace windows no longer reopen off-screen after disconnecting or rearranging monitors (#1535).
-- Claude plugins no longer load a second, unconfigured copy alongside their marketplace installation (#1465).
-- Personal session sync keeps publishing when the server index holds entries written under another device's sync key, and the iPhone skips those entries instead of stalling; the sync status shows how many were skipped (#1545, #1542).
-- Selecting the Stable release channel while running a newer build no longer rolls the app back to the older version on every launch (#1545).
-- A sync credential file that cannot be read keeps the existing key instead of silently generating a new one (#1542).
 
 ### Removed
 <!-- Removed features go here -->
+
+## [0.78.2] - 2026-09-18
+
+
+### Added
+- Open shared documents in the browser from their document menu.
+- Share Namenym naming projects for collaborative editing and individual favorites on desktop and the web.
+
+### Fixed
+- Codex honors writable directories, detects unexpected read-only sessions, and offers Windows sandbox setup (#1544).
+- Codex file tracking handles rebuilds, slow commands, restarts, and overlapping sessions without false edits or warnings.
+- Browser previews no longer remain over the app after switching tabs (#1547).
+- Claude usage consistently shows percent used, matching its progress bars (#1546).
+- Image previews refresh after external edits and recover from failed loads (#1543).
+- Pasting tracker values across grouped rows keeps each value aligned with its record (#1548).
+- Organizations recover after startup sign-in delays instead of appearing empty.
+- Cloudflare sandbox failures show clearer errors and refresh connection status before retrying.
+- Workspace windows stay on-screen after disconnecting or rearranging monitors (#1535).
+- Claude plugins no longer load duplicate, unconfigured copies (#1465).
+- Personal session sync keeps publishing when some server entries use another device's key (#1545, #1542).
+- Selecting Stable while running a newer build no longer rolls the app back on every launch (#1545).
+- Unreadable sync credentials preserve the existing encryption key (#1542).
 
 ## [0.78.1] - 2026-09-17
 
