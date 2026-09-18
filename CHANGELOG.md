@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Claude usage consistently shows percent used for all quotas, matching their progress bars (#1546).
 - Image previews refresh after external edits and recover from failed loads (#1543).
 - Pasting multiple tracker values across grouped rows keeps every value aligned with its intended record (#1548).
 - Organizations recover after startup sign-in delays instead of appearing empty.
