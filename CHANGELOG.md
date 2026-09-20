@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Spawned sessions run correctly in projects opened through symlinks or different path casing (#1551).
 - Foreground commands no longer trigger background-task wake-ups, and genuine completions are delivered once (#1493).
 - Cancelling a question clears its waiting state without hiding other pending prompts (#1549).
+- Tracker field edits preserve untouched frontmatter comments, formatting, dates, and line endings (#1552).
 
 ### Removed
 <!-- Removed features go here -->
