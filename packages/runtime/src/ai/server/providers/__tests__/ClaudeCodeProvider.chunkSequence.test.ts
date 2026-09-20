@@ -988,6 +988,88 @@ describe('ClaudeCodeProvider.sendMessage chunk sequence', () => {
     expect(idleMessages).toHaveLength(1);
   });
 
+  // GitHub #1555 (duplicate of #1493): the reported turn ran SEVERAL shell
+  // commands, "some in the background", and the continuation listed notices
+  // "for commands I already reported on". A single-task fixture cannot catch
+  // that — the wake is legitimate here, so what has to hold is which tasks the
+  // message names. The foreground ones settled inline and must be absent.
+  it('names only the backgrounded command when foreground commands ran in the same turn', async () => {
+    const { provider } = await makeProvider();
+    const foregroundPair = (taskId: string, toolUseId: string, command: string, output: string) => [
+      {
+        type: 'system',
+        subtype: 'task_started',
+        task_id: taskId,
+        task_type: 'local_bash',
+        is_backgrounded: false,
+        description: command,
+        tool_use_id: toolUseId,
+      },
+      {
+        type: 'assistant',
+        session_id: 'sdk-session-1',
+        message: {
+          id: `msg_${taskId}`,
+          content: [{ type: 'tool_use', id: toolUseId, name: 'Bash', input: { command } }],
+        },
+      },
+      {
+        type: 'system',
+        subtype: 'task_notification',
+        task_id: taskId,
+        status: 'completed',
+        summary: output,
+      },
+      {
+        type: 'user',
+        message: {
+          content: [{ type: 'tool_result', tool_use_id: toolUseId, content: output, is_error: false }],
+        },
+      },
+    ];
+
+    const { query } = scriptQueryWithClose([
+      INIT_CHUNK,
+      ...foregroundPair('task_fg1', 'toolu_fg1', 'git status', 'nothing to commit'),
+      ...foregroundPair('task_fg2', 'toolu_fg2', 'npm run typecheck', 'no errors'),
+      {
+        type: 'system',
+        subtype: 'task_started',
+        task_id: 'task_bg',
+        task_type: 'local_bash',
+        is_backgrounded: true,
+        description: 'npm run build',
+        tool_use_id: 'toolu_bg',
+      },
+      {
+        type: 'assistant',
+        session_id: 'sdk-session-1',
+        message: { id: 'msg_lead', content: [{ type: 'text', text: 'build is running in the background' }] },
+      },
+      { type: 'result', subtype: 'success', is_error: false, num_turns: 4 },
+      // Settles after the lead's result — this is the drain, and the only
+      // outcome the session has not already been told about.
+      {
+        type: 'system',
+        subtype: 'task_notification',
+        task_id: 'task_bg',
+        status: 'completed',
+        summary: 'build succeeded',
+      },
+    ]);
+    queryMock.mockImplementation(() => query);
+
+    const idleMessages: Array<{ message: string }> = [];
+    provider.on('teammate:messageWhileIdle', (payload) => idleMessages.push(payload));
+
+    await runTurn(provider, 'check the tree, typecheck, then build in the background');
+
+    expect(idleMessages).toHaveLength(1);
+    expect(idleMessages[0].message).toContain('npm run build');
+    expect(idleMessages[0].message).not.toContain('git status');
+    expect(idleMessages[0].message).not.toContain('npm run typecheck');
+  });
+
   it('passes the resolved turn inputs through to buildSdkOptions', async () => {
     const { provider } = await makeProvider();
     queryMock.mockImplementation(() =>
