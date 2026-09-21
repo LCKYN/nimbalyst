@@ -3,25 +3,42 @@ import { describe, expect, it, vi } from 'vitest';
 import * as rtl from '@testing-library/react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 
-const { render, screen, fireEvent, waitFor } = rtl;
+const { render, screen, fireEvent, waitFor, act } = rtl;
 
 const { copyToClipboard } = vi.hoisted(() => ({ copyToClipboard: vi.fn() }));
 vi.mock('../../../../utils/clipboard', () => ({ copyToClipboard }));
 
 describe('MarkdownRenderer code block copy button', () => {
-  it('copies the fenced block text and briefly shows Copied', async () => {
+  it('copies and resets confirmation under StrictMode', async () => {
     copyToClipboard.mockResolvedValueOnce(undefined);
-    render(<MarkdownRenderer content={'```bash\nnpm install\n```'} />);
+    render(<React.StrictMode><MarkdownRenderer content={'```bash\nnpm install\n```'} /></React.StrictMode>);
 
     // The button is icon-only, so its accessible name is the only label a
     // screen reader (or this test) can read.
     const button = screen.getByTestId('code-block-copy-button');
     expect(button.getAttribute('aria-label')).toBe('Copy code');
 
-    fireEvent.click(button);
+    vi.useFakeTimers();
+    try {
+      await act(async () => { fireEvent.click(button); });
+      expect(copyToClipboard).toHaveBeenCalledWith('npm install');
+      expect(button.getAttribute('aria-label')).toBe('Copied');
+      await act(async () => { vi.advanceTimersByTime(1500); });
+      expect(button.getAttribute('aria-label')).toBe('Copy code');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-    expect(copyToClipboard).toHaveBeenCalledWith('npm install');
-    await waitFor(() => expect(button.getAttribute('aria-label')).toBe('Copied'));
+  it.each([
+    ['unlabelled single line', '```\necho hello\n```', 'echo hello'],
+    ['unlabelled multiline', '```\nfirst\n  second\n```', 'first\n  second'],
+    ['labelled multiline', '```bash\necho first\n  echo second\n```', 'echo first\n  echo second'],
+  ])('copies raw text from %s blocks', async (_name, content, expected) => {
+    copyToClipboard.mockResolvedValueOnce(undefined);
+    render(<MarkdownRenderer content={content} />);
+    await act(async () => { fireEvent.click(screen.getByTestId('code-block-copy-button')); });
+    expect(copyToClipboard).toHaveBeenLastCalledWith(expected);
   });
 
   it('logs and leaves the button unchanged when the clipboard write fails', async () => {

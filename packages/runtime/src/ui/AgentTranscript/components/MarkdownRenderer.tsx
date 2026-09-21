@@ -198,6 +198,7 @@ const CodeBlockCopyButton: React.FC<{ codeString: string }> = ({ codeString }) =
   const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
@@ -725,7 +726,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               // permanently so hovering never resizes the block.
               padding: reservesCopyButtonRoom
                 ? '0.25rem 2rem 0.25rem 0.5rem'
-                : isSingleLine ? '0.25rem 0.5rem' : '0.75rem',
+                // Keep multiline controls above the text, including when a
+                // long first line scrolls underneath their right-hand edge.
+                : isSingleLine ? '0.25rem 0.5rem' : '2.25rem 0.75rem 0.75rem',
               borderRadius: isSingleLine ? '0.25rem' : '0.375rem',
               fontSize: '0.8125rem',
               lineHeight: isSingleLine ? '1.4' : '1.5',

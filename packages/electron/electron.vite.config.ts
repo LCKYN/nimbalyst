@@ -315,8 +315,7 @@ export default defineConfig({
       ]
     },
     build: {
-      // Electron 43 ships Node 22. node16 predates top-level await, which the
-      // Anthropic SDK bundle now uses at module scope.
+      // Target modern Node syntax supported by the bundled Electron runtime.
       target: 'node22',
       sourcemap: isDev,
       rollupOptions: {
