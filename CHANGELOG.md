@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Foreground commands no longer trigger background-task wake-ups, and genuine completions are delivered once (#1493).
 - Cancelling a question clears its waiting state without hiding other pending prompts (#1549).
 - Tracker field edits preserve untouched frontmatter comments, formatting, dates, and line endings (#1552).
+- A failed organization directory lookup is reported as unavailable and retried instead of showing an empty organization list.
 
 ### Removed
 <!-- Removed features go here -->
