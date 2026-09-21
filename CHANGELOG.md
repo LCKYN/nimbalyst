@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Mobile session creation reports sync failures accurately, and sync status shows when session writes are unavailable.
 - Review with AI starts a pull request review without requiring a custom slash command (#1556).
 - Codex can ask interactive questions when tool approval is set to never (#1553).
 - Spawned sessions run correctly in projects opened through symlinks or different path casing (#1551).
