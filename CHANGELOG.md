@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tracker field edits preserve untouched frontmatter comments, formatting, dates, and line endings (#1552).
 - A failed organization directory lookup is reported as unavailable and retried instead of showing an empty organization list.
 - An agent edit to a long, list-heavy markdown file no longer freezes the editor for several seconds per attempt while its inline diff is computed and retried.
+- Memory extension re-indexing skips unchanged files and records instead of rebuilding its whole search index for each batch.
 
 ### Removed
 <!-- Removed features go here -->
