@@ -609,6 +609,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
 
   // Error state - centralized in atom, updated by sessionTranscriptListeners
   const sessionError = useAtomValue(sessionErrorAtom(sessionId));
+  const setSessionError = useSetAtom(sessionErrorAtom(sessionId));
 
   // Track mode at last message send to detect mode transitions via toggle button
 
@@ -1092,11 +1093,17 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
       setDraftAttachments([]);
       clearAIInputHistory(sessionId);
     } catch (error) {
+      // Surface it: the draft is left intact on failure, so without this the
+      // click looks like it simply did nothing (main rejects a fireAt that has
+      // drifted inside the 30s minimum, or a session it cannot find).
       console.error('[SessionTranscript] Failed to schedule prompt:', error);
+      setSessionError({
+        message: `Could not schedule this prompt: ${error instanceof Error ? error.message : String(error)}`,
+      });
     } finally {
       setIsScheduling(false);
     }
-  }, [sessionId, workspacePath, setDraftInput, setDraftAttachments, isScheduling, clearAIInputHistory]);
+  }, [sessionId, workspacePath, setDraftInput, setDraftAttachments, isScheduling, clearAIInputHistory, setSessionError]);
 
   // What the composer looked like when this session opened. Once per session,
   // not per render: we are trying to explain why people do not act on a screen,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 import { FloatingPortal, useFloatingMenu } from '../../hooks/useFloatingMenu';
@@ -38,31 +38,32 @@ export function ScheduleLaterMenu({ disabled = false, disabledReason, onSchedule
   const { isOpen, setIsOpen } = menu;
   const usage = useAtomValue(claudeUsageAtom);
   const [customTime, setCustomTime] = useState('');
-  const [customTimeError, setCustomTimeError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const resetsAt = usage?.fiveHour.resetsAt ?? null;
   const usageResetAvailable = resetsAt !== null && resolveFireAt({ kind: 'usageReset', resetsAt }) !== null;
 
-  const confirm = (mode: ScheduleLaterMode) => {
-    const fireAt = resolveFireAt(mode);
-    if (fireAt === null) return;
-    onSchedule(fireAt);
-    setIsOpen(false);
-    setCustomTime('');
-    setCustomTimeError(false);
-  };
+  // Dismissing the menu (click-outside or Escape) bypasses every handler, so
+  // without this a failed attempt greets the user again on reopen.
+  useEffect(() => {
+    if (!isOpen) setError(null);
+  }, [isOpen]);
 
-  const confirmCustomTime = () => {
-    if (!customTime) return;
-    const fireAt = resolveFireAt({ kind: 'clockTime', isoLocal: customTime });
+  /**
+   * Every path routes through here so an unresolvable time reports itself.
+   * A menu that just closes (or does nothing) on an already-passed usage reset
+   * is indistinguishable from a successful schedule.
+   */
+  const confirm = (mode: ScheduleLaterMode, failureMessage: string) => {
+    const fireAt = resolveFireAt(mode);
     if (fireAt === null) {
-      setCustomTimeError(true);
+      setError(failureMessage);
       return;
     }
     onSchedule(fireAt);
     setIsOpen(false);
     setCustomTime('');
-    setCustomTimeError(false);
+    setError(null);
   };
 
   return (
@@ -96,7 +97,7 @@ export function ScheduleLaterMenu({ disabled = false, disabledReason, onSchedule
                 key={preset.label}
                 type="button"
                 className="flex items-center w-full px-2 py-1.5 border-none rounded text-xs text-left cursor-pointer text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
-                onClick={() => confirm({ kind: 'delay', ms: preset.ms })}
+                onClick={() => confirm({ kind: 'delay', ms: preset.ms }, 'That delay is too short to schedule.')}
               >
                 {preset.label}
               </button>
@@ -105,7 +106,9 @@ export function ScheduleLaterMenu({ disabled = false, disabledReason, onSchedule
             <button
               type="button"
               className="flex items-center w-full px-2 py-1.5 border-none rounded text-xs text-left cursor-pointer text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
-              onClick={() => confirm({ kind: 'clockTime', isoLocal: tomorrowNineAmIso() })}
+              onClick={() =>
+                confirm({ kind: 'clockTime', isoLocal: tomorrowNineAmIso() }, 'That time has already passed.')
+              }
             >
               Tomorrow, 9am
             </button>
@@ -116,7 +119,10 @@ export function ScheduleLaterMenu({ disabled = false, disabledReason, onSchedule
               disabled={!usageResetAvailable}
               className="flex items-center w-full px-2 py-1.5 border-none rounded text-xs text-left cursor-pointer text-[var(--nim-text)] hover:enabled:bg-[var(--nim-bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
               title={usageResetAvailable ? undefined : 'No usage data yet'}
-              onClick={() => resetsAt && confirm({ kind: 'usageReset', resetsAt })}
+              onClick={() =>
+                resetsAt &&
+                confirm({ kind: 'usageReset', resetsAt }, 'Your usage has already reset — send it now instead.')
+              }
             >
               When my usage resets{resetsAt ? ` (${formatResetTime(resetsAt)})` : ''}
             </button>
@@ -128,7 +134,7 @@ export function ScheduleLaterMenu({ disabled = false, disabledReason, onSchedule
                 value={customTime}
                 onChange={(e) => {
                   setCustomTime(e.target.value);
-                  setCustomTimeError(false);
+                  setError(null);
                 }}
                 className="flex-1 min-w-0 px-1 py-0.5 rounded border border-[var(--nim-border)] bg-transparent text-xs text-[var(--nim-text)]"
               />
@@ -136,14 +142,19 @@ export function ScheduleLaterMenu({ disabled = false, disabledReason, onSchedule
                 type="button"
                 disabled={!customTime}
                 className="px-2 py-0.5 rounded text-xs border-none cursor-pointer bg-[var(--nim-primary)] text-white disabled:opacity-40 disabled:cursor-not-allowed"
-                onClick={confirmCustomTime}
+                onClick={() =>
+                  confirm(
+                    { kind: 'clockTime', isoLocal: customTime },
+                    'Pick a time at least 30 seconds from now.',
+                  )
+                }
               >
                 Set
               </button>
             </div>
-            {customTimeError && (
-              <p data-testid="schedule-later-custom-time-error" className="px-2 pb-1 text-[11px] text-[var(--nim-error)]">
-                Pick a time at least 30 seconds from now.
+            {error && (
+              <p data-testid="schedule-later-error" className="px-2 pb-1 text-[11px] text-[var(--nim-error)]">
+                {error}
               </p>
             )}
           </div>
