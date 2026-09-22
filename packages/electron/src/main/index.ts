@@ -3051,11 +3051,11 @@ app.whenReady().then(async () => {
         const scheduler = SessionWakeupScheduler.getInstance();
         scheduler.configure({
             store: getSessionWakeupsStore(),
-            executor: async ({ sessionId, workspacePath, prompt }) => {
+            executor: async ({ sessionId, workspacePath, prompt, attachments }) => {
                 if (!aiSvcRef) {
                     return { triggered: false };
                 }
-                await aiSvcRef.queuePromptForSession(sessionId, prompt, undefined, {
+                await aiSvcRef.queuePromptForSession(sessionId, prompt, attachments?.length ? attachments : undefined, {
                   promptOrigin: 'wakeup_resume',
                   promptProvenance: {
                     actor: 'system',

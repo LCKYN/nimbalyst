@@ -36,6 +36,8 @@ export type WakeupExecutor = (args: {
   sessionId: string;
   workspacePath: string;
   prompt: string;
+  /** Attachments captured when the prompt was scheduled; empty when none. */
+  attachments?: unknown[];
 }) => Promise<{ triggered: boolean }>;
 
 export interface SessionWakeupSchedulerDeps {
@@ -250,6 +252,7 @@ export class SessionWakeupScheduler {
         sessionId: row.sessionId,
         workspacePath: row.workspaceId,
         prompt: row.prompt,
+        attachments: row.attachments,
       });
 
       if (!result.triggered) {

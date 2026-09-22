@@ -2,6 +2,9 @@
  * WakeupHandlers - IPC handlers for session wakeups (scheduled re-invocations).
  *
  * Channels:
+ * - wakeup:create        ({ sessionId, workspacePath, prompt, fireAt, reason? }) -> created row.
+ *                                            User-facing "Run later" creation path; same store/scheduler
+ *                                            as the agent-only schedule_wakeup MCP tool.
  * - wakeup:list-active   (workspacePath?) -> active wakeups (pending/overdue/waiting_for_workspace),
  *                                            scoped to workspace if provided.
  * - wakeup:cancel        (id) -> updated row or null.
@@ -14,12 +17,66 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import log from 'electron-log/main';
+import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
 import { getSessionWakeupsStore } from '../services/RepositoryManager';
 import { SessionWakeupScheduler } from '../services/SessionWakeupScheduler';
 
 const logger = log.scope('WakeupHandlers');
 
+const MIN_LEAD_MS = 30_000;
+
 export function registerWakeupHandlers(): void {
+  ipcMain.handle('wakeup:create', async (_event, args: {
+    sessionId?: string;
+    workspacePath?: string;
+    prompt?: string;
+    fireAt?: number;
+    reason?: string;
+    attachments?: unknown[];
+  }) => {
+    const { sessionId, workspacePath, prompt, fireAt, reason, attachments } = args ?? {};
+    if (!sessionId || typeof sessionId !== 'string') {
+      throw new Error('sessionId is required');
+    }
+    if (!workspacePath || typeof workspacePath !== 'string') {
+      throw new Error('workspacePath is required');
+    }
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      throw new Error('prompt is required and must be a non-empty string');
+    }
+    if (typeof fireAt !== 'number' || !Number.isFinite(fireAt)) {
+      throw new Error('fireAt is required and must be a number (epoch ms)');
+    }
+    if (fireAt < Date.now() + MIN_LEAD_MS) {
+      throw new Error(`fireAt must be at least ${MIN_LEAD_MS / 1000}s in the future`);
+    }
+
+    const session = await AISessionsRepository.get(sessionId);
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
+
+    try {
+      const id = `wakeup-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const row = await getSessionWakeupsStore().create({
+        id,
+        sessionId,
+        workspaceId: workspacePath,
+        prompt: prompt.trim(),
+        reason: reason?.trim() || undefined,
+        fireAt,
+        attachments: Array.isArray(attachments) ? attachments : undefined,
+      });
+      SessionWakeupScheduler.getInstance().onCreated(row);
+      broadcastWakeupChanged(row);
+      return row;
+    } catch (error) {
+      logger.error('wakeup:create failed', error);
+      throw error;
+    }
+  });
+
+
   ipcMain.handle('wakeup:list-active', async (_event, workspacePath?: string) => {
     try {
       const store = getSessionWakeupsStore();

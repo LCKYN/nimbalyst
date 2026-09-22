@@ -614,6 +614,8 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
 
   // Track if we're currently queueing a message (prevents double-submission)
   const [isQueueing, setIsQueueing] = useState(false);
+  // Track if we're currently scheduling a "Run later" prompt (prevents double-submission)
+  const [isScheduling, setIsScheduling] = useState(false);
 
   // claude-code-cli (NIM-806, Phase 3): the rich transcript is primary; the
   // genuine TUI lives in a collapsible "raw terminal" drawer. Default EXPANDED so
@@ -1066,6 +1068,35 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
       setIsQueueing(false);
     }
   }, [sessionId, getEffectiveDocumentContext, setDraftInput, setDraftAttachments, setLastSubmitAt, isQueueing, clearAIInputHistory]);
+
+  // "Run later": schedules the draft to resume this session at fireAt instead
+  // of sending immediately. Backed by the same wakeup store/scheduler as the
+  // agent-facing schedule_wakeup tool (see WakeupHandlers.ts wakeup:create).
+  const handleScheduleLater = useCallback(async (message: string, fireAt: number) => {
+    if (!message.trim() || isScheduling) return;
+    setIsScheduling(true);
+    try {
+      // Read imperatively, like handleQueue: subscribing here would re-render
+      // the whole transcript on every keystroke.
+      const currentAttachments = store.get(sessionDraftAttachmentsAtom(sessionId)) ?? [];
+      await window.electronAPI.invoke('wakeup:create', {
+        sessionId,
+        workspacePath,
+        prompt: message.trim(),
+        fireAt,
+        // Persisted with the wakeup and re-attached when it fires, so a
+        // scheduled prompt keeps its images like a queued one does (#1497).
+        attachments: currentAttachments,
+      });
+      setDraftInput('');
+      setDraftAttachments([]);
+      clearAIInputHistory(sessionId);
+    } catch (error) {
+      console.error('[SessionTranscript] Failed to schedule prompt:', error);
+    } finally {
+      setIsScheduling(false);
+    }
+  }, [sessionId, workspacePath, setDraftInput, setDraftAttachments, isScheduling, clearAIInputHistory]);
 
   // What the composer looked like when this session opened. Once per session,
   // not per render: we are trying to explain why people do not act on a screen,
@@ -2554,10 +2585,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
             readFile={readFile}
             fileEdits={sessionFileEdits}
             renderFilesHeader={mode === 'agent' ? () => (
-              <>
-                <WakeupBanner sessionId={sessionId} />
-                <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
-              </>
+              <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
             ) : undefined}
             pendingReviewFiles={pendingReviewFiles}
             groupByDirectory={groupByDirectory}
@@ -2696,7 +2724,6 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
       {mode === 'chat' && !collapseTranscript && (
         <>
           <McpLockdownBanner provider={typeof provider === 'string' ? provider : undefined} />
-          <WakeupBanner sessionId={sessionId} />
           <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
         </>
       )}
@@ -2711,6 +2738,12 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
           pendingReviewFiles={pendingReviewFiles}
         />
       )}
+
+      {/* Scheduled "Run later" prompt, directly above the queue it behaves like.
+          Deliberately NOT inside a mode/sidebar branch: in agent mode the banner
+          used to ride along with the Files Edited sidebar, so a collapsed sidebar
+          hid the only feedback that a prompt had been scheduled (#1497). */}
+      <WakeupBanner sessionId={sessionId} />
 
       {/* Queue display */}
       <PromptQueueList
@@ -2774,6 +2807,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
         provider={provider}
         onQueue={handleQueue}
         queueCount={queuedPrompts.length}
+        onScheduleLater={handleScheduleLater}
         currentFilePath={currentFilePath}
         onLaunchActionInNewSession={handleLaunchActionInNewSession}
       />

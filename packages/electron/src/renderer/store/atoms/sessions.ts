@@ -153,6 +153,8 @@ export interface SessionWakeupView {
   sessionId: string;
   workspaceId: string;
   prompt: string;
+  /** Attachments captured when the prompt was scheduled; empty when none. */
+  attachments?: Array<{ id: string; filename: string; type: 'image' | 'pdf' | 'document' }>;
   reason: string | null;
   fireAt: number;
   status: 'pending' | 'firing' | 'fired' | 'waiting_for_workspace' | 'overdue' | 'cancelled' | 'failed';

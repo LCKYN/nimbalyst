@@ -31,6 +31,8 @@ export interface SessionWakeup {
   createdAt: number;
   firedAt: number | null;
   error: string | null;
+  /** ChatAttachment[] carried with the scheduled prompt; empty when none. */
+  attachments: unknown[];
 }
 
 export interface CreateSessionWakeupInput {
@@ -40,6 +42,7 @@ export interface CreateSessionWakeupInput {
   prompt: string;
   reason?: string;
   fireAt: Date | number; // Date or epoch ms
+  attachments?: unknown[];
 }
 
 export interface SessionWakeupsStore {
@@ -81,12 +84,34 @@ type PGliteLike = {
 
 type EnsureReadyFn = () => Promise<void>;
 
+/**
+ * `attachments` is a TEXT column on both backends, so it arrives as a JSON
+ * string -- but the standard defensive parse is kept because a JSONB-typed
+ * read would hand back an already-parsed array on PGLite and a string on
+ * SQLite (see DATABASE.md). Malformed JSON degrades to no attachments rather
+ * than breaking the whole wakeup.
+ */
+function parseAttachments(value: unknown): unknown[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function rowToWakeup(row: any): SessionWakeup {
   return {
     id: row.id,
     sessionId: row.session_id,
     workspaceId: row.workspace_id,
     prompt: row.prompt,
+    attachments: parseAttachments(row.attachments),
     reason: row.reason ?? null,
     fireAt: toMillis(row.fire_at)!,
     status: row.status as SessionWakeupStatus,
@@ -123,10 +148,11 @@ export function createPGLiteSessionWakeupsStore(
         [input.sessionId, ACTIVE_STATUSES],
       );
 
+      const attachments = input.attachments?.length ? JSON.stringify(input.attachments) : null;
       const { rows } = await db.query<any>(
         `INSERT INTO ai_session_wakeups
-           (id, session_id, workspace_id, prompt, reason, fire_at, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+           (id, session_id, workspace_id, prompt, reason, fire_at, status, attachments)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
          RETURNING *`,
         [
           input.id,
@@ -135,6 +161,7 @@ export function createPGLiteSessionWakeupsStore(
           input.prompt,
           input.reason ?? null,
           fireAt,
+          attachments,
         ],
       );
 
