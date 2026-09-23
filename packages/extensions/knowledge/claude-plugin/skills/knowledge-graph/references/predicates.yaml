@@ -1,4 +1,4 @@
-# knowledge-software predicate registry (master plan 4.1).
+# Knowledge graph predicate registry (software domain).
 #
 # The verbs a software-domain graph is allowed to use. This is the ontology,
 # and it is deliberately small: a predicate earns its place by having qualifiers
@@ -7,9 +7,8 @@
 # which operations, tested against which version" is the part someone can use.
 #
 # Every subject is declared against `entity` rather than against a narrowed
-# kind, because `isSubjectKindAllowed` walks the `extends` chain. A later
-# `product extends entity` satisfies these with no edit here, which is the drift
-# this indirection exists to prevent.
+# kind: domains are values of `entity.kind`, so a new domain satisfies these
+# with no edit here.
 predicates:
   - id: integrates-with
     label: integrates with

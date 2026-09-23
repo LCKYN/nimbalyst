@@ -1,4 +1,4 @@
-# knowledge-core: one attempt at a question.
+# Knowledge graph: one attempt at a question.
 #
 # Separate from `finding` because attempts outnumber answers and most of them
 # fail. `outcome: inconclusive` and `reusedFindings` are the two that pay for

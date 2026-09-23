@@ -1,10 +1,10 @@
-# knowledge-core: one assertion, under stated conditions.
+# Knowledge graph: one assertion, under stated conditions.
 #
 # A claim is the unit the graph is actually made of. `subject predicate object`
 # is the statement; everything else on this type exists to say when it holds and
 # why anyone should believe it.
 #
-# `basis` is a FIELD, not a trust score (master plan rule 8). A documented claim
+# `basis` is a FIELD, not a trust score. A documented claim
 # and an observed claim are different kinds of thing, and collapsing them into
 # one confidence number is how a vendor's marketing page ends up outranking a
 # test result.
@@ -61,14 +61,13 @@ fields:
       - entity
     multiValue: false
 
-  # The verb, by id, from the project's predicate registry (master plan 4.1).
+  # The verb, by id, from the project's predicate registry (predicates.yaml).
   #
   # `predicate-ref` rather than a plain string: the registry is synced data, not
-  # part of this type, so the room can add a verb without every client
-  # reinstalling the pack -- but a typo in an unchecked string produces a
-  # statement that validates and means nothing, which is worse than a rejection.
-  # Not a select for the same reason: the option list would freeze at whatever
-  # the pack shipped.
+  # part of this type, so a project can add a verb without redefining claim --
+  # but a typo in an unchecked string produces a statement that validates and
+  # means nothing, which is worse than a rejection. Not a select for the same
+  # reason: the option list would freeze at whatever was defined first.
   - name: predicate
     type: predicate-ref
 

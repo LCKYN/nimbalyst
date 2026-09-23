@@ -1,4 +1,4 @@
-# knowledge-core: a scoped answer, resting on exact claims.
+# Knowledge graph: a scoped answer, resting on exact claims.
 #
 # A finding is the reusable artifact -- the thing a second agent retrieves
 # instead of redoing the work. Two fields are what make it reusable rather than
@@ -53,8 +53,8 @@ fields:
       - question
     multiValue: false
 
-  # Pinned to exact revisions through each relationship value's `revisionId`
-  # (master plan 4.2), so a finding keeps saying what it said even after the
+  # Pinned to exact revisions through each relationship value's `revisionId`,
+  # so a finding keeps saying what it said even after the
   # claims underneath it move. An upstream change surfaces as a notice, never as
   # a silent re-point.
   - name: claims

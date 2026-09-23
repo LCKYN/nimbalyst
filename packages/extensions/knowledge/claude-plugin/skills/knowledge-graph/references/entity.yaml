@@ -1,15 +1,13 @@
-# knowledge-core: the base kind.
+# Knowledge graph: the base kind.
 #
 # An entity is anything with stable identity that statements can be made ABOUT.
 # It deliberately carries almost no domain meaning: the domain lives in `kind`
-# and in the claims that point at it, not in a per-domain tracker type. That is
-# the whole difference from the `kg-*` experiment this replaces, where every
-# question got its own type and every relationship field had to restate the
-# full list of target types.
+# and in the claims that point at it, not in a per-domain tracker type, so
+# relationship fields can target `entity` and never restate a list of types.
 #
-# Domain packs refine this with `extends: entity` (master plan 4.1). Until the
-# pack installer lands, `kind` is how a product, a capability or a protocol tell
-# themselves apart.
+# `kind` is how a product, a capability or a protocol tell themselves apart;
+# a new domain adds options here (and optional fields if it needs them).
+# Derived kinds (`extends: entity`) are not supported by tracker_define_type yet.
 type: entity
 displayName: Entity
 displayNamePlural: Entities
@@ -89,7 +87,7 @@ fields:
         icon: archive
         category: cancelled
 
-  # Labels never identify anything (master plan rule 1), so the names a thing
+  # Labels never identify anything so the names a thing
   # goes by are data, not identity. Search and the upstream importer both read
   # this rather than fuzzy-matching titles.
   - name: aliases
@@ -138,10 +136,9 @@ fields:
     displayInline: false
     readOnly: true
 
-# Not here yet, and deliberately: `externalRefs`. It needs the `external-ref`
-# field type and the per-project scope resolver (master plan 4.3, N9). Adding a
-# plain string field in the meantime would create references nothing validates,
-# which is the failure rule 2 exists to prevent.
+# Not here yet, and deliberately: `externalRefs`. It needs an `external-ref`
+# field type and a per-project scope resolver that do not exist yet. Adding a
+# plain string field in the meantime would create references nothing validates.
 
 statusBarLayout:
   - row:

@@ -335,6 +335,7 @@ Companion app; pairs with a desktop over encrypted sync. Voice mode is not inclu
 - Supported shared custom editors include spreadsheets, mockups, Excalidraw diagrams, data models, and Canvas; editable source mode provides access when a document's editor cannot render it
 - Namenym shared projects open in the browser with manual editing, individual/team favorites, presence, and read-only access; AI generation remains desktop-only. Browser creation, source mode, export and history actions are not offered for Namenym.
 - Shared-document comments and replies with mentions delivered to the recipient's inbox
+- Knowledge wiki (Docs mode, Documents | Wiki toggle) -- knowledge items (entities, questions, findings) in a team project read as wiki pages: the field header, a collaborative body, and backlinks. Tracker links in a body can render as a chip, a live card, or a statements block (claims about the item). Cards say what the item is and its state in words, the state can be changed from the page, and agent-proposed items or state changes are kept or dismissed in place. Card and statements views render only in the web console; desktop shows them as chips. Requires knowledge types shared with the team
 - Organization invitations, pending-invite management, and a Requests inbox for feedback, mentions, replies, and discussions
 - Quick open (Cmd+K), tracker row context menus, Nimbalyst themes, and layouts that adapt to narrow screens
 
@@ -365,7 +366,7 @@ Companion app; pairs with a desktop over encrypted sync. Voice mode is not inclu
 - Tracker schema overrides in Trackers settings -- customize a built-in type into `.nimbalyst/trackers`, edit an existing override, reset back to the built-in default, and resync the local database mirror when schema files drift
 - External-source importers: import GitHub issues (extension-provided) into the tracker as native bug, task, or feature items with a back-link to the source, a "from GitHub" chip, re-snapshot ("pull latest from source") with conservative merge, and a Source filter; agent tools `tracker_importer_list` / `tracker_importer_search` / `tracker_import` / `tracker_resnapshot` / `tracker_get_by_urn`
 - Per-project "AI Agent Access" toggle in tracker settings -- allow or block AI agents from using tracker tools in that project (on by default)
-- Knowledge packs (desktop, agent-installed, personal trackers only) -- `tracker_install_pack` adds knowledge kinds (entity, claim, question, finding, investigation) and a project vocabulary of relationship verbs (`.nimbalyst/predicates.yaml`); source, capture, and citation types stay hidden until a pack is installed. Knowledge kinds keep a full revision history, and a citation pins the exact revision of whatever it cites (any item type), shown in a citation inspector on the item detail
+- Knowledge kinds -- agents set up entity, claim, question, finding, and investigation trackers and a project vocabulary of relationship verbs (`.nimbalyst/predicates.yaml`) from the Knowledge extension's shared ontology, as team trackers in team projects; source, capture, and citation types stay hidden until the project defines `claim`. Knowledge kinds keep a full revision history, and a citation pins the exact revision of whatever it cites (any item type), shown in a citation inspector on the item detail
 - Radar -- a since-you-left digest for a shared tracker covering teammate activity, status moves, bulk sweeps, and work that has gone stalled; available in the desktop app and the web console, and to agents via the `work_radar` tool so a session can check for concurrent work before starting on an item
 
 ## Shared Links
@@ -415,6 +416,7 @@ Companion app; pairs with a desktop over encrypted sync. Voice mode is not inclu
 - GitHub Issues Importer
 - Image Generation
 - iOS Dev Tools
+- Knowledge -- agent skill carrying the shared knowledge-graph ontology (kinds, fields, relationship verbs) so team and public knowledge graphs stay consistent
 - MockupLM
 - Math -- inline and block LaTeX rendering in documents and agent transcripts
 - Nimbalyst Memory — local project-knowledge brain (hybrid search + facts) for the voice and coding agents, with separate instruction/personal-memory sources, optional on-device embeddings, and index/semantic-search readiness controls
