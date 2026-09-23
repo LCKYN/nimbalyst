@@ -248,6 +248,7 @@ export function AgentFeaturesPanel() {
             posthog?.capture('auto_commit_toggled', { enabled: checked });
           }}
           name="Auto-approve Commits"
+          testId="setting-auto-approve-commits"
           description="Automatically approve when Claude proposes git commits."
         />
 
@@ -267,7 +268,7 @@ export function AgentFeaturesPanel() {
           testId="show-mcp-session-status-toggle"
         />
 
-        <div className="agent-preferred-language flex items-start justify-between gap-4 py-3">
+        <div className="agent-preferred-language flex items-start justify-between gap-4 py-3" data-testid="setting-preferred-agent-language">
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium text-[var(--nim-text)] leading-tight">
               Preferred Agent Language
@@ -370,7 +371,7 @@ export function AgentFeaturesPanel() {
           </p>
         </div>
 
-        <div className="claude-api-upstream mb-4 rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] p-3">
+        <div className="claude-api-upstream mb-4 rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] p-3" data-testid="setting-claude-api-upstream">
           <h5 className="text-sm font-semibold mb-1.5 text-[var(--nim-text)]">
             Custom Claude API upstream
           </h5>
@@ -406,7 +407,7 @@ export function AgentFeaturesPanel() {
           )}
         </div>
 
-        <div className="mb-4 rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] p-3">
+        <div className="agent-workflow-compatibility mb-4 rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] p-3" data-testid="setting-agent-workflow-compatibility">
           <h5 className="text-sm font-semibold mb-1.5 text-[var(--nim-text)]">
             Agent skills and commands compatibility
           </h5>
@@ -477,6 +478,7 @@ export function AgentFeaturesPanel() {
           checked={chatShowToolCalls}
           onChange={(checked) => updateAIDebugSettings({ chatShowToolCalls: checked })}
           name="Show Tool Calls in Chat"
+          testId="setting-show-tool-calls-in-chat"
           description="Display tool call rows in the AI chat view. Turn off to hide tool activity and see only the conversational messages."
         />
       </div>
