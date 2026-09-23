@@ -6,19 +6,23 @@
  * open panel is mounted -- there is nothing to scan for the others.
  *
  * `anchor` is the row's `data-testid`; search scrolls to it after opening the
- * page. `scripts/check-settings-search-index.mjs` fails the pre-push gate when
- * an anchor no longer exists in the renderer, so a renamed or removed row
- * cannot leave a dead entry behind. Keep `name` identical to the on-screen label.
+ * page. Keep `name` identical to the on-screen label.
+ *
+ * `scripts/check-settings-search-index.mjs` keeps this list honest in both
+ * directions on pre-push: an anchor whose row was renamed or removed fails,
+ * and so does a new `SettingsToggle` / `DropdownRow` that is in neither this
+ * list nor `SETTINGS_SEARCH_EXCLUDED`.
  *
  * Rows that only render conditionally (a platform, a parent toggle) are still
  * listed: the page opens either way, and the jump is skipped when the row is
  * not on screen.
  */
 
-import type { ApplicationSettingsCategory } from './settingsRoutes';
+import type { RegisteredSettingsCategory } from './settingsRoutes';
 
 export interface SettingsSearchEntry {
-  category: ApplicationSettingsCategory;
+  /** The page the row lives on. Search only offers it while that page is in the sidebar. */
+  category: RegisteredSettingsCategory;
   anchor: string;
   name: string;
   description?: string;
@@ -220,8 +224,164 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
   },
   {
     category: 'agent-features',
+    anchor: 'setting-workspace-claude-compat',
+    name: 'Workspace Claude compatibility',
+    description: 'Import project and user .claude commands and skills into the shared workflow registry.',
+    keywords: ['skills', 'slash commands'],
+  },
+  {
+    category: 'agent-features',
+    anchor: 'setting-project-claude-sources',
+    name: 'Project .claude sources',
+    description: 'Include .claude/commands and .claude/skills from the current workspace.',
+    keywords: ['skills', 'slash commands'],
+  },
+  {
+    category: 'agent-features',
+    anchor: 'setting-user-claude-sources',
+    name: 'User .claude sources',
+    description: 'Include ~/.claude commands and skills.',
+    keywords: ['skills', 'slash commands'],
+  },
+  {
+    category: 'agent-features',
+    anchor: 'setting-extension-workflows',
+    name: 'Extension workflows',
+    description: 'Load agentWorkflows contributions and legacy Claude plugin workflows from enabled extensions.',
+  },
+  {
+    category: 'agent-features',
+    anchor: 'setting-codex-generated-skills',
+    name: 'Codex generated skills',
+    description: 'Export registry workflows into .agents/skills/.nimbalyst-generated before Codex turns.',
+  },
+  {
+    category: 'agent-features',
+    anchor: 'setting-claude-generated-extension-workflows',
+    name: 'Claude generated extension workflows',
+    description: 'Generate Claude plugin shims for extension agentWorkflows.',
+  },
+  {
+    category: 'agent-features',
     anchor: 'setting-show-tool-calls-in-chat',
     name: 'Show Tool Calls in Chat',
     description: 'Display tool call rows in the AI chat view.',
   },
+
+  // ---- Agent providers ----
+  {
+    category: 'claude-code',
+    anchor: 'setting-enable-claude-agent',
+    name: 'Enable Claude Agent',
+    description: 'Turn the Claude Agent provider on or off.',
+  },
+  {
+    category: 'claude-code',
+    anchor: 'claude-agent-usage-indicator-toggle',
+    name: 'Show Usage Indicator',
+    description: 'Display Claude API usage limits in the navigation gutter.',
+    keywords: ['claude', 'limits', 'quota'],
+  },
+  {
+    category: 'claude-code',
+    anchor: 'setting-claude-plan-tracking',
+    name: 'Plan Tracking',
+    description: 'Save plans to nimbalyst-local/plans/ with tracking frontmatter.',
+  },
+  {
+    category: 'claude-code',
+    anchor: 'setting-claude-agent-teams',
+    name: 'Agent Teams (Experimental)',
+    description: 'Allow Claude to coordinate multiple agents working together as a team.',
+    keywords: ['parallel', 'subagents'],
+  },
+  {
+    category: 'claude-code',
+    anchor: 'setting-enable-claude-code-cli',
+    name: 'Enable Claude Code CLI',
+    description: 'Turn the Claude Code CLI provider on or off.',
+    keywords: ['subscription', 'terminal'],
+  },
+  {
+    category: 'openai-codex',
+    anchor: 'setting-enable-openai-codex',
+    name: 'Enable OpenAI Codex',
+    description: 'Turn the OpenAI Codex provider on or off.',
+  },
+  {
+    category: 'openai-codex',
+    anchor: 'setting-codex-usage-indicator',
+    name: 'Show Usage Indicator',
+    description: 'Display Codex usage limits in the navigation gutter.',
+    keywords: ['codex', 'limits', 'quota'],
+  },
+  {
+    category: 'openai-codex',
+    anchor: 'setting-codex-acp-transport',
+    name: 'Enable ACP transport',
+    description: "Keeps the separate 'OpenAI Codex (ACP)' legacy provider available.",
+    keywords: ['codex'],
+  },
+  {
+    category: 'opencode',
+    anchor: 'setting-enable-opencode',
+    name: 'Enable OpenCode',
+    description: 'Turn the OpenCode provider on or off.',
+  },
+  {
+    category: 'opencode',
+    anchor: 'setting-opencode-disable-auto-update',
+    name: 'Disable OpenCode auto-update',
+    description: 'Stop OpenCode from updating itself.',
+    keywords: ['opencode', 'updates'],
+  },
+  {
+    category: 'copilot-cli',
+    anchor: 'setting-enable-copilot',
+    name: 'Enable GitHub Copilot',
+    description: 'Turn the GitHub Copilot provider on or off.',
+  },
+  {
+    category: 'antigravity-gemini-agent',
+    anchor: 'setting-enable-gemini',
+    name: 'Enable Gemini',
+    description: 'Turn the Gemini provider on or off.',
+    keywords: ['google'],
+  },
+
+  // ---- Chat providers (only listed while "Show Chat Providers" is on) ----
+  {
+    category: 'claude',
+    anchor: 'setting-enable-claude-chat',
+    name: 'Enable Claude',
+    description: 'Turn the Claude Chat provider on or off.',
+  },
+  {
+    category: 'openai',
+    anchor: 'setting-enable-openai',
+    name: 'Enable OpenAI',
+    description: 'Turn the OpenAI chat provider on or off.',
+    keywords: ['gpt'],
+  },
+  {
+    category: 'lmstudio',
+    anchor: 'setting-enable-lmstudio',
+    name: 'Enable LM Studio',
+    description: 'Turn the LM Studio provider on or off.',
+    keywords: ['local models'],
+  },
 ];
+
+/**
+ * Settings rows that deliberately stay out of search, keyed by `testId`, each
+ * with the reason. The pre-push check requires every settings row to be in
+ * `SETTINGS_SEARCH_ENTRIES` or here, so a new row forces the decision.
+ */
+export const SETTINGS_SEARCH_EXCLUDED: Record<string, string> = {
+  'setting-dev-show-all-tool-calls': 'Development builds only.',
+  'setting-dev-ai-debug-logging': 'Development builds only.',
+  'setting-dev-show-prompt-additions': 'Development builds only.',
+  'setting-enable-all-beta-features': 'The Beta Features page is never shown in the sidebar.',
+  'organization-settings-rooms-toggle': 'Lives in the organization management dialog, not a Settings page.',
+  'organization-settings-dms-toggle': 'Lives in the organization management dialog, not a Settings page.',
+};
