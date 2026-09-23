@@ -66,6 +66,9 @@ export async function scheduleSessionWakeup(
   const replaced = input.origin === 'agent'
     ? await deps.store.cancelActiveForSession(input.sessionId, 'agent')
     : [];
+  // Announced before the insert: the cancel is already committed, so a failed
+  // insert must not leave the banner showing a wakeup that no longer exists.
+  for (const cancelled of replaced) deps.broadcast(cancelled);
 
   const row = await deps.store.create({
     id: `wakeup-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -78,7 +81,6 @@ export async function scheduleSessionWakeup(
     origin: input.origin,
   });
 
-  for (const cancelled of replaced) deps.broadcast(cancelled);
   deps.onCreated(row);
   deps.broadcast(row);
   return row;

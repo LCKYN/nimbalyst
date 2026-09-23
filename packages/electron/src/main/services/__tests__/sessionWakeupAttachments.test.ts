@@ -195,6 +195,28 @@ describe('scheduling a wakeup', () => {
       expect(announced).toContainEqual(['agent 2', 'pending']);
     });
   });
+
+  it('still announces the replaced wakeup when creating its successor fails', async () => {
+    await withStore(async (store) => {
+      const broadcast = vi.fn();
+      const deps = { store, onCreated: vi.fn(), broadcast };
+      await scheduleSessionWakeup(
+        { sessionId: 's1', workspaceId: '/w', origin: 'agent', prompt: 'agent 1', fireAt: inHours(1) },
+        deps,
+      );
+      broadcast.mockClear();
+
+      const failingStore = { ...store, create: vi.fn().mockRejectedValue(new Error('disk full')) };
+      await expect(
+        scheduleSessionWakeup(
+          { sessionId: 's1', workspaceId: '/w', origin: 'agent', prompt: 'agent 2', fireAt: inHours(1) },
+          { ...deps, store: failingStore },
+        ),
+      ).rejects.toThrow('disk full');
+
+      expect(broadcast.mock.calls.map(([row]) => [row.prompt, row.status])).toEqual([['agent 1', 'cancelled']]);
+    });
+  });
 });
 
 describe('delivering a fired wakeup', () => {

@@ -106,7 +106,7 @@ import {
 } from '../../store';
 import { streamCompletionSignalAtom } from '../../store/atoms/sessionTranscript';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom, nextOptimisticId, type SessionWakeupView } from '../../store/atoms/sessions';
-import { leadTimeBucket, type ScheduleLaterChoice } from './scheduleLater';
+import { leadTimeBucket, submitWithDraftCleared, type ScheduleLaterChoice } from './scheduleLater';
 import { clearAIInputHistoryAtom } from '../../store/atoms/aiInputUndo';
 import {
   cliTerminalExpandedAtom,
@@ -618,7 +618,6 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
   const [isQueueing, setIsQueueing] = useState(false);
   // Track if we're currently scheduling a "Run later" prompt (prevents double-submission)
   const [isScheduling, setIsScheduling] = useState(false);
-
   // claude-code-cli (NIM-806, Phase 3): the rich transcript is primary; the
   // genuine TUI lives in a collapsible "raw terminal" drawer. Default EXPANDED so
   // the strip's IntersectionObserver fires and the CLI actually spawns; once
@@ -1109,26 +1108,35 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
       // Read imperatively, like handleQueue: subscribing here would re-render
       // the whole transcript on every keystroke.
       const currentAttachments = store.get(sessionDraftAttachmentsAtom(sessionId)) ?? [];
-      await window.electronAPI.invoke('wakeup:create', {
-        sessionId,
-        workspacePath,
-        prompt: message.trim(),
-        fireAt,
-        // Persisted with the wakeup and re-attached when it fires, so a
-        // scheduled prompt keeps its images like a queued one does (#1497).
-        attachments: currentAttachments,
-      });
+      await submitWithDraftCleared(
+        () => {
+          setDraftInput('');
+          setDraftAttachments([]);
+          // Only refill what the user has not started replacing meanwhile.
+          return () => {
+            setDraftInput(prev => (prev.trim().length > 0 ? prev : message));
+            setDraftAttachments(prev => (prev.length > 0 ? prev : currentAttachments));
+          };
+        },
+        () => window.electronAPI.invoke('wakeup:create', {
+          sessionId,
+          workspacePath,
+          prompt: message.trim(),
+          fireAt,
+          // Persisted with the wakeup and re-attached when it fires, so a
+          // scheduled prompt keeps its images like a queued one does (#1497).
+          attachments: currentAttachments,
+        }),
+      );
       posthog?.capture('ai_prompt_scheduled', {
         choice,
         lead_time: leadTimeBucket(fireAt - Date.now()),
         has_attachments: currentAttachments.length > 0,
         provider: typeof provider === 'string' ? provider : undefined,
       });
-      setDraftInput('');
-      setDraftAttachments([]);
       clearAIInputHistory(sessionId);
     } catch (error) {
-      // Surface it: the draft is left intact on failure, so without this the
+      // Surface it: the draft is restored on failure, so without this the
       // click looks like it simply did nothing (main rejects a fireAt that has
       // drifted inside the 30s minimum, or a session it cannot find).
       console.error('[SessionTranscript] Failed to schedule prompt:', error);

@@ -6,7 +6,8 @@
  *
  * `create` only inserts. Replacement is the caller's decision, made through
  * `cancelActiveForSession` -- see sessionWakeupScheduling.ts, which is the one
- * place that decides it (#1497).
+ * place that decides it (#1497). The two are separate statements, not one
+ * transaction.
  */
 
 import type { ChatAttachment } from '@nimbalyst/runtime/ai/server/types';

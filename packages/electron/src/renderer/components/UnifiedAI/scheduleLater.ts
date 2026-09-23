@@ -5,6 +5,7 @@
  */
 
 import { MIN_WAKEUP_LEAD_MS } from '../../../shared/sessionWakeups';
+import type { ClaudeUsageData } from '../../../shared/claudeUsage';
 
 export type ScheduleLaterMode =
   | { kind: 'delay'; ms: number }
@@ -21,6 +22,37 @@ export type ScheduleLaterChoice = 'in_1h' | 'in_4h' | 'tomorrow_morning' | 'usag
  */
 export function hasClaudeUsageReset(provider: string | null | undefined): boolean {
   return provider === 'claude-code' || provider === 'claude-code-cli';
+}
+
+/**
+ * When the account can send again. An exhausted weekly limit outlasts the
+ * 5-hour one, so firing at the 5-hour reset would hit the weekly limit again
+ * and spend the schedule. Model-scoped weekly limits are left out: they only
+ * block some models, and the session may not use one of them.
+ */
+export function usageResumeAt(usage: Pick<ClaudeUsageData, 'fiveHour' | 'sevenDay'> | null): string | null {
+  if (!usage) return null;
+  if (usage.sevenDay.utilization >= 100 && usage.sevenDay.resetsAt) return usage.sevenDay.resetsAt;
+  return usage.fiveHour.resetsAt;
+}
+
+/**
+ * Empties the composer before the schedule request goes out and puts the
+ * draft back if it fails. Clearing only after the request resolves leaves a
+ * window where Enter sends the same prompt immediately as well.
+ * `clearDraft` returns the function that restores it.
+ */
+export async function submitWithDraftCleared<T>(
+  clearDraft: () => () => void,
+  submit: () => Promise<T>,
+): Promise<T> {
+  const restoreDraft = clearDraft();
+  try {
+    return await submit();
+  } catch (error) {
+    restoreDraft();
+    throw error;
+  }
 }
 
 /**

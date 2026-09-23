@@ -10,6 +10,7 @@ import {
   resolveFireAt,
   tomorrowMorning,
   toDateTimeLocal,
+  usageResumeAt,
   type ScheduleLaterChoice,
   type ScheduleLaterMode,
 } from './scheduleLater';
@@ -72,7 +73,7 @@ export function ScheduleLaterMenu({ disabled = false, disabledReason, provider, 
   const [error, setError] = useState<string | null>(null);
 
   const showUsageReset = hasClaudeUsageReset(provider);
-  const resetsAt = usage?.fiveHour.resetsAt ?? null;
+  const resetsAt = usageResumeAt(usage);
   const usageResetAvailable = resetsAt !== null && resolveFireAt({ kind: 'usageReset', resetsAt }) !== null;
 
   // Fresh each time the menu opens: a stale error greets nobody, and the
