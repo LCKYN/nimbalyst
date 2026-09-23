@@ -25,6 +25,7 @@ import { resolveCollabEditorUser } from './presence';
 import { createCollabDocumentSession } from './session';
 import { acquireCollabAssetImageResolver } from './collabAssetImages';
 import { BrowserDocumentEmbedContext, registerBrowserDocumentEmbeds } from './documentEmbeds';
+import { TrackerReferenceResolverProvider } from '@nimbalyst/collab-client/trackers-ui/references';
 
 import type {
   CollabEditorHandle,
@@ -280,10 +281,12 @@ export function mountCollabEditor(options: CollabEditorMountOptions): CollabEdit
     root.render(
       <BundleEditorErrorBoundary onError={(error) => options.onError?.(error)}>
         <BrowserDocumentEmbedContext.Provider value={options.renderDecisionArtifact}>
-          <BrowserEditorSurface
-            config={config}
-            subscribeToPresence={subscribeToPresence}
-          />
+          <TrackerReferenceResolverProvider resolver={options.trackerReferences}>
+            <BrowserEditorSurface
+              config={config}
+              subscribeToPresence={subscribeToPresence}
+            />
+          </TrackerReferenceResolverProvider>
         </BrowserDocumentEmbedContext.Provider>
       </BundleEditorErrorBoundary>,
     );
