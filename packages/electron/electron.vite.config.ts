@@ -265,7 +265,13 @@ const staticFileTypeInJimp = () => {
   };
 };
 
-export default defineConfig({
+// `dev-loop.sh` keeps the renderer dev server alive across `/restart` in its
+// own process (scripts/renderer-dev-server.mjs), so the per-restart
+// `electron-vite dev` builds main and preload only. Without this, every restart
+// recompiled ~2,600 renderer modules cold, ~30s before any window could paint.
+const externalRenderer = process.env.NIMBALYST_EXTERNAL_RENDERER === '1';
+
+const config = {
   main: {
     define: {
       'process.env.OFFICIAL_BUILD': JSON.stringify(isOfficialBuild ? 'true' : 'false'),
@@ -537,7 +543,8 @@ export default defineConfig({
       sourcemap: isDev,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html')
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          island: resolve(__dirname, 'src/renderer/island.html'),
         }
       }
     },
@@ -754,4 +761,6 @@ export default defineConfig({
       }
     }
   }
-})
+};
+
+export default defineConfig(externalRenderer ? { ...config, renderer: undefined } : config);

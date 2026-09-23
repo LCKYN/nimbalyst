@@ -69,20 +69,29 @@ class PairBudget {
 type PairContext = {
     memo: Map<PairKey, number>;
     budget: PairBudget;
-    signatures: WeakMap<CanonicalTreeNode, string>;
+    signatures: WeakMap<CanonicalTreeNode, number>;
+    signatureIds: Map<string, number>;
 };
 
 /**
  * Everything `pairCost` reads from a subtree -- type, text, attrs, children --
- * so two nodes with the same signature always cost 0 against each other.
+ * interned to an id, so two nodes with the same id always cost 0 against each
+ * other. The key embeds child ids, never child keys: nesting the child strings
+ * re-escapes them at every level, and on ten levels of nested lists that grew
+ * exponentially (134ms -> 8.7s).
  */
-function signature(n: CanonicalTreeNode, ctx: PairContext): string {
+function signature(n: CanonicalTreeNode, ctx: PairContext): number {
     const cached = ctx.signatures.get(n);
     if (cached !== undefined) return cached;
-    const childSigs = kids(n).map((c) => signature(c, ctx));
-    const sig = JSON.stringify([n.type, n.text ?? '', n.attrs ?? null, childSigs]);
-    ctx.signatures.set(n, sig);
-    return sig;
+    const childIds = kids(n).map((c) => signature(c, ctx));
+    const key = JSON.stringify([n.type, n.text ?? '', n.attrs ?? null, childIds]);
+    let id = ctx.signatureIds.get(key);
+    if (id === undefined) {
+        id = ctx.signatureIds.size;
+        ctx.signatureIds.set(key, id);
+    }
+    ctx.signatures.set(n, id);
+    return id;
 }
 
 function sameSubtree(a: CanonicalTreeNode, b: CanonicalTreeNode, ctx: PairContext): boolean {
@@ -457,6 +466,7 @@ export function diffTrees(a: CanonicalTreeNode, b: CanonicalTreeNode, optsPartia
         memo: new Map<PairKey, number>(),
         budget: new PairBudget(opts.maxPairEvaluations),
         signatures: new WeakMap(),
+        signatureIds: new Map(),
     };
     const ops: DiffOp[] = [];
 
