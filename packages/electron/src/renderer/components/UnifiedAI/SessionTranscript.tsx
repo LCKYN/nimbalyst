@@ -107,6 +107,7 @@ import {
 import { streamCompletionSignalAtom } from '../../store/atoms/sessionTranscript';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom, nextOptimisticId, type SessionWakeupView } from '../../store/atoms/sessions';
 import { leadTimeBucket, submitWithDraftCleared, type ScheduleLaterChoice } from './scheduleLater';
+import { settingAtom } from '../../store/atoms/settingAtomFamily';
 import { clearAIInputHistoryAtom } from '../../store/atoms/aiInputUndo';
 import {
   cliTerminalExpandedAtom,
@@ -618,6 +619,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
   const [isQueueing, setIsQueueing] = useState(false);
   // Track if we're currently scheduling a "Run later" prompt (prevents double-submission)
   const [isScheduling, setIsScheduling] = useState(false);
+  const showRunLaterButton = useAtomValue(settingAtom('ai.showRunLaterButton')) as boolean;
   // claude-code-cli (NIM-806, Phase 3): the rich transcript is primary; the
   // genuine TUI lives in a collapsible "raw terminal" drawer. Default EXPANDED so
   // the strip's IntersectionObserver fires and the CLI actually spawns; once
@@ -2857,7 +2859,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
         provider={provider}
         onQueue={handleQueue}
         queueCount={queuedPrompts.length}
-        onScheduleLater={handleScheduleLater}
+        onScheduleLater={showRunLaterButton ? handleScheduleLater : undefined}
         currentFilePath={currentFilePath}
         onLaunchActionInNewSession={handleLaunchActionInNewSession}
       />
