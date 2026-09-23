@@ -26,6 +26,13 @@ export const CLAUDE_MODELS: ModelDefinition[] = [
     contextWindow: 1000000,
   },
   {
+    id: 'claude-opus-5-5',
+    displayName: 'Claude Opus 5.5 (1M)',
+    shortName: 'Opus 5.5',
+    maxTokens: 8192,
+    contextWindow: 1000000,
+  },
+  {
     id: 'claude-opus-5',
     displayName: 'Claude Opus 5 (1M)',
     shortName: 'Opus 5',
@@ -497,7 +504,7 @@ export function resolveClaudeCodeParentContextWindow(
 export const CLAUDE_CODE_SAFE_FALLBACK_MODEL = 'claude-code:opus' as const;
 
 export const DEFAULT_MODELS = {
-  claude: 'claude:claude-opus-5',
+  claude: 'claude:claude-opus-5-5',
   openai: 'openai:gpt-5.6-sol',
   // Plain `opus` (not `opus-1m`): a plan-gated auto-upgrade gives Max/Team/
   // Enterprise 1M on the plain alias, while an explicit `[1m]` would spend usage

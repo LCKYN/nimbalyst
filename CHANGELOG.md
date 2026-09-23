@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Claude Opus 5.5 is available in the Claude API model picker and is the new Claude API default.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
