@@ -26,8 +26,13 @@ final class ModelLabelTests: XCTestCase {
         XCTAssertEqual(ModelLabel.shortLabel(provider: "claude-code", model: "claude-code:fable-5"), "Fable 5")
     }
 
-    func testClaudeCodeOpus5PinnedVariant() {
-        XCTAssertEqual(ModelLabel.shortLabel(provider: "claude-code", model: "claude-code:opus-5"), "Opus 5")
+    func testClaudeCodeOpus55AndPinnedOpus5() {
+        for provider in ["claude-code", "claude-code-cli"] {
+            XCTAssertEqual(ModelLabel.shortLabel(provider: provider, model: "\(provider):opus-5-5-1m"), "Opus 5.5")
+            XCTAssertEqual(ModelLabel.shortLabel(provider: provider, model: "\(provider):opus-5-1m"), "Opus 5")
+            XCTAssertEqual(ModelLabel.shortLabel(provider: provider, model: "claude-opus-5-5"), "Opus 5.5")
+            XCTAssertEqual(ModelLabel.shortLabel(provider: provider, model: "claude-opus-5"), "Opus 5")
+        }
     }
 
     func testClaudeCodeOpus48AliasVariants() {

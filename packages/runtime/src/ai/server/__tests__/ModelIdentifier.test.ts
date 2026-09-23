@@ -126,6 +126,13 @@ describe('ModelIdentifier', () => {
       expect(id.combined).toBe('claude-code:opus');
     });
 
+    it.each(['claude-code', 'claude-code-cli'] as const)('preserves an explicit Opus 5 selection for %s', (provider) => {
+      const id = ModelIdentifier.create(provider, 'Opus-5-1M');
+      expect(id.combined).toBe(`${provider}:opus-5-1m`);
+      expect(id.baseVariant).toBe('opus-5');
+      expect(id.isExtendedContext).toBe(true);
+    });
+
     it('preserves the explicit pinned opus-4-8 variant', () => {
       const id = ModelIdentifier.create('claude-code', 'Opus-4-8');
       expect(id.provider).toBe('claude-code');

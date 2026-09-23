@@ -4,6 +4,12 @@ import { resolveClaudeCodeModelVariant } from '../../types';
 const DEFAULT_MODEL = 'claude-code:opus-1m';
 
 describe('resolveClaudeCodeModelVariant', () => {
+  it.each(['claude-code', 'claude-code-cli'])('resolves explicit 5.5 and preserves Opus 5 for %s', (provider) => {
+    expect(resolveClaudeCodeModelVariant(`${provider}:opus-5-5`, DEFAULT_MODEL)).toBe('claude-opus-5-5');
+    expect(resolveClaudeCodeModelVariant(`${provider}:opus-5-5-1m`, DEFAULT_MODEL)).toBe('claude-opus-5-5[1m]');
+    expect(resolveClaudeCodeModelVariant(`${provider}:opus-5`, DEFAULT_MODEL)).toBe('claude-opus-5');
+  });
+
   describe('standard variants (no extended context)', () => {
     it('resolves sonnet variant', () => {
       expect(resolveClaudeCodeModelVariant('claude-code:sonnet', DEFAULT_MODEL)).toBe('sonnet');
@@ -13,12 +19,8 @@ describe('resolveClaudeCodeModelVariant', () => {
       expect(resolveClaudeCodeModelVariant('claude-code:sonnet-5', DEFAULT_MODEL)).toBe('sonnet');
     });
 
-    it('resolves opus to the pinned Opus 5.5 model id', () => {
+    it('resolves opus variant', () => {
       expect(resolveClaudeCodeModelVariant('claude-code:opus', DEFAULT_MODEL)).toBe('claude-opus-5-5');
-    });
-
-    it('resolves pinned opus-5 to the previous-generation model id', () => {
-      expect(resolveClaudeCodeModelVariant('claude-code:opus-5', DEFAULT_MODEL)).toBe('claude-opus-5');
     });
 
     it('resolves haiku variant', () => {
@@ -57,7 +59,7 @@ describe('resolveClaudeCodeModelVariant', () => {
       expect(result).toBe('sonnet[1m]');
     });
 
-    it('opus-1m resolves to claude-opus-5-5[1m]', () => {
+    it('opus-1m resolves to pinned 5.5 with [1m]', () => {
       const result = resolveClaudeCodeModelVariant('claude-code:opus-1m', DEFAULT_MODEL);
       expect(result).toBe('claude-opus-5-5[1m]');
     });
@@ -67,9 +69,9 @@ describe('resolveClaudeCodeModelVariant', () => {
       expect(result).toBe('haiku[1m]');
     });
 
-    it('opus-5-5-1m alias resolves to claude-opus-5-5[1m]', () => {
-      const result = resolveClaudeCodeModelVariant('claude-code:opus-5-5-1m', DEFAULT_MODEL);
-      expect(result).toBe('claude-opus-5-5[1m]');
+    it('opus-5-1m preserves the previous generation with [1m]', () => {
+      const result = resolveClaudeCodeModelVariant('claude-code:opus-5-1m', DEFAULT_MODEL);
+      expect(result).toBe('claude-opus-5[1m]');
     });
 
     it('opus-4-8-1m pinned variant resolves to claude-opus-4-8[1m]', () => {
@@ -80,8 +82,8 @@ describe('resolveClaudeCodeModelVariant', () => {
 
   describe('SDK compatibility', () => {
     it('standard variants are valid SDK model values', () => {
-      const validSdkValues = ['sonnet', 'haiku'];
-      for (const variant of validSdkValues) {
+      const validSdkValues = ['sonnet', 'claude-opus-5-5', 'haiku'];
+      for (const variant of ['sonnet', 'opus', 'haiku']) {
         const result = resolveClaudeCodeModelVariant(`claude-code:${variant}`, DEFAULT_MODEL);
         expect(validSdkValues).toContain(result);
       }
@@ -108,8 +110,8 @@ describe('resolveClaudeCodeModelVariant', () => {
 
   describe('pinned-version variants', () => {
     it('opus-4-8 resolves to the full claude-opus-4-8 SDK model ID', () => {
-      // Pinned after the canonical `opus` alias was bumped past Opus 4.8, so
-      // users can keep selecting 4.8 explicitly.
+      // Pinned after the canonical `opus` alias was bumped to Opus 5, so users
+      // can keep selecting 4.8 explicitly.
       const result = resolveClaudeCodeModelVariant('claude-code:opus-4-8', DEFAULT_MODEL);
       expect(result).toBe('claude-opus-4-8');
     });
@@ -163,8 +165,8 @@ describe('resolveClaudeCodeModelVariant', () => {
       expect(resolveClaudeCodeModelVariant('opus-1m', DEFAULT_MODEL)).toBe('claude-opus-5-5[1m]');
     });
 
-    it('accepts raw opus-5-5 alias without provider prefix', () => {
-      expect(resolveClaudeCodeModelVariant('opus-5-5', DEFAULT_MODEL)).toBe('claude-opus-5-5');
+    it('accepts raw pinned opus-5 without provider prefix', () => {
+      expect(resolveClaudeCodeModelVariant('opus-5', DEFAULT_MODEL)).toBe('claude-opus-5');
     });
 
     it('accepts raw pinned opus-4-8 variant without provider prefix', () => {
