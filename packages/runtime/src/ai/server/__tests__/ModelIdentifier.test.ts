@@ -37,8 +37,8 @@ describe('ModelIdentifier', () => {
       expect(id.isExtendedContext).toBe(true);
     });
 
-    it('normalizes claude-code opus-5 alias to canonical opus', () => {
-      const id = ModelIdentifier.parse('claude-code:opus-5-1m');
+    it('normalizes claude-code opus-5-5 alias to canonical opus', () => {
+      const id = ModelIdentifier.parse('claude-code:opus-5-5-1m');
       expect(id.provider).toBe('claude-code');
       expect(id.model).toBe('opus-1m');
       expect(id.combined).toBe('claude-code:opus-1m');
@@ -119,8 +119,8 @@ describe('ModelIdentifier', () => {
       expect(id.isExtendedContext).toBe(true);
     });
 
-    it('accepts explicit opus-5 alias and normalizes to canonical opus', () => {
-      const id = ModelIdentifier.create('claude-code', 'Opus-5');
+    it('accepts explicit opus-5-5 alias and normalizes to canonical opus', () => {
+      const id = ModelIdentifier.create('claude-code', 'Opus-5-5');
       expect(id.provider).toBe('claude-code');
       expect(id.model).toBe('opus');
       expect(id.combined).toBe('claude-code:opus');
@@ -266,7 +266,7 @@ describe('ModelIdentifier', () => {
     it('returns default ModelIdentifier for claude', () => {
       const id = ModelIdentifier.getDefaultForProvider('claude');
       expect(id.provider).toBe('claude');
-      expect(id.combined).toBe('claude:claude-opus-5');
+      expect(id.combined).toBe('claude:claude-opus-5-5');
     });
 
     it('returns default ModelIdentifier for claude-code', () => {
@@ -304,7 +304,7 @@ describe('ModelIdentifier', () => {
 
   describe('getDefaultModelId', () => {
     it('returns default model ID string for all providers', () => {
-      expect(ModelIdentifier.getDefaultModelId('claude')).toBe('claude:claude-opus-5');
+      expect(ModelIdentifier.getDefaultModelId('claude')).toBe('claude:claude-opus-5-5');
       expect(ModelIdentifier.getDefaultModelId('claude-code')).toBe('claude-code:opus');
       expect(ModelIdentifier.getDefaultModelId('openai')).toBe('openai:gpt-5.6-sol');
       expect(ModelIdentifier.getDefaultModelId('openai-codex')).toBe('openai-codex:gpt-5.6-sol');

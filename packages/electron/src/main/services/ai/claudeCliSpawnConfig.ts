@@ -52,7 +52,9 @@ export function resolveClaudeCliModelArg(model: string | undefined): string | un
     // model ids (claude-fable-5, claude-opus-4-7). For pinned variants the
     // CLI doesn't accept as short aliases, pass the full model id instead.
     let alias: string;
-    if (variant.startsWith('opus')) {
+    if (variant === 'opus-5') {
+      alias = 'claude-opus-5';
+    } else if (variant.startsWith('opus')) {
       alias = 'opus';
     } else if (variant === 'fable-5') {
       alias = 'claude-fable-5';

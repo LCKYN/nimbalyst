@@ -274,6 +274,7 @@ export function supportsEffortLevel(modelId?: string): boolean {
   if (
     variant === 'fable' ||
     variant === 'opus' ||
+    variant === 'opus-5' ||
     variant === 'opus-4-7' ||
     variant === 'opus-4-6' ||
     variant === 'sonnet' ||

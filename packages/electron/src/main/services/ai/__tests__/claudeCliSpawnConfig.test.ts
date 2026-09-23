@@ -479,6 +479,11 @@ describe('resolveClaudeCliModelArg', () => {
     expect(resolveClaudeCliModelArg('claude-code-cli:opus-4-7-1m')).toBe('opus[1m]');
   });
 
+  it('resolves pinned opus-5 to the full model id; canonical opus stays the CLI alias', () => {
+    expect(resolveClaudeCliModelArg('claude-code-cli:opus-5')).toBe('claude-opus-5');
+    expect(resolveClaudeCliModelArg('claude-code-cli:opus-5-5')).toBe('opus');
+  });
+
   it('passes the fable variant through as the CLI `fable` alias', () => {
     expect(resolveClaudeCliModelArg('claude-code-cli:fable')).toBe('fable');
     expect(resolveClaudeCliModelArg('fable')).toBe('fable');

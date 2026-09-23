@@ -26,6 +26,13 @@ export const CLAUDE_MODELS: ModelDefinition[] = [
     contextWindow: 1000000,
   },
   {
+    id: 'claude-opus-5-5',
+    displayName: 'Claude Opus 5.5 (1M)',
+    shortName: 'Opus 5.5',
+    maxTokens: 8192,
+    contextWindow: 1000000,
+  },
+  {
     id: 'claude-opus-5',
     displayName: 'Claude Opus 5 (1M)',
     shortName: 'Opus 5',
@@ -254,25 +261,26 @@ export const OPENAI_MODELS: ModelDefinition[] = [
  *   the previous-generation Opus selectable after bumping the canonical
  *   `opus` to the next version.
  */
-export type ClaudeCodeVariant = 'fable' | 'fable-5' | 'opus' | 'sonnet' | 'haiku' | 'opus-4-8' | 'opus-4-7' | 'opus-4-6' | 'sonnet-4-6';
-export type ClaudeCodeVariantInput = ClaudeCodeVariant | 'opus-5' | 'sonnet-5' | 'fable-5-1';
+export type ClaudeCodeVariant = 'fable' | 'fable-5' | 'opus' | 'sonnet' | 'haiku' | 'opus-5' | 'opus-4-8' | 'opus-4-7' | 'opus-4-6' | 'sonnet-4-6';
+export type ClaudeCodeVariantInput = ClaudeCodeVariant | 'opus-5-5' | 'sonnet-5' | 'fable-5-1';
 
 /**
  * Accepted input aliases for Claude Agent model identifiers.
  *
- * `opus-5` is intentionally accepted as an alias for the canonical `opus`
+ * `opus-5-5` is intentionally accepted as an alias for the canonical `opus`
  * variant so legacy code paths (meta-agent, Agent tool, imported session IDs)
  * can request the current Opus generation explicitly without requiring a
- * duplicate visible picker entry. `sonnet-5` and `fable-5` are accepted as
+ * duplicate visible picker entry. `sonnet-5` and `fable-5-1` are accepted as
  * aliases for `sonnet` and `fable` for the same reason.
- * `opus-4-8` is now a pinned previous-generation
- * variant (its own row), not an alias — it resolves to that specific model.
+ * `opus-5` and `opus-4-8` are pinned previous-generation variants (their own
+ * rows), not aliases — each resolves to that specific model.
  */
 export const CLAUDE_CODE_ACCEPTED_VARIANT_INPUTS: readonly ClaudeCodeVariantInput[] = [
   'fable',
   'fable-5-1',
   'fable-5',
   'opus',
+  'opus-5-5',
   'opus-5',
   'opus-4-8',
   'opus-4-7',
@@ -288,7 +296,8 @@ const CLAUDE_CODE_VARIANT_INPUT_MAP: Readonly<Record<ClaudeCodeVariantInput, Cla
   'fable-5-1': 'fable',
   'fable-5': 'fable-5',
   opus: 'opus',
-  'opus-5': 'opus',
+  'opus-5-5': 'opus',
+  'opus-5': 'opus-5',
   'opus-4-8': 'opus-4-8',
   'opus-4-7': 'opus-4-7',
   'opus-4-6': 'opus-4-6',
@@ -305,9 +314,10 @@ export function normalizeClaudeCodeVariant(variant: string): ClaudeCodeVariant |
 export const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
   fable: '5.1',
   'fable-5': '5',
-  opus: '5',
+  opus: '5.5',
   sonnet: '5',
   haiku: '4.5',
+  'opus-5': '5',
   'opus-4-8': '4.8',
   'opus-4-7': '4.7',
   'opus-4-6': '4.6',
@@ -320,6 +330,7 @@ export const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
   opus: 'Opus',
   sonnet: 'Sonnet',
   haiku: 'Haiku',
+  'opus-5': 'Opus',
   'opus-4-8': 'Opus',
   'opus-4-7': 'Opus',
   'opus-4-6': 'Opus',
@@ -334,6 +345,10 @@ export const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
 export const CLAUDE_CODE_PINNED_SDK_MODELS: Partial<Record<ClaudeCodeVariant, string>> = {
   fable: 'claude-fable-5-1',
   'fable-5': 'claude-fable-5',
+  // Pinned so the canonical `opus` row runs Opus 5.5 regardless of which
+  // model the SDK-bundled CLI's bare `opus` alias currently resolves to.
+  opus: 'claude-opus-5-5',
+  'opus-5': 'claude-opus-5',
   'opus-4-8': 'claude-opus-4-8',
   'opus-4-7': 'claude-opus-4-7',
   'opus-4-6': 'claude-opus-4-6',
@@ -374,6 +389,7 @@ export const CLAUDE_CODE_NATIVE_1M_VARIANTS: readonly ClaudeCodeVariant[] = [
   'fable-5',
   'opus',
   'sonnet',
+  'opus-5',
   'opus-4-8',
   'opus-4-7',
   'opus-4-6',
@@ -399,7 +415,7 @@ export const CLAUDE_CODE_NATIVE_1M_VARIANTS: readonly ClaudeCodeVariant[] = [
  *   - `haiku` has no 1M window.
  *   - the pinned legacy variants are excluded because `resolveClaudeCliModelArg`
  *     collapses every `opus*` variant to the bare `opus` alias, so an
- *     `opus-4-7-1m` row would run Opus 5 at 1M while claiming to be Opus 4.7.
+ *     `opus-4-7-1m` row would run Opus 5.5 at 1M while claiming to be Opus 4.7.
  */
 export const CLAUDE_CODE_VARIANTS_WITH_1M: readonly ClaudeCodeVariant[] = ['opus', 'fable'];
 
@@ -485,7 +501,7 @@ export function resolveClaudeCodeParentContextWindow(
 export const CLAUDE_CODE_SAFE_FALLBACK_MODEL = 'claude-code:opus' as const;
 
 export const DEFAULT_MODELS = {
-  claude: 'claude:claude-opus-5',
+  claude: 'claude:claude-opus-5-5',
   openai: 'openai:gpt-5.6-sol',
   // Plain `opus` (not `opus-1m`): a plan-gated auto-upgrade gives Max/Team/
   // Enterprise 1M on the plain alias, while an explicit `[1m]` would spend usage
