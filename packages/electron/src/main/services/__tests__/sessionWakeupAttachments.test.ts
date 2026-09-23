@@ -3,7 +3,7 @@
  * Round-trip for scheduled-prompt attachments (#1497) against a REAL migrated
  * SQLite database, not a mock.
  *
- * Three things can only break here: migrations 0045/0046 not reaching a fresh
+ * Three things can only break here: migrations 0048/0049 not reaching a fresh
  * install, the Postgres-style `$7` placeholder not surviving dialect
  * translation, and the JSON column coming back as a string that nobody parses.
  * Each one silently loses the user's image rather than throwing, which is why
