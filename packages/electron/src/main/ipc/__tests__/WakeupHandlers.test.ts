@@ -23,13 +23,12 @@ vi.mock('electron-log/main', () => ({
 }));
 
 const createSpy = vi.fn(async (input: unknown) => ({ id: 'wakeup-1', ...(input as object) }));
-vi.mock('../../services/RepositoryManager', () => ({
-  getSessionWakeupsStore: () => ({ create: createSpy }),
+vi.mock('../../services/sessionWakeupScheduling', () => ({
+  scheduleSessionWakeup: createSpy,
 }));
-
-const onCreatedSpy = vi.fn();
+vi.mock('../../services/RepositoryManager', () => ({ getSessionWakeupsStore: vi.fn() }));
 vi.mock('../../services/SessionWakeupScheduler', () => ({
-  SessionWakeupScheduler: { getInstance: () => ({ onCreated: onCreatedSpy }) },
+  SessionWakeupScheduler: { getInstance: vi.fn() },
 }));
 
 const getSessionSpy = vi.fn(async (sessionId: string): Promise<{ id: string } | null> => ({ id: sessionId }));
@@ -87,16 +86,16 @@ describe('wakeup:create', () => {
     expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ attachments: undefined }));
   });
 
-  it('creates the wakeup and re-arms the scheduler for valid input', async () => {
+  it('schedules valid input as a user wakeup, which never replaces another', async () => {
     const fireAt = Date.now() + 3_600_000;
-    const row = await call({ sessionId: 's1', workspacePath: '/w', prompt: 'hi', fireAt });
+    await call({ sessionId: 's1', workspacePath: '/w', prompt: 'hi', fireAt });
 
     expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: 's1',
       workspaceId: '/w',
       prompt: 'hi',
       fireAt,
+      origin: 'user',
     }));
-    expect(onCreatedSpy).toHaveBeenCalledWith(row);
   });
 });

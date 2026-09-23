@@ -19,6 +19,7 @@ import { atom } from 'jotai';
 import { atomFamily } from '../debug/atomFamilyRegistry';
 import { store } from '@nimbalyst/runtime/store';
 import { ModelIdentifier, type ChatAttachment, type SessionData } from '@nimbalyst/runtime/ai/server/types';
+import type { SessionWakeupOrigin } from '../../../shared/sessionWakeups';
 import type { SessionMeta } from '@nimbalyst/runtime';
 import deepEqual from 'fast-deep-equal';
 import { captureTranscriptMessages, reconcileTranscriptMessages } from '../transcriptReconciliation';
@@ -143,10 +144,8 @@ export const sessionPendingPromptAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
- * Per-session active scheduled wakeup.
- * Holds the most recent active wakeup row (pending / waiting_for_workspace / overdue)
- * for a session, or null if there is none. Updated by `wakeupListener.ts` in response
- * to `wakeup:changed` IPC events.
+ * One active scheduled wakeup row (pending / firing / waiting_for_workspace /
+ * overdue), as broadcast by main on `wakeup:changed`.
  */
 export interface SessionWakeupView {
   id: string;
@@ -154,7 +153,9 @@ export interface SessionWakeupView {
   workspaceId: string;
   prompt: string;
   /** Attachments captured when the prompt was scheduled; empty when none. */
-  attachments?: Array<{ id: string; filename: string; type: 'image' | 'pdf' | 'document' }>;
+  attachments?: ChatAttachment[];
+  /** 'user' for a "Run later" prompt, 'agent' for the agent's self-pacing wakeup. */
+  origin?: SessionWakeupOrigin;
   reason: string | null;
   fireAt: number;
   status: 'pending' | 'firing' | 'fired' | 'waiting_for_workspace' | 'overdue' | 'cancelled' | 'failed';
@@ -163,8 +164,13 @@ export interface SessionWakeupView {
   error: string | null;
 }
 
-export const sessionWakeupAtom = atomFamily((_sessionId: string) =>
-  atom<SessionWakeupView | null>(null)
+/**
+ * Active wakeups for a session, soonest first. A list rather than a single row
+ * because a user can schedule several prompts; only the agent's self-pacing
+ * tool replaces its previous one (#1497).
+ */
+export const sessionWakeupsAtom = atomFamily((_sessionId: string) =>
+  atom<SessionWakeupView[]>([])
 );
 
 /**

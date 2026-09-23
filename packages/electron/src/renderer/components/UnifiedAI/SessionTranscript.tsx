@@ -105,7 +105,8 @@ import {
   loadInitialQueuedPrompts,
 } from '../../store';
 import { streamCompletionSignalAtom } from '../../store/atoms/sessionTranscript';
-import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom, nextOptimisticId } from '../../store/atoms/sessions';
+import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom, nextOptimisticId, type SessionWakeupView } from '../../store/atoms/sessions';
+import { leadTimeBucket, type ScheduleLaterChoice } from './scheduleLater';
 import { clearAIInputHistoryAtom } from '../../store/atoms/aiInputUndo';
 import {
   cliTerminalExpandedAtom,
@@ -1070,10 +1071,38 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
     }
   }, [sessionId, getEffectiveDocumentContext, setDraftInput, setDraftAttachments, setLastSubmitAt, isQueueing, clearAIInputHistory]);
 
+  // Editing a scheduled prompt mirrors handleEditQueuedPrompt: drop the
+  // schedule and hand the text (and its attachments) back to the composer,
+  // rather than adding an update API for a row the user is about to rewrite.
+  const handleEditScheduledPrompt = useCallback(async (wakeup: SessionWakeupView) => {
+    try {
+      const cancelled = await window.electronAPI.invoke('wakeup:cancel', wakeup.id);
+      if (!cancelled) {
+        // Already fired (or cancelled elsewhere) between render and click.
+        // Restoring the text now would let the user send it a second time.
+        setSessionError({ message: 'This scheduled prompt has already been sent, so it can no longer be edited.' });
+        return;
+      }
+      setDraftInput(prev => prev.trim().length > 0 ? `${prev}\n\n${wakeup.prompt}` : wakeup.prompt);
+      // Appended like the text, so editing never discards what is already
+      // attached in the composer.
+      const restored = wakeup.attachments ?? [];
+      if (restored.length > 0) {
+        setDraftAttachments(prev => [...prev, ...restored]);
+      }
+      inputRef.current?.focus();
+    } catch (error) {
+      console.error('[SessionTranscript] Failed to edit scheduled prompt:', error);
+      setSessionError({
+        message: `Could not edit this scheduled prompt: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }, [setDraftInput, setDraftAttachments, setSessionError]);
+
   // "Run later": schedules the draft to resume this session at fireAt instead
   // of sending immediately. Backed by the same wakeup store/scheduler as the
   // agent-facing schedule_wakeup tool (see WakeupHandlers.ts wakeup:create).
-  const handleScheduleLater = useCallback(async (message: string, fireAt: number) => {
+  const handleScheduleLater = useCallback(async (message: string, fireAt: number, choice: ScheduleLaterChoice) => {
     if (!message.trim() || isScheduling) return;
     setIsScheduling(true);
     try {
@@ -1089,6 +1118,12 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
         // scheduled prompt keeps its images like a queued one does (#1497).
         attachments: currentAttachments,
       });
+      posthog?.capture('ai_prompt_scheduled', {
+        choice,
+        lead_time: leadTimeBucket(fireAt - Date.now()),
+        has_attachments: currentAttachments.length > 0,
+        provider: typeof provider === 'string' ? provider : undefined,
+      });
       setDraftInput('');
       setDraftAttachments([]);
       clearAIInputHistory(sessionId);
@@ -1103,7 +1138,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
     } finally {
       setIsScheduling(false);
     }
-  }, [sessionId, workspacePath, setDraftInput, setDraftAttachments, isScheduling, clearAIInputHistory, setSessionError]);
+  }, [sessionId, workspacePath, setDraftInput, setDraftAttachments, isScheduling, clearAIInputHistory, setSessionError, posthog, provider]);
 
   // What the composer looked like when this session opened. Once per session,
   // not per render: we are trying to explain why people do not act on a screen,
@@ -2750,7 +2785,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
           Deliberately NOT inside a mode/sidebar branch: in agent mode the banner
           used to ride along with the Files Edited sidebar, so a collapsed sidebar
           hid the only feedback that a prompt had been scheduled (#1497). */}
-      <WakeupBanner sessionId={sessionId} />
+      <WakeupBanner sessionId={sessionId} onEdit={handleEditScheduledPrompt} />
 
       {/* Queue display */}
       <PromptQueueList

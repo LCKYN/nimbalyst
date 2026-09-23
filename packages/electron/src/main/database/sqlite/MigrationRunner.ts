@@ -246,6 +246,7 @@ export function getMigrations(schemaDir: string): Migration[] {
     { version: 43, name: 'shell_tracking_coverage', sqlFile: path.join(schemaDir, '0043_shell_tracking_coverage.sql') },
     { version: 44, name: 'external_session_cursors', sqlFile: path.join(schemaDir, '0044_external_session_cursors.sql') },
     { version: 45, name: 'session_wakeup_attachments', sqlFile: path.join(schemaDir, '0045_session_wakeup_attachments.sql') },
+    { version: 46, name: 'session_wakeup_origin', sqlFile: path.join(schemaDir, '0046_session_wakeup_origin.sql') },
   ];
 }
 

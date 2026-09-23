@@ -36,9 +36,10 @@ import {
   setSelectedWorkstreamAtom,
 } from '../store/atoms/sessions';
 import { sessionQueuedPromptsAtom } from '../store/atoms/sessionTranscript';
+import { MIN_WAKEUP_LEAD_MS } from '../../shared/sessionWakeups';
 
-/** Matches MIN_LEAD_MS in WakeupHandlers.ts; a few seconds of headroom for the round trip. */
-const MIN_FIRE_IN_SECONDS = 35;
+/** The server minimum plus a few seconds of headroom for the round trip. */
+const MIN_FIRE_IN_SECONDS = MIN_WAKEUP_LEAD_MS / 1000 + 5;
 
 const FIRST_QUEUE_BATCH = [
   'Queued #1 — added while the agent is mid-turn',
@@ -71,7 +72,7 @@ export interface SeedScheduleLaterResult {
   /** Seeded into the renderer atom only — transient, never dispatched. */
   queuedSeeded: number;
   runLaterRequested: number;
-  /** How many wakeups actually survived — see the replace-on-create note below. */
+  /** Active wakeups for the session afterwards; equals runLaterRequested unless one failed. */
   runLaterActive: number;
   note?: string;
 }
@@ -147,9 +148,8 @@ export async function seedScheduleLaterDemo(
     })),
   );
 
-  // Step 3: two "run later" schedules. Only the last survives today — the store
-  // cancels a session's active wakeups on create (replace-on-create), so this
-  // batch doubles as a demonstration of that limitation.
+  // Step 3: two "run later" schedules. User schedules accumulate (only the
+  // agent's self-pacing wakeup replaces its predecessor), so both show.
   const baseFireIn = Math.max(MIN_FIRE_IN_SECONDS, options.fireInSeconds ?? 3600);
   for (const [index, prompt] of RUN_LATER_PROMPTS.entries()) {
     await window.electronAPI.invoke('wakeup:create', {
@@ -174,7 +174,7 @@ export async function seedScheduleLaterDemo(
     runLaterActive,
     note:
       runLaterActive < RUN_LATER_PROMPTS.length
-        ? `Only ${runLaterActive} of ${RUN_LATER_PROMPTS.length} wakeups survived: creating one cancels the session's earlier pending wakeup.`
+        ? `Only ${runLaterActive} of ${RUN_LATER_PROMPTS.length} scheduled prompts are active; check the main log for a wakeup:create failure.`
         : undefined,
   };
 }

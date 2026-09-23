@@ -32,6 +32,7 @@ import {
 import { useAIInputUndo } from '../../hooks/useAIInputUndo';
 import type { AIInputSnapshot } from '../../store/atoms/aiInputUndo';
 import { ScheduleLaterMenu } from './ScheduleLaterMenu';
+import type { ScheduleLaterChoice } from './scheduleLater';
 import { parseCommandTokens, type CommandToken } from './commandPills/parseCommandTokens';
 import { parseMentionTokens } from './commandPills/parseMentionTokens';
 import { HighlightOverlay, type OverlayToken } from './commandPills/HighlightOverlay';
@@ -122,7 +123,7 @@ export interface AIInputProps {
 
   // "Run later" support — schedules the current draft to send at a future time
   // instead of immediately. Omit to hide the affordance (e.g. no session yet).
-  onScheduleLater?: (message: string, fireAt: number) => void;
+  onScheduleLater?: (message: string, fireAt: number, choice: ScheduleLaterChoice) => void;
 
   // Mockup annotation indicator support
   currentFilePath?: string;
@@ -1514,7 +1515,11 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
               {onScheduleLater && (
                 <ScheduleLaterMenu
                   disabled={disabled || !value.trim() || processingAttachments.length > 0}
-                  onSchedule={(fireAt) => onScheduleLater(value, fireAt)}
+                  disabledReason={
+                    processingAttachments.length > 0 ? 'Processing attachments...' : 'Type a prompt to run it later'
+                  }
+                  provider={currentProvider ?? provider}
+                  onSchedule={(fireAt, choice) => onScheduleLater(value, fireAt, choice)}
                 />
               )}
               {isLoading ? (

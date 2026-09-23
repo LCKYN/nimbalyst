@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { resolveFireAt } from '../scheduleLater';
+import { defaultCustomTime, resolveFireAt } from '../scheduleLater';
 
 const NOW = new Date('2026-09-22T12:00:00.000Z').getTime();
 
@@ -35,5 +35,18 @@ describe('resolveFireAt', () => {
   it('rejects a usage-reset time already in the past', () => {
     const resetsAt = new Date(NOW - 1_000).toISOString();
     expect(resolveFireAt({ kind: 'usageReset', resetsAt }, NOW)).toBeNull();
+  });
+});
+
+describe('custom time picker default', () => {
+  // The picker value is local wall-clock time. Building it from toISOString()
+  // would shift it by the UTC offset, and outside UTC+0 the default would land
+  // hours away (or in the past) from what the picker shows.
+  it('resolves back to the same instant it was built from, rounded to a quarter hour', () => {
+    const fireAt = resolveFireAt({ kind: 'clockTime', isoLocal: defaultCustomTime(NOW) }, NOW);
+    expect(fireAt).not.toBeNull();
+    expect(fireAt! - NOW).toBeGreaterThanOrEqual(3_600_000);
+    expect(fireAt! - NOW).toBeLessThan(3_600_000 + 15 * 60_000);
+    expect(new Date(fireAt!).getMinutes() % 15).toBe(0);
   });
 });

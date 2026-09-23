@@ -4,11 +4,13 @@
  * Persistent scheduled wakeups for AI sessions. The scheduler service in main
  * process owns the timer; this store owns the rows.
  *
- * "Replace-on-create" semantics: creating a wakeup for a session that already
- * has an active one (pending / overdue / waiting_for_workspace) cancels the
- * prior row in the same transaction.
+ * `create` only inserts. Replacement is the caller's decision, made through
+ * `cancelActiveForSession` -- see sessionWakeupScheduling.ts, which is the one
+ * place that decides it (#1497).
  */
 
+import type { ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
+import type { SessionWakeupOrigin } from '../../shared/sessionWakeups';
 import { toMillis } from '../utils/timestampUtils';
 
 export type SessionWakeupStatus =
@@ -31,8 +33,9 @@ export interface SessionWakeup {
   createdAt: number;
   firedAt: number | null;
   error: string | null;
-  /** ChatAttachment[] carried with the scheduled prompt; empty when none. */
-  attachments: unknown[];
+  /** Carried with the scheduled prompt; empty when none. */
+  attachments: ChatAttachment[];
+  origin: SessionWakeupOrigin;
 }
 
 export interface CreateSessionWakeupInput {
@@ -42,15 +45,20 @@ export interface CreateSessionWakeupInput {
   prompt: string;
   reason?: string;
   fireAt: Date | number; // Date or epoch ms
-  attachments?: unknown[];
+  attachments?: ChatAttachment[];
+  /** Defaults to 'agent', matching every row written before the column existed. */
+  origin?: SessionWakeupOrigin;
 }
 
 export interface SessionWakeupsStore {
-  /**
-   * Create a wakeup. Cancels any existing active wakeup
-   * (pending / overdue / waiting_for_workspace) for the same session first.
-   */
+  /** Insert a wakeup. Never touches the session's other wakeups. */
   create(input: CreateSessionWakeupInput): Promise<SessionWakeup>;
+
+  /**
+   * Cancel a session's active wakeups of one origin, returning the cancelled
+   * rows so the caller can tell the renderer they are gone.
+   */
+  cancelActiveForSession(sessionId: string, origin: SessionWakeupOrigin): Promise<SessionWakeup[]>;
 
   get(id: string): Promise<SessionWakeup | null>;
 
@@ -91,7 +99,7 @@ type EnsureReadyFn = () => Promise<void>;
  * SQLite (see DATABASE.md). Malformed JSON degrades to no attachments rather
  * than breaking the whole wakeup.
  */
-function parseAttachments(value: unknown): unknown[] {
+function parseAttachments(value: unknown): ChatAttachment[] {
   if (!value) return [];
   if (Array.isArray(value)) return value;
   if (typeof value === 'string') {
@@ -118,6 +126,7 @@ function rowToWakeup(row: any): SessionWakeup {
     createdAt: toMillis(row.created_at)!,
     firedAt: toMillis(row.fired_at),
     error: row.error ?? null,
+    origin: row.origin === 'user' ? 'user' : 'agent',
   };
 }
 
@@ -139,20 +148,11 @@ export function createPGLiteSessionWakeupsStore(
 
       const fireAt = input.fireAt instanceof Date ? input.fireAt : new Date(input.fireAt);
 
-      // Cancel any active wakeup for the same session (replace-on-create semantics).
-      await db.query(
-        `UPDATE ai_session_wakeups
-            SET status = 'cancelled'
-          WHERE session_id = $1
-            AND status = ANY($2::text[])`,
-        [input.sessionId, ACTIVE_STATUSES],
-      );
-
       const attachments = input.attachments?.length ? JSON.stringify(input.attachments) : null;
       const { rows } = await db.query<any>(
         `INSERT INTO ai_session_wakeups
-           (id, session_id, workspace_id, prompt, reason, fire_at, status, attachments)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+           (id, session_id, workspace_id, prompt, reason, fire_at, status, attachments, origin)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8)
          RETURNING *`,
         [
           input.id,
@@ -162,6 +162,7 @@ export function createPGLiteSessionWakeupsStore(
           input.reason ?? null,
           fireAt,
           attachments,
+          input.origin ?? 'agent',
         ],
       );
 
@@ -169,6 +170,20 @@ export function createPGLiteSessionWakeupsStore(
         throw new Error('Failed to create session wakeup');
       }
       return rowToWakeup(rows[0]);
+    },
+
+    async cancelActiveForSession(sessionId: string, origin: SessionWakeupOrigin): Promise<SessionWakeup[]> {
+      await ensureReady();
+      const { rows } = await db.query<any>(
+        `UPDATE ai_session_wakeups
+            SET status = 'cancelled'
+          WHERE session_id = $1
+            AND origin = $2
+            AND status = ANY($3::text[])
+          RETURNING *`,
+        [sessionId, origin, ACTIVE_STATUSES],
+      );
+      return rows.map(rowToWakeup);
     },
 
     async get(id: string): Promise<SessionWakeup | null> {

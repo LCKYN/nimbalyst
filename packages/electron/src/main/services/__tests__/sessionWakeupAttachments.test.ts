@@ -3,19 +3,33 @@
  * Round-trip for scheduled-prompt attachments (#1497) against a REAL migrated
  * SQLite database, not a mock.
  *
- * Three things can only break here: migration 0045 not reaching a fresh
+ * Three things can only break here: migrations 0045/0046 not reaching a fresh
  * install, the Postgres-style `$7` placeholder not surviving dialect
  * translation, and the JSON column coming back as a string that nobody parses.
  * Each one silently loses the user's image rather than throwing, which is why
  * this asserts the value that comes back out rather than that create() resolved.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { SQLiteDatabase } from '../../database/sqlite/SQLiteDatabase';
 import { createSQLiteStoreAdapter } from '../../database/sqlite/SQLiteStoreAdapter';
+import type { ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { createPGLiteSessionWakeupsStore } from '../PGLiteSessionWakeupsStore';
+import {
+  scheduleSessionWakeup,
+  wakeupPromptDelivery,
+  type ScheduleSessionWakeupInput,
+} from '../sessionWakeupScheduling';
+
+vi.mock('electron', () => ({ BrowserWindow: { getAllWindows: () => [] } }));
+vi.mock('../RepositoryManager', () => ({ getSessionWakeupsStore: vi.fn() }));
+vi.mock('../SessionWakeupScheduler', () => ({ SessionWakeupScheduler: { getInstance: vi.fn() } }));
+
+function attachment(id: string, filename: string, type: ChatAttachment['type']): ChatAttachment {
+  return { id, filename, type, filepath: `/tmp/${filename}`, mimeType: 'application/octet-stream', size: 1, addedAt: 0 };
+}
 
 async function withStore<T>(
   run: (store: ReturnType<typeof createPGLiteSessionWakeupsStore>, sqlite: SQLiteDatabase) => Promise<T>,
@@ -60,10 +74,7 @@ describe('scheduled prompt attachments', () => {
 
   it('round-trips attachments through create and read-back', async () => {
     await withStore(async (store) => {
-      const attachments = [
-        { id: 'a1', filename: 'screenshot.png', type: 'image' },
-        { id: 'a2', filename: 'spec.pdf', type: 'pdf' },
-      ];
+      const attachments = [attachment('a1', 'screenshot.png', 'image'), attachment('a2', 'spec.pdf', 'pdf')];
       const created = await store.create({
         id: 'wakeup-1',
         sessionId: 's1',
@@ -81,7 +92,7 @@ describe('scheduled prompt attachments', () => {
 
   it('survives the status transitions the scheduler drives', async () => {
     await withStore(async (store) => {
-      const attachments = [{ id: 'a1', filename: 'shot.png', type: 'image' }];
+      const attachments = [attachment('a1', 'shot.png', 'image')];
       await store.create({
         id: 'wakeup-2',
         sessionId: 's1',
@@ -112,5 +123,90 @@ describe('scheduled prompt attachments', () => {
       const reloaded = await store.get('wakeup-3');
       expect(reloaded?.attachments).toEqual([]);
     });
+  });
+
+  it('treats rows written before the origin column as agent wakeups', async () => {
+    await withStore(async (store, sqlite) => {
+      // Every wakeup that predates "Run later" came from the agent's tool.
+      await sqlite.query(
+        `INSERT INTO ai_session_wakeups (id, session_id, workspace_id, prompt, fire_at, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')`,
+        ['legacy-1', 's1', '/w', 'old', new Date(Date.now() + 3_600_000)],
+      );
+      expect((await store.get('legacy-1'))?.origin).toBe('agent');
+    });
+  });
+});
+
+describe('scheduling a wakeup', () => {
+  const inHours = (h: number) => Date.now() + h * 3_600_000;
+
+  async function withScheduler<T>(
+    run: (
+      schedule: (input: Omit<ScheduleSessionWakeupInput, 'workspaceId' | 'sessionId'>) => Promise<unknown>,
+      store: ReturnType<typeof createPGLiteSessionWakeupsStore>,
+      broadcast: ReturnType<typeof vi.fn>,
+    ) => Promise<T>,
+  ): Promise<T> {
+    return withStore(async (store) => {
+      const broadcast = vi.fn();
+      const deps = { store, onCreated: vi.fn(), broadcast };
+      return run(
+        (input) => scheduleSessionWakeup({ sessionId: 's1', workspaceId: '/w', ...input }, deps),
+        store,
+        broadcast,
+      );
+    });
+  }
+
+  it('keeps every prompt a person schedules', async () => {
+    await withScheduler(async (schedule, store) => {
+      await schedule({ origin: 'user', prompt: 'first', fireAt: inHours(1) });
+      await schedule({ origin: 'user', prompt: 'second', fireAt: inHours(2) });
+
+      const active = await store.listActiveForSession('s1');
+      expect(active.map((w) => w.prompt)).toEqual(['first', 'second']);
+    });
+  });
+
+  it('does not let the agent re-pacing itself cancel a prompt the user scheduled', async () => {
+    await withScheduler(async (schedule, store) => {
+      await schedule({ origin: 'user', prompt: 'mine', fireAt: inHours(3) });
+      await schedule({ origin: 'agent', prompt: 'agent 1', fireAt: inHours(1) });
+      await schedule({ origin: 'agent', prompt: 'agent 2', fireAt: inHours(1) });
+
+      const active = await store.listActiveForSession('s1');
+      expect(active.map((w) => [w.origin, w.prompt])).toEqual([
+        ['agent', 'agent 2'],
+        ['user', 'mine'],
+      ]);
+    });
+  });
+
+  it('announces the agent wakeup it replaced, so the banner drops it', async () => {
+    await withScheduler(async (schedule, _store, broadcast) => {
+      await schedule({ origin: 'agent', prompt: 'agent 1', fireAt: inHours(1) });
+      broadcast.mockClear();
+
+      await schedule({ origin: 'agent', prompt: 'agent 2', fireAt: inHours(1) });
+
+      const announced = broadcast.mock.calls.map(([row]) => [row.prompt, row.status]);
+      expect(announced).toContainEqual(['agent 1', 'cancelled']);
+      expect(announced).toContainEqual(['agent 2', 'pending']);
+    });
+  });
+});
+
+describe('delivering a fired wakeup', () => {
+  it('sends a user-scheduled prompt as the user, so it renders as their message', () => {
+    const delivery = wakeupPromptDelivery('user');
+    expect(delivery.promptOrigin).not.toBe('wakeup_resume');
+    expect(delivery.promptProvenance).toEqual({ actor: 'human', origin: 'composer' });
+  });
+
+  it('keeps agent wakeups as a system resume marker', () => {
+    const delivery = wakeupPromptDelivery('agent');
+    expect(delivery.promptOrigin).toBe('wakeup_resume');
+    expect(delivery.promptProvenance.actor).toBe('system');
   });
 });
