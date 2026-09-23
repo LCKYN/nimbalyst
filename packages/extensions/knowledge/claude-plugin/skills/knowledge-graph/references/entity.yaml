@@ -65,6 +65,9 @@ fields:
       - value: concept
         label: Concept
         icon: lightbulb
+      - value: area
+        label: Area
+        icon: folder
 
   - name: status
     type: select
@@ -86,6 +89,15 @@ fields:
         label: Retired
         icon: archive
         category: cancelled
+
+  # The wiki hierarchy: an area, subarea or page points at the entity it sits
+  # under. Top-level areas have no parent. Built from links, not folders.
+  - name: parent
+    type: relationship
+    relationshipTypeKey: part-of
+    targetTrackerTypes:
+      - entity
+    multiValue: false
 
   # Labels never identify anything so the names a thing
   # goes by are data, not identity. Search and the upstream importer both read

@@ -173,6 +173,14 @@ fields:
       - entity
     multiValue: true
 
+  # A sub-question points at the question it helps answer.
+  - name: parent
+    type: relationship
+    relationshipTypeKey: sub-question-of
+    targetTrackerTypes:
+      - question
+    multiValue: false
+
   - name: answers
     type: relationship
     relationshipTypeKey: answered-by

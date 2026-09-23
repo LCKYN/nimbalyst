@@ -29,6 +29,7 @@ The canonical definitions are in `references/` next to this file. They are the s
 - `claim.subject` and `claim.object` are relationships to `entity`. `claim.predicate` is a `predicate-ref` whose value is a predicate `id` from the registry. `claim.basis` is one of `documented`, `observed`, `decision`, `inference`.
 - `question.owner`, `question.position`, `question.positionAsOf`, `question.positionState`, `question.decidedBy`, `question.decidedAt` carry accountability. `question.subjects` targets `entity`; `question.answers` targets `finding`.
 - `finding.question` targets `question`; `finding.claims` targets `claim`. `investigation.question` targets `question`.
+- The wiki hierarchy reads `entity.kind: area`, `entity.parent` (targets `entity`), and `question.parent` (targets `question`).
 - Predicate ids and their `label` / `inverseLabel` are what the wiki prints. Do not change an existing id.
 
 ## Setup
@@ -39,6 +40,16 @@ The canonical definitions are in `references/` next to this file. They are the s
 4. Read the project's current registry from `.nimbalyst/predicates.yaml` at the workspace root (for a team project this is the local copy of the team's registry; a missing file means an empty registry). Merge in every predicate from `references/predicates.yaml` whose `id` is not already there, keep all existing ones unchanged, and call `tracker_define_type` with `predicates` set to the merged array. The call replaces the whole registry, so never send only the reference list. An existing predicate with the same `id` but a different definition is a conflict: keep the existing one and report it.
 5. Idempotence: if a kind already exists, compare it to the reference. Missing fields or options may be added with a `schema` + `overwrite: true` that keeps every existing field. Never remove, rename, or change the type of an existing field or option, never pass `confirmDestructive` on your own, and never overwrite a kind that differs in an incompatible way. Report each conflict to the user with the field names and stop for that kind.
 6. Switching an existing personal kind to team needs `promoteExistingItems: true`; ask the user first.
+
+## Hierarchy
+
+The wiki's tree comes from links between items, not tracker folders.
+
+- A top-level area is an entity with `kind: area` and no `parent`.
+- Subareas (also `kind: area`) and pages (any other entity) set `parent` to the entity they sit under.
+- Questions appear under the entities in their `subjects`. A sub-question sets `parent` to the question it helps answer.
+- Never create a cycle: before setting `parent`, walk up from the new parent and make sure you do not reach the item itself.
+- Keep it shallow: an area, a subarea, then pages. Use claims, not deeper nesting, to relate pages to each other.
 
 ## Extending
 

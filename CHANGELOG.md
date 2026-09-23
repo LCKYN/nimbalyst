@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- New features go here -->
 - Claude Opus 5.5 is available in the Claude API model picker and is the new Claude API default.
 - GPT-6 Sol and GPT-6 Luna are available for Codex and OpenAI API sessions, and GPT-6 Sol is the new default for both.
-- Knowledge extension (off by default) gives agents a shared ontology for team knowledge graphs: entities, claims, questions, findings, and the verbs that connect them.
+- Knowledge extension (off by default) gives agents a shared ontology for team knowledge graphs: entities, claims, questions, findings, the verbs that connect them, and a hierarchy of areas.
 
 ### Changed
 <!-- Changes to existing functionality go here -->

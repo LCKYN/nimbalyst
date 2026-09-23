@@ -38,6 +38,14 @@ describe('knowledge ontology references', () => {
     expect(field('question', 'owner')?.type).toBe('user');
     expect(field('question', 'position')?.type).toBe('text');
     expect(field('question', 'positionState')?.type).toBe('select');
+    // Wiki hierarchy: areas -> subareas -> pages, built from links.
+    expect(field('entity', 'kind')?.options?.map((o) => o.value)).toContain('area');
+    expect(field('entity', 'parent')).toMatchObject({
+      type: 'relationship', targetTrackerTypes: ['entity'], multiValue: false,
+    });
+    expect(field('question', 'parent')).toMatchObject({
+      type: 'relationship', targetTrackerTypes: ['question'], multiValue: false,
+    });
   });
 
   it('ships a valid predicate registry whose subjects and targets are defined kinds', () => {
