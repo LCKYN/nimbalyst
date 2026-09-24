@@ -12,6 +12,7 @@ export type {
   TrackerReferenceResolution,
   TrackerReferenceResolver,
   TrackerReferenceSchema,
+  TrackerReferenceSearchResult,
   TrackerReferenceStatusInfo,
   TrackerReferenceTypeInfo,
   TrackerStatement,
@@ -25,6 +26,11 @@ export {
   useTrackerReferenceResolver,
   useTrackerStatements,
 } from './TrackerReferenceResolverContext';
+export {
+  TrackerReferenceInlineAppearanceContext,
+  useTrackerReferenceInlineAppearance,
+} from './TrackerReferenceQuietLink';
+export type { TrackerReferenceInlineAppearance } from './TrackerReferenceQuietLink';
 export {
   LiveTrackerReferenceRenderer,
   TrackerReferenceChipView,

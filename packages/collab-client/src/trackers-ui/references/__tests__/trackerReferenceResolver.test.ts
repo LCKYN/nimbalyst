@@ -125,4 +125,27 @@ describe('createTrackerReferenceResolver', () => {
     expect(resolver.statementsAbout('ent-gateway')).toBe(groups);
     resolver.dispose();
   });
+
+  it('searches the room by issue key and title for the insert typeahead, honoring a type scope', async () => {
+    const fake = fakeDataSource('connected');
+    const resolver = createTrackerReferenceResolver(fake.source, { schema: fakeSchema() });
+    const claim = item({ id: 'c1', issueKey: 'KB-3', issueNumber: 3, type: 'claim', title: 'Gateway retries twice' });
+    const archived = item({ id: 'old', issueKey: 'KB-4', issueNumber: 4, type: 'entity', title: 'Old gateway', archived: true });
+    await fake.release([
+      { ...gateway, issueNumber: 1 },
+      { ...auth, issueNumber: 2, description: 'Issues gateway tokens' },
+      claim,
+      archived,
+    ]);
+
+    // Newest first with no query; archived items never offered.
+    expect(resolver.search!(null).options.map((o) => o.referenceKey)).toEqual(['KB-3', 'KB-2', 'KB-1']);
+    // Title prefix beats title substring beats description match.
+    expect(resolver.search!('gateway').options.map((o) => o.referenceKey)).toEqual(['KB-3', 'KB-1', 'KB-2']);
+    expect(resolver.search!('kb-2').options[0]).toMatchObject({ referenceKey: 'KB-2', title: 'Auth service', type: 'entity' });
+    const scoped = resolver.search!('claim:gate');
+    expect(scoped).toMatchObject({ typeFilter: 'claim', searchQuery: 'gate' });
+    expect(scoped.options.map((o) => o.referenceKey)).toEqual(['KB-3']);
+    resolver.dispose();
+  });
 });

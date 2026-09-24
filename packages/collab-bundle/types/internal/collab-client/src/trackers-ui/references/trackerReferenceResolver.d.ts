@@ -18,8 +18,10 @@
  */
 import { type PredicateDefinition, type StatusCategory, type TrackerDataModel } from '@nimbalyst/tracker-schema';
 import type { TrackerDataSource, TrackerItem } from '../../trackers/dataSource';
+import { type TrackerReferenceSearchResult } from '../../../../runtime/src/plugins/TrackerLinkPlugin/trackerReferenceSearch';
 import type { TrackerReferenceStatusOption } from './trackerReferenceLifecycle';
 export type { TrackerReferenceStatusOption } from './trackerReferenceLifecycle';
+export type { TrackerReferenceSearchResult } from '../../../../runtime/src/plugins/TrackerLinkPlugin/trackerReferenceSearch';
 export interface TrackerReferenceActor {
     email: string;
     name?: string;
@@ -103,6 +105,14 @@ export interface TrackerReferenceResolver {
     /** Item ids a relationship field on `item` targets, in stored order. */
     relationshipTargets(item: TrackerItem, fieldName: string): string[];
     predicateLabel(predicateId: string): string;
+    /**
+     * Items to offer when inserting a reference, ranked for a typed `#…` query
+     * (title, issue key, optional `type:` scope). Present means the editor can
+     * insert references; absent keeps it render-only.
+     */
+    search?(query: string | null, options?: {
+        limit?: number;
+    }): TrackerReferenceSearchResult;
     /** Present when the host can navigate to an item. */
     openItem?: (itemId: string) => void;
     /** The type's workflow status options, in schema order. */

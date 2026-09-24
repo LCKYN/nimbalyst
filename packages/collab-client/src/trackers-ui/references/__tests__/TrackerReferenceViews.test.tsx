@@ -3,7 +3,7 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { LexicalEditor, ParagraphNode } from 'lexical';
 import { $createNodeSelection, $createParagraphNode, $getRoot, $setSelection } from 'lexical';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,11 +17,55 @@ import { setTrackerReferenceNodeRenderer } from '@nimbalyst/runtime/plugins/Trac
 import { createTrackerReferenceResolver } from '../trackerReferenceResolver';
 import { TrackerReferenceResolverProvider } from '../TrackerReferenceResolverContext';
 import { LiveTrackerReferenceRenderer } from '../TrackerReferenceViews';
+import { TrackerReferenceInlineAppearanceContext } from '../TrackerReferenceQuietLink';
 import { fakeDataSource, fakeSchema, item } from './referenceFixtures';
 
 afterEach(cleanup);
 
 describe('LiveTrackerReferenceRenderer', () => {
+  it('renders quiet inline references as the full title, keeps the key for the peek, and strikes a missing key', async () => {
+    const fake = fakeDataSource();
+    const resolver = createTrackerReferenceResolver(fake.source, { schema: fakeSchema() });
+    const longTitle = 'How do we differentiate from each competitor on the team workspace?';
+    const question = item({ id: 'q-1', issueKey: 'KB-37', type: 'question', title: longTitle, status: 'open' });
+    const gateway = item({
+      id: 'ent-gateway', issueKey: 'KB-1', type: 'entity', title: 'API gateway', status: 'active',
+      customFields: { summary: 'Routes every public request. Owned by platform.' },
+    });
+
+    const { container } = render(
+      <TrackerReferenceResolverProvider resolver={resolver}>
+        <TrackerReferenceInlineAppearanceContext.Provider value="quiet">
+          <LiveTrackerReferenceRenderer referenceKey="KB-37" nodeKey="n1" view="chip" />
+          <LiveTrackerReferenceRenderer referenceKey="KB-1" nodeKey="n2" view="chip" />
+          <LiveTrackerReferenceRenderer referenceKey="KB-99" nodeKey="n3" view="chip" />
+          <LiveTrackerReferenceRenderer referenceKey="KB-1" nodeKey="n4" view="card" />
+        </TrackerReferenceInlineAppearanceContext.Provider>
+      </TrackerReferenceResolverProvider>,
+    );
+    await act(() => fake.release([question, gateway]));
+
+    const links = [...container.querySelectorAll('.tracker-reference-quiet')];
+    expect(links.map((link) => [link.textContent, link.getAttribute('data-type'), link.getAttribute('data-state')])).toEqual([
+      [longTitle, 'question', null],
+      ['API gateway', 'entity', null],
+      ['KB-99', null, 'missing'],
+    ]);
+    // Block views are not prose; the card keeps its own presentation.
+    expect(container.querySelector('.tracker-reference-card')).not.toBeNull();
+
+    act(() => { fireEvent.focus(links[1]); });
+    // The peek module loads lazily on first focus or hover.
+    const peek = await waitFor(() => {
+      const element = document.querySelector('.tracker-reference-peek');
+      expect(element).not.toBeNull();
+      return element;
+    });
+    expect(peek?.textContent).toContain('KB-1');
+    expect(peek?.textContent).toContain('Routes every public request.');
+    expect(peek?.textContent).not.toContain('Owned by platform');
+  });
+
   it('renders a card from live resolver data and follows item changes', async () => {
     const fake = fakeDataSource();
     const onOpenItem = vi.fn();

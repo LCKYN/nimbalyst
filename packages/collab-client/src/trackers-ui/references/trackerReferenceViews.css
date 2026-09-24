@@ -75,6 +75,89 @@
   text-decoration: line-through;
 }
 
+/* ---- Quiet inline link ----------------------------------------------------
+ * Prose appearance: the title in the surrounding text's own size and color,
+ * with a kind-tinted underline as the only chrome. Wraps like text, so it
+ * never changes the line box. */
+
+.tracker-reference-quiet {
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--tracker-reference-kind, var(--nim-text-muted)) 60%, transparent);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.tracker-reference-quiet[data-type='question'] {
+  text-decoration-style: dashed;
+}
+
+.tracker-reference-quiet[data-resolved='true']:hover,
+.tracker-reference-quiet[data-resolved='true']:focus-visible {
+  background: color-mix(in srgb, var(--tracker-reference-kind, var(--nim-text-muted)) 14%, transparent);
+  text-decoration-color: var(--tracker-reference-kind, var(--nim-text-muted));
+  outline: none;
+}
+
+.tracker-reference-quiet[data-resolved='false'] {
+  cursor: default;
+  color: var(--nim-text-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  text-decoration-color: var(--nim-text-faint);
+}
+
+.tracker-reference-quiet[data-state='missing'] {
+  text-decoration-line: line-through;
+}
+
+.tracker-reference-quiet[data-state='loading'] {
+  text-decoration-line: none;
+}
+
+.tracker-reference-peek {
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 16px));
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--nim-border);
+  background: var(--nim-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  color: var(--nim-text);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.tracker-reference-peek-meta {
+  display: flex;
+  gap: 8px;
+  color: var(--nim-text-muted);
+  font-size: 12px;
+}
+
+.tracker-reference-peek-key {
+  margin-left: auto;
+  color: var(--nim-text-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+}
+
+.tracker-reference-peek-title {
+  font-weight: 600;
+}
+
+.tracker-reference-peek-summary {
+  color: var(--nim-text-muted);
+}
+
 .tracker-reference-type-icon {
   flex-shrink: 0;
   font-size: 15px;

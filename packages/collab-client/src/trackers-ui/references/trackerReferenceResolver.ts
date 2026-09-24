@@ -35,10 +35,17 @@ import type {
   TrackerDataSource,
   TrackerItem,
 } from '../../trackers/dataSource';
+import {
+  collectCandidateTypes,
+  searchTrackerReferenceCandidates,
+  type TrackerReferenceCandidate,
+  type TrackerReferenceSearchResult,
+} from '@nimbalyst/runtime/plugins/TrackerLinkPlugin/trackerReferenceSearch';
 import { readStoredFieldValue } from '../../trackers/relationshipFieldStorage';
 import type { TrackerReferenceStatusOption } from './trackerReferenceLifecycle';
 
 export type { TrackerReferenceStatusOption } from './trackerReferenceLifecycle';
+export type { TrackerReferenceSearchResult } from '@nimbalyst/runtime/plugins/TrackerLinkPlugin/trackerReferenceSearch';
 
 export interface TrackerReferenceActor {
   email: string;
@@ -126,6 +133,12 @@ export interface TrackerReferenceResolver {
   /** Item ids a relationship field on `item` targets, in stored order. */
   relationshipTargets(item: TrackerItem, fieldName: string): string[];
   predicateLabel(predicateId: string): string;
+  /**
+   * Items to offer when inserting a reference, ranked for a typed `#…` query
+   * (title, issue key, optional `type:` scope). Present means the editor can
+   * insert references; absent keeps it render-only.
+   */
+  search?(query: string | null, options?: { limit?: number }): TrackerReferenceSearchResult;
   /** Present when the host can navigate to an item. */
   openItem?: (itemId: string) => void;
   /** The type's workflow status options, in schema order. */
@@ -197,6 +210,8 @@ function sameItems(a: readonly TrackerItem[], b: readonly TrackerItem[]): boolea
 
 interface Indexes {
   byId: Map<string, TrackerItem>;
+  candidates: TrackerReferenceCandidate[];
+  candidateTypes: Set<string>;
   byIssueKey: Map<string, TrackerItem>;
   claimsBySubject: Map<string, TrackerItem[]>;
   backlinksByTarget: Map<string, TrackerBacklink[]>;
@@ -431,7 +446,19 @@ export function createTrackerReferenceResolver(
     const claimsBySubject = new Map<string, TrackerItem[]>();
     const backlinksByTarget = new Map<string, TrackerBacklink[]>();
     const namesByEmail = new Map<string, string>();
+    const candidates: TrackerReferenceCandidate[] = [];
     for (const item of items.values()) {
+      candidates.push({
+        id: item.id,
+        issueKey: item.issueKey,
+        issueNumber: item.issueNumber,
+        title: item.title,
+        description: item.description,
+        status: item.status,
+        type: item.type,
+        typeTags: item.typeTags,
+        archived: item.archived,
+      });
       if (item.issueKey) byIssueKey.set(item.issueKey.toUpperCase(), item);
       for (const identity of [item.authorIdentity, item.lastModifiedBy]) {
         if (identity?.email && identity.displayName) namesByEmail.set(identity.email.toLowerCase(), identity.displayName);
@@ -455,7 +482,15 @@ export function createTrackerReferenceResolver(
         }
       }
     }
-    const value = { byId: items, byIssueKey, claimsBySubject, backlinksByTarget, namesByEmail };
+    const value = {
+      byId: items,
+      candidates,
+      candidateTypes: collectCandidateTypes(candidates),
+      byIssueKey,
+      claimsBySubject,
+      backlinksByTarget,
+      namesByEmail,
+    };
     indexes = { version, value };
     return value;
   };
@@ -567,6 +602,11 @@ export function createTrackerReferenceResolver(
     (previous, next) => previous.every((link, i) => link.fieldName === next[i]?.fieldName),
   );
 
+  const search = (query: string | null, searchOptions: { limit?: number } = {}): TrackerReferenceSearchResult => {
+    const { candidates, candidateTypes } = getIndexes();
+    return searchTrackerReferenceCandidates(candidates, query, { knownTypes: candidateTypes, limit: searchOptions.limit });
+  };
+
   const statusOptions = (type: string): TrackerReferenceStatusOption[] => {
     const model = schema.get(type);
     return (findField(model, statusFieldName(model))?.options ?? []).map((option) => ({
@@ -611,6 +651,7 @@ export function createTrackerReferenceResolver(
     optionLabel,
     relationshipTargets,
     predicateLabel,
+    search,
     ...(options.onOpenItem ? { openItem: options.onOpenItem } : {}),
     statusOptions,
     updateItem,

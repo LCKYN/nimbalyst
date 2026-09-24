@@ -188,6 +188,12 @@ export interface CollabEditorMountOptions {
    * card and statements references render their full views.
    */
   trackerReferences?: TrackerReferenceResolver;
+  /**
+   * How inline references render in prose. `'chip'` (the default) is the
+   * bordered key-and-title pill; `'quiet'` is the title as a kind-tinted link
+   * with key, kind and state in a hover peek. Presentation only.
+   */
+  trackerReferenceAppearance?: 'chip' | 'quiet';
   onStateChange?: (state: CollabEditorState) => void;
   onPresenceChange?: (presence: CollabEditorPresence) => void;
   onWriteRejected?: (rejection: CollabEditorWriteRejection) => void;

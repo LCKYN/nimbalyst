@@ -3,7 +3,9 @@
  * {@link TrackerReferenceResolver} rather than the desktop tracker atoms.
  *
  * Three presentations of one `TrackerReferenceNode`:
- *  - chip: inline key + title + status, the resting shape of every reference.
+ *  - chip: inline key + title + status, the resting shape of every reference;
+ *    or, where the host opts into the quiet inline appearance, the title as a
+ *    tinted link with the rest in a hover peek.
  *  - card: a block summary of the item with the few fields its type is about.
  *  - statements: the claims whose subject is the item, grouped by predicate.
  *
