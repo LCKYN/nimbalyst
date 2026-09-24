@@ -26,8 +26,9 @@ import {
 } from '../ipc/ExtensionHandlers';
 import { getExtensionEnabled } from '../utils/store';
 import { getRegisteredWorkspacePaths } from '../mcp/mcpWorkspaceResolver';
-import { clearBackendToolsForModule } from '../mcp/backendToolRegistry';
+import { clearBackendToolsForModule, clearBackendTools } from '../mcp/backendToolRegistry';
 import { logger } from '../utils/logger';
+import { isGitRepositoryInUse } from '../file/GitWatcherLifecycle';
 
 /** One extension's resolved backend-module declarations + disk path. */
 export interface ResolvedBackendModules {
@@ -59,11 +60,69 @@ export interface BackendModuleLifecycleDeps {
   isExtensionEnabled: (extensionId: string) => boolean;
   /** Currently-open workspace paths. */
   collectWorkspaces: () => string[];
+  isWorkspaceInUse: (workspacePath: string) => boolean;
   startModule: (args: StartModuleArgs) => Promise<ModuleHandle>;
   stopModule: (extensionId: string, moduleId: string, workspacePath: string) => Promise<void>;
   /** Every module handle the host currently tracks (for stop-everywhere on disable). */
   listModuleHandles: () => ModuleHandle[];
+  onModuleStateChanged: (listener: (handle: ModuleHandle) => void) => () => void;
   clearBackendToolsForModule: (extensionId: string, moduleId: string) => void;
+  clearBackendTools: (workspacePath: string, extensionId: string, moduleId: string) => void;
+}
+
+// Serialize process starts and stops per workspace. Reopening must wait for a
+// previous shutdown; otherwise startModule can return the process being killed.
+const workspaceOperations = new Map<string, Promise<void>>();
+function runInWorkspace(workspacePath: string, operation: () => Promise<void>): Promise<void> {
+  const previous = workspaceOperations.get(workspacePath) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(operation);
+  workspaceOperations.set(workspacePath, next);
+  const forget = () => {
+    if (workspaceOperations.get(workspacePath) === next) workspaceOperations.delete(workspacePath);
+  };
+  void next.then(forget, forget);
+  return next;
+}
+
+/** Remember startup only while a workspace has a window or unfinished turn. */
+export class WorkspaceBackendLifecycle {
+  private readonly started = new Map<string, Promise<boolean>>();
+  constructor(private readonly deps: BackendModuleLifecycleDeps) {}
+
+  /** Lazy importer/provider starts can finish outside the eager-start queue. */
+  observeModuleStarts(): () => void {
+    return this.deps.onModuleStateChanged(handle => {
+      if (handle.state.status !== 'running' || this.deps.isWorkspaceInUse(handle.workspacePath)) return;
+      void this.prune().catch(error => logger.main.error('Failed to release late workspace extension:', error));
+    });
+  }
+
+  open(workspacePath: string): Promise<boolean> {
+    if (!this.deps.isWorkspaceInUse(workspacePath) || this.started.has(workspacePath)) return Promise.resolve(false);
+    const opening = startWorkspaceBackendModules(workspacePath, this.deps).then(() => true).catch(error => {
+      if (this.started.get(workspacePath) === opening) this.started.delete(workspacePath);
+      throw error;
+    });
+    this.started.set(workspacePath, opening);
+    return opening;
+  }
+
+  async prune(): Promise<void> {
+    const paths = new Set([...this.started.keys(), ...this.deps.listModuleHandles().map(h => h.workspacePath)]);
+    await Promise.all([...paths].map(workspacePath => {
+      if (this.deps.isWorkspaceInUse(workspacePath)) return;
+      this.started.delete(workspacePath);
+      return runInWorkspace(workspacePath, async () => {
+        for (const handle of this.deps.listModuleHandles()) {
+          if (handle.workspacePath !== workspacePath || handle.state.status === 'stopped') continue;
+          // Another window or agent may have acquired it while shutdown queued.
+          if (this.deps.isWorkspaceInUse(workspacePath)) return;
+          await this.deps.stopModule(handle.extensionId, handle.moduleId, workspacePath);
+          this.deps.clearBackendTools(workspacePath, handle.extensionId, handle.moduleId);
+        }
+      });
+    }));
+  }
 }
 
 /** Start every module of `resolved` across each of `workspaces`. */
@@ -94,17 +153,25 @@ async function startModulesAcrossWorkspaces(
     }
     for (const workspacePath of workspaces) {
       try {
-        const handle = await deps.startModule({
-          extensionId: resolved.extensionId,
-          extensionName: resolved.extensionName,
-          extensionPath: resolved.extensionPath,
-          module,
-          workspacePath,
+        await runInWorkspace(workspacePath, async () => {
+          if (!deps.isWorkspaceInUse(workspacePath) || !deps.isExtensionEnabled(resolved.extensionId)) return;
+          const handle = await deps.startModule({
+            extensionId: resolved.extensionId,
+            extensionName: resolved.extensionName,
+            extensionPath: resolved.extensionPath,
+            module,
+            workspacePath,
+          });
+          logger.main.info(
+            `[backendModuleLifecycle] start ${resolved.extensionId}/${module.id} ` +
+              `@ ${workspacePath} -> ${handle.state.status}`
+          );
+          // Consent or process startup may have finished after the last owner left.
+          if (!deps.isWorkspaceInUse(workspacePath)) {
+            await deps.stopModule(resolved.extensionId, module.id, workspacePath);
+            deps.clearBackendTools(workspacePath, resolved.extensionId, module.id);
+          }
         });
-        logger.main.info(
-          `[backendModuleLifecycle] start ${resolved.extensionId}/${module.id} ` +
-            `@ ${workspacePath} -> ${handle.state.status}`
-        );
       } catch (error) {
         logger.main.error(
           `[backendModuleLifecycle] failed to start ${resolved.extensionId}/${module.id} ` +
@@ -208,10 +275,13 @@ export function getDefaultBackendModuleLifecycleDeps(): BackendModuleLifecycleDe
     resolveBackendModules: (extensionId) => resolveExtensionBackendModules(extensionId),
     isExtensionEnabled: (extensionId) => getExtensionEnabled(extensionId),
     collectWorkspaces: () => getRegisteredWorkspacePaths(),
+    isWorkspaceInUse: workspacePath => isGitRepositoryInUse(workspacePath, new Set([workspacePath])),
+    clearBackendTools,
     startModule: (args) => getPrivilegedExtensionHost().startModule(args),
     stopModule: (extensionId, moduleId, workspacePath) =>
       getPrivilegedExtensionHost().stopModule(extensionId, moduleId, workspacePath),
     listModuleHandles: () => getPrivilegedExtensionHost().list(),
+    onModuleStateChanged: listener => getPrivilegedExtensionHost().onStateChanged(listener),
     clearBackendToolsForModule: (extensionId, moduleId) =>
       clearBackendToolsForModule(extensionId, moduleId),
   };

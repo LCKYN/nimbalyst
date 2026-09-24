@@ -26,6 +26,7 @@ import { canvasWorkingSetRegistry } from '@nimbalyst/runtime/canvas/canvasPresen
 import { store } from '@nimbalyst/runtime/store';
 import {
   sessionProcessingAtom,
+  pruneClosedSessionDataAtom,
   reloadSessionDataAtom,
   sessionListWorkspaceAtom,
   updateSessionStoreAtom,
@@ -310,6 +311,7 @@ export function initSessionStateListeners(): () => void {
       // child finishes this clears the parent's spinner within ~1s rather than
       // leaving it stuck until the user clicks the child.
       scheduleProcessingReconcile?.();
+      store.set(pruneClosedSessionDataAtom);
     }
 
     if (!ownedWorkspacePath) {

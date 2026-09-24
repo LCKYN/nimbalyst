@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Unit tests for the backend-module start-on-enable / stop-on-disable lifecycle
  * decision logic. The orchestration is dependency-injected, so these tests drive
@@ -19,12 +20,14 @@ vi.mock('../../ipc/ExtensionHandlers', () => ({
 }));
 vi.mock('../../utils/store', () => ({ getExtensionEnabled: vi.fn() }));
 vi.mock('../../mcp/mcpWorkspaceResolver', () => ({ getRegisteredWorkspacePaths: vi.fn() }));
-vi.mock('../../mcp/backendToolRegistry', () => ({ clearBackendToolsForModule: vi.fn() }));
+vi.mock('../../mcp/backendToolRegistry', () => ({ clearBackendToolsForModule: vi.fn(), clearBackendTools: vi.fn() }));
+vi.mock('../../file/GitWatcherLifecycle', () => ({ isGitRepositoryInUse: vi.fn() }));
 vi.mock('../../utils/logger', () => ({
   logger: { main: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } },
 }));
 
 import {
+  WorkspaceBackendLifecycle,
   startExtensionBackendModules,
   stopExtensionBackendModules,
   startWorkspaceBackendModules,
@@ -61,7 +64,10 @@ function makeDeps(overrides: Partial<BackendModuleLifecycleDeps> = {}): BackendM
     }) as ModuleHandle),
     stopModule: vi.fn(async () => {}),
     listModuleHandles: vi.fn(() => []),
+    onModuleStateChanged: vi.fn(() => vi.fn()),
     clearBackendToolsForModule: vi.fn(),
+    clearBackendTools: vi.fn(),
+    isWorkspaceInUse: vi.fn(() => true),
     ...overrides,
   };
 }
@@ -190,4 +196,96 @@ describe('backendModuleLifecycle', () => {
       module: { id: 'memory-engine' },
     });
   });
+});
+
+
+it('releases only unused workspaces and restarts their modules after reopening', async () => {
+  const inUse = new Set(['/ws/a', '/ws/b']);
+  const handles: ModuleHandle[] = [];
+  const deps = makeDeps({
+    isWorkspaceInUse: path => inUse.has(path),
+    startModule: vi.fn(async args => {
+      const handle: ModuleHandle = { extensionId: EXT, moduleId: MOD, workspacePath: args.workspacePath, state: { status: 'running', startedAt: 0, methods: [] } };
+      handles.push(handle); return handle;
+    }),
+    listModuleHandles: () => handles,
+  });
+  const lifecycle = new WorkspaceBackendLifecycle(deps);
+  await lifecycle.open('/ws/a');
+  await lifecycle.open('/ws/b');
+  await lifecycle.open('/ws/a'); // Repeated document-state updates don't start again.
+  expect(deps.startModule).toHaveBeenCalledTimes(2);
+  inUse.delete('/ws/a');
+  await lifecycle.prune();
+  expect(deps.stopModule).toHaveBeenCalledExactlyOnceWith(EXT, MOD, '/ws/a');
+  expect(deps.clearBackendTools).toHaveBeenCalledExactlyOnceWith('/ws/a', EXT, MOD);
+  expect(deps.clearBackendToolsForModule).not.toHaveBeenCalled();
+  inUse.add('/ws/a');
+  await lifecycle.open('/ws/a');
+  expect(deps.startModule).toHaveBeenCalledTimes(3);
+});
+
+it('releases an enable-time start that finishes after its workspace closes', async () => {
+  let used = true;
+  let finish!: (handle: ModuleHandle) => void;
+  const deps = makeDeps({
+    collectWorkspaces: () => ['/ws/late'],
+    isWorkspaceInUse: () => used,
+    startModule: vi.fn(() => new Promise<ModuleHandle>(resolve => { finish = resolve; })),
+  });
+  const starting = startExtensionBackendModules(EXT, deps);
+  await vi.waitFor(() => expect(deps.startModule).toHaveBeenCalled());
+  used = false;
+  const closing = new WorkspaceBackendLifecycle(deps).prune();
+  finish({ extensionId: EXT, moduleId: MOD, workspacePath: '/ws/late', state: { status: 'running', startedAt: 0, methods: [] } });
+  await Promise.all([starting, closing]);
+  expect(deps.stopModule).toHaveBeenCalledExactlyOnceWith(EXT, MOD, '/ws/late');
+  expect(deps.clearBackendTools).toHaveBeenCalledExactlyOnceWith('/ws/late', EXT, MOD);
+});
+
+it('waits for shutdown before starting a reopened workspace', async () => {
+  let used = true;
+  let stopped!: () => void;
+  const events: string[] = [];
+  const handle: ModuleHandle = { extensionId: EXT, moduleId: MOD, workspacePath: '/ws/race', state: { status: 'running', startedAt: 0, methods: [] } };
+  const deps = makeDeps({
+    isWorkspaceInUse: () => used,
+    listModuleHandles: () => [handle],
+    startModule: vi.fn(async () => { events.push('start'); return handle; }),
+    stopModule: vi.fn(() => new Promise<void>(resolve => { stopped = () => { events.push('stopped'); resolve(); }; })),
+  });
+  const lifecycle = new WorkspaceBackendLifecycle(deps);
+  await lifecycle.open('/ws/race');
+  used = false;
+  const closing = lifecycle.prune();
+  await vi.waitFor(() => expect(deps.stopModule).toHaveBeenCalled());
+  used = true;
+  const reopening = lifecycle.open('/ws/race');
+  await Promise.resolve();
+  expect(events).toEqual(['start']);
+  stopped();
+  await Promise.all([closing, reopening]);
+  expect(events).toEqual(['start', 'stopped', 'start']);
+});
+
+it('releases a lazy module that becomes ready after its workspace closes', async () => {
+  let listener!: (handle: ModuleHandle) => void;
+  let used = true;
+  const handle: ModuleHandle = { extensionId: EXT, moduleId: MOD, workspacePath: '/ws/lazy', state: { status: 'awaiting-consent', reason: { kind: 'first-use' } } };
+  const deps = makeDeps({
+    isWorkspaceInUse: () => used,
+    listModuleHandles: () => [handle],
+    onModuleStateChanged: vi.fn(callback => { listener = callback; return vi.fn(); }),
+  });
+  const lifecycle = new WorkspaceBackendLifecycle(deps);
+  lifecycle.observeModuleStarts();
+  listener(handle);
+  expect(deps.stopModule).not.toHaveBeenCalled();
+  handle.state = { status: 'running', startedAt: 0, methods: [] };
+  listener(handle);
+  expect(deps.stopModule).not.toHaveBeenCalled(); // An open project still owns it.
+  used = false;
+  listener(handle); // Importer/provider startup can bypass the eager-start queue.
+  await vi.waitFor(() => expect(deps.stopModule).toHaveBeenCalledExactlyOnceWith(EXT, MOD, '/ws/lazy'));
+  expect(deps.clearBackendTools).toHaveBeenCalledExactlyOnceWith('/ws/lazy', EXT, MOD);
 });
