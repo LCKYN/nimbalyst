@@ -27,6 +27,7 @@ import { store } from '@nimbalyst/runtime/store';
 import {
   sessionProcessingAtom,
   pruneClosedSessionDataAtom,
+  sessionDataReleaseListenersAtom,
   reloadSessionDataAtom,
   sessionListWorkspaceAtom,
   updateSessionStoreAtom,
@@ -197,6 +198,9 @@ export function initSessionStateListeners(): () => void {
     console.warn('[sessionStateListeners] sessionState API not available');
     return () => {};
   }
+
+  const releaseTranscript = (sessionId: string) => transcriptAccumulator.unload(sessionId);
+  store.set(sessionDataReleaseListenersAtom, listeners => new Set([...listeners, releaseTranscript]));
 
   // Debounced trigger for the processing-state reconcile (assigned once the
   // reconcile function is defined below). Fired on terminal session events so a
@@ -1203,6 +1207,11 @@ export function initSessionStateListeners(): () => void {
     cleanupSyncDraftInput?.();
     cleanupTranscriptEvent?.();
     cleanupTranscriptSessionReparsed?.();
+    store.set(sessionDataReleaseListenersAtom, listeners => {
+      const remaining = new Set(listeners);
+      remaining.delete(releaseTranscript);
+      return remaining;
+    });
     transcriptAccumulator.clear();
   };
 }

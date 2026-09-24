@@ -1750,6 +1750,8 @@ export const openSessionsAtom = atom<OpenSession[]>([]);
  */
 const loadSessionPromises = new Map<string, Promise<SessionData | null>>();
 const loadSessionWorkspaces = new Map<string, string>();
+/** Non-atom transcript caches release their references at the same boundary. */
+export const sessionDataReleaseListenersAtom = atom<ReadonlySet<(sessionId: string) => void>>(new Set<(sessionId: string) => void>());
 const closedSessionWorkspacesAtom = atom<Set<string>>(new Set<string>());
 const sessionWorkspaceGenerationsAtom = atom<Map<string, object>>(new Map());
 
@@ -1767,6 +1769,7 @@ export const pruneClosedSessionDataAtom = atom(null, (get, set) => {
     const data = get(sessionStoreAtom(sessionId));
     if (!data?.workspacePath || !closed.has(data.workspacePath) || !canReleaseSessionData(get, sessionId)) continue;
     set(sessionStoreAtom(sessionId), null);
+    for (const release of get(sessionDataReleaseListenersAtom)) release(sessionId);
     // Unmounted derived atoms can otherwise keep their last large value cached.
     for (const { family, ids } of derivedCaches) {
       if (ids.has(sessionId)) get<unknown>(family(sessionId));
@@ -1835,7 +1838,8 @@ export const loadSessionDataAtom = atom(
     const loadPromise = (async () => {
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
-      if (get(sessionWorkspaceGenerationsAtom).get(workspacePath) !== generation) return null;
+      if (get(sessionWorkspaceGenerationsAtom).get(workspacePath) !== generation ||
+          (get(closedSessionWorkspacesAtom).has(workspacePath) && canReleaseSessionData(get, sessionId))) return null;
       if (sessionData) {
         // Validate model field (for debugging)
         const model = sessionData.model;
@@ -2022,7 +2026,8 @@ export const reloadSessionDataAtom = atom(
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
 
       // Check if this reload was superseded by a newer one
-      if (thisReload.aborted) {
+      if (thisReload.aborted ||
+          (get(closedSessionWorkspacesAtom).has(workspacePath) && canReleaseSessionData(get, sessionId))) {
         return;
       }
 

@@ -42,6 +42,21 @@ describe('closed project conversation cache', () => {
     expect(store.get(sessionMessagesAtom('idle'))).toHaveLength(1);
   });
 
+  it.each([loadSessionDataAtom, reloadSessionDataAtom])('does not restore a closed history after its active turn finishes', async (loadAtom) => {
+    const store = createStore();
+    const response = deferred();
+    vi.stubGlobal('window', { electronAPI: { aiLoadSession: vi.fn(() => response.promise) } });
+    const sessionId = 'finishing';
+    store.set(sessionProcessingAtom(sessionId), true);
+    store.set(setSessionWorkspaceOpenAtom, { workspacePath: '/closed', isOpen: false });
+    const loading = store.set(loadAtom, { sessionId, workspacePath: '/closed' });
+    store.set(sessionProcessingAtom(sessionId), false);
+    store.set(pruneClosedSessionDataAtom);
+    response.resolve(data(sessionId));
+    await loading;
+    expect(store.get(sessionStoreAtom(sessionId))).toBeNull();
+  });
+
   it.each([loadSessionDataAtom, reloadSessionDataAtom])('rejects obsolete loads across close and reopen', async (loadAtom) => {
     const store = createStore();
     const old = deferred();

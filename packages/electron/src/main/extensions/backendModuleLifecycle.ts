@@ -70,15 +70,16 @@ export interface BackendModuleLifecycleDeps {
   clearBackendTools: (workspacePath: string, extensionId: string, moduleId: string) => void;
 }
 
-// Serialize process starts and stops per workspace. Reopening must wait for a
-// previous shutdown; otherwise startModule can return the process being killed.
-const workspaceOperations = new Map<string, Promise<void>>();
-function runInWorkspace(workspacePath: string, operation: () => Promise<void>): Promise<void> {
-  const previous = workspaceOperations.get(workspacePath) ?? Promise.resolve();
+// Serialize each module's starts and stops. Consent for one module must not
+// keep an unrelated running backend alive after its workspace closes.
+const moduleOperations = new Map<string, Promise<void>>();
+function runForModule(workspacePath: string, extensionId: string, moduleId: string, operation: () => Promise<void>): Promise<void> {
+  const key = JSON.stringify([workspacePath, extensionId, moduleId]);
+  const previous = moduleOperations.get(key) ?? Promise.resolve();
   const next = previous.catch(() => {}).then(operation);
-  workspaceOperations.set(workspacePath, next);
+  moduleOperations.set(key, next);
   const forget = () => {
-    if (workspaceOperations.get(workspacePath) === next) workspaceOperations.delete(workspacePath);
+    if (moduleOperations.get(key) === next) moduleOperations.delete(key);
   };
   void next.then(forget, forget);
   return next;
@@ -109,17 +110,19 @@ export class WorkspaceBackendLifecycle {
 
   async prune(): Promise<void> {
     const paths = new Set([...this.started.keys(), ...this.deps.listModuleHandles().map(h => h.workspacePath)]);
-    await Promise.all([...paths].map(workspacePath => {
-      if (this.deps.isWorkspaceInUse(workspacePath)) return;
-      this.started.delete(workspacePath);
-      return runInWorkspace(workspacePath, async () => {
-        for (const handle of this.deps.listModuleHandles()) {
-          if (handle.workspacePath !== workspacePath || handle.state.status === 'stopped') continue;
-          // Another window or agent may have acquired it while shutdown queued.
-          if (this.deps.isWorkspaceInUse(workspacePath)) return;
-          await this.deps.stopModule(handle.extensionId, handle.moduleId, workspacePath);
-          this.deps.clearBackendTools(workspacePath, handle.extensionId, handle.moduleId);
-        }
+    for (const workspacePath of paths) {
+      if (!this.deps.isWorkspaceInUse(workspacePath)) this.started.delete(workspacePath);
+    }
+    await Promise.all(this.deps.listModuleHandles().map(handle => {
+      const { workspacePath, extensionId, moduleId } = handle;
+      if (this.deps.isWorkspaceInUse(workspacePath) || handle.state.status === 'stopped') return;
+      // There is no runtime to release while consent is pending. The start
+      // path (or the lazy-start observer) rechecks ownership when it settles.
+      if (handle.state.status === 'awaiting-consent') return;
+      return runForModule(workspacePath, extensionId, moduleId, async () => {
+        if (this.deps.isWorkspaceInUse(workspacePath)) return;
+        await this.deps.stopModule(extensionId, moduleId, workspacePath);
+        this.deps.clearBackendTools(workspacePath, extensionId, moduleId);
       });
     }));
   }
@@ -153,7 +156,7 @@ async function startModulesAcrossWorkspaces(
     }
     for (const workspacePath of workspaces) {
       try {
-        await runInWorkspace(workspacePath, async () => {
+        await runForModule(workspacePath, resolved.extensionId, module.id, async () => {
           if (!deps.isWorkspaceInUse(workspacePath) || !deps.isExtensionEnabled(resolved.extensionId)) return;
           const handle = await deps.startModule({
             extensionId: resolved.extensionId,

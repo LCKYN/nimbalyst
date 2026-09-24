@@ -289,3 +289,47 @@ it('releases a lazy module that becomes ready after its workspace closes', async
   await vi.waitFor(() => expect(deps.stopModule).toHaveBeenCalledExactlyOnceWith(EXT, MOD, '/ws/lazy'));
   expect(deps.clearBackendTools).toHaveBeenCalledExactlyOnceWith('/ws/lazy', EXT, MOD);
 });
+
+
+it('releases running siblings without waiting for unanswered consent, including on reopen', async () => {
+  let used = true;
+  let answer!: () => void;
+  const handles: ModuleHandle[] = [];
+  const consent = new Promise<void>(resolve => { answer = resolve; });
+  const modules = [MOD, 'needs-consent'].map(id => ({ id, entry: 'backend.js', runtime: 'utility-process' as const }));
+  const deps = makeDeps({
+    listBackendModuleExtensions: async () => [resolved({ modules: modules as any })],
+    isWorkspaceInUse: () => used,
+    listModuleHandles: () => handles,
+    startModule: vi.fn(async args => {
+      const handle: ModuleHandle = {
+        extensionId: EXT, moduleId: args.module.id, workspacePath: args.workspacePath,
+        state: args.module.id === MOD ? { status: 'running', startedAt: 0, methods: [] }
+          : { status: 'awaiting-consent', reason: { kind: 'first-use' } },
+      };
+      handles.push(handle);
+      if (args.module.id !== MOD) await consent;
+      return handle;
+    }),
+    stopModule: vi.fn(async (_extensionId, moduleId) => {
+      for (const handle of handles) if (handle.moduleId === moduleId) handle.state = { status: 'stopped', stoppedAt: 0 };
+    }),
+  });
+  const lifecycle = new WorkspaceBackendLifecycle(deps);
+  const opening = lifecycle.open('/ws/consent');
+  let closing: Promise<void> | undefined;
+  let reopening: Promise<boolean> | undefined;
+  try {
+    await vi.waitFor(() => expect(handles).toHaveLength(2));
+    used = false;
+    closing = lifecycle.prune();
+    await vi.waitFor(() => expect(deps.stopModule).toHaveBeenCalledWith(EXT, MOD, '/ws/consent'));
+    await closing;
+    used = true;
+    reopening = lifecycle.open('/ws/consent');
+    await vi.waitFor(() => expect(handles.filter(h => h.moduleId === MOD && h.state.status === 'running')).toHaveLength(1));
+  } finally {
+    answer();
+    await Promise.all([opening, closing, reopening]);
+  }
+});
