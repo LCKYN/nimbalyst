@@ -416,7 +416,7 @@ Companion app; pairs with a desktop over encrypted sync. Voice mode is not inclu
 - GitHub Issues Importer
 - Image Generation
 - iOS Dev Tools
-- Knowledge -- agent skill carrying the shared knowledge-graph ontology (kinds, fields, relationship verbs) so team and public knowledge graphs stay consistent
+- Knowledge -- off by default; agent skill carrying the shared knowledge-graph ontology (kinds, fields, relationship verbs, and a hierarchy of areas) so team and public knowledge graphs stay consistent
 - MockupLM
 - Math -- inline and block LaTeX rendering in documents and agent transcripts
 - Nimbalyst Memory — local project-knowledge brain (hybrid search + facts) for the voice and coding agents, with separate instruction/personal-memory sources, optional on-device embeddings, and index/semantic-search readiness controls
