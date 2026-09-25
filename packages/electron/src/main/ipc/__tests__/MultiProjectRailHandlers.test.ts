@@ -140,6 +140,7 @@ vi.mock('../../utils/logger', () => ({
 
 // Imported AFTER mocks are wired so `safeHandle` calls capture into our map.
 import { registerMultiProjectRailHandlers } from '../MultiProjectRailHandlers';
+import { applyRailOrder } from '../../utils/railOrder';
 
 function makeState(partial: Partial<WindowState> = {}): WindowState {
   return {
@@ -344,5 +345,47 @@ describe('MultiProjectRailHandlers', () => {
       expect(mocks.clearFileSystemService).toHaveBeenCalled();
       expect(mocks.windowStates.get(1)?.activeWorkspacePath).toBeNull();
     });
+  });
+
+  describe('workspace:set-rail-order', () => {
+    beforeEach(() => {
+      mocks.windowStates.set(1, makeState({ workspacePath: '/ws/a', additionalWorkspacePaths: ['/ws/b'] }));
+    });
+
+    it('stores the order on the window state', async () => {
+      const result = await invoke('workspace:set-rail-order', { paths: ['/ws/b', '/ws/a'] }, 1);
+      expect(result).toMatchObject({ success: true });
+      expect(mocks.windowStates.get(1)?.railOrder).toEqual(['/ws/b', '/ws/a']);
+    });
+
+    it.each([
+      ['a non-array payload', { paths: '/ws/b' }],
+      ['a non-string entry', { paths: ['/ws/b', 3] }],
+      ['a missing payload', undefined],
+    ])('rejects %s', async (_label, data) => {
+      const result = await invoke('workspace:set-rail-order', data, 1);
+      expect(result).toMatchObject({ success: false });
+      expect(mocks.windowStates.get(1)?.railOrder).toBeUndefined();
+    });
+  });
+});
+
+describe('applyRailOrder', () => {
+  it('applies a full reorder', () => {
+    expect(applyRailOrder(['/a', '/b', '/c'], ['/c', '/a', '/b'])).toEqual(['/c', '/a', '/b']);
+  });
+
+  it('drops order entries that are no longer open', () => {
+    expect(applyRailOrder(['/a', '/b'], ['/b', '/gone', '/a'])).toEqual(['/b', '/a']);
+  });
+
+  it('puts paths missing from the order at the end, in their original order', () => {
+    expect(applyRailOrder(['/a', '/b', '/new1', '/new2'], ['/b', '/a'])).toEqual(['/b', '/a', '/new1', '/new2']);
+  });
+
+  it('returns the input unchanged for an empty or missing order', () => {
+    const paths = ['/a', '/b'];
+    expect(applyRailOrder(paths, [])).toBe(paths);
+    expect(applyRailOrder(paths, undefined)).toBe(paths);
   });
 });

@@ -15,6 +15,8 @@
  * - `workspace:set-active` -- update the visible project in a window
  *   without spawning a new BrowserWindow (the legacy `project-selected`
  *   path stays for the "open in new window" escape hatch).
+ * - `workspace:set-rail-order` -- remember the order the user dragged the
+ *   rail into, so a renderer reload restores it.
  *
  * It also owns attach/detach for multi-root workspaces. An attached folder is
  * NOT a rail project: it has no identity of its own (no settings entry, no
@@ -305,6 +307,27 @@ export function registerMultiProjectRailHandlers(): void {
             );
         }
 
+        return { success: true };
+    });
+
+    // The renderer reports the rail order after a drag so `get-initial-state`
+    // can hand it back on a renderer reload. Stored as-is; stale or missing
+    // entries are reconciled against the registered paths when it is read.
+    safeHandle('workspace:set-rail-order', async (event, data: { paths: string[] }) => {
+        const paths = data?.paths;
+        if (!Array.isArray(paths) || !paths.every((path) => typeof path === 'string')) {
+            return { success: false, error: 'paths must be a string array' };
+        }
+
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return { success: false, error: 'No window for event sender' };
+        const windowId = getWindowId(window);
+        if (windowId === null) return { success: false, error: 'No windowId' };
+
+        const state = windowStates.get(windowId);
+        if (!state) return { success: false, error: 'No window state' };
+
+        state.railOrder = [...paths];
         return { success: true };
     });
 

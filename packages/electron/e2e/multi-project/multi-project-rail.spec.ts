@@ -82,6 +82,40 @@ test.describe('Multi-Project Rail', () => {
     await expect(addButton).toBeVisible();
   });
 
+  test('dragging a rail icon reorders projects and survives a reload', async () => {
+    await page.evaluate(async (workspacePath) => {
+      const reg = await window.electronAPI.invoke('workspace:register-additional', { workspacePath });
+      if (!reg?.success) throw new Error('register-additional failed: ' + JSON.stringify(reg));
+    }, workspaceB);
+    await page.reload();
+    await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
+
+    const items = page.locator('[data-testid="project-rail"] [data-testid="project-rail-item"]');
+    await expect(items).toHaveCount(2);
+    const railOrder = () => items.evaluateAll((els) => els.map((el) => el.getAttribute('data-project-path')));
+    const [first, second] = await railOrder();
+
+    const firstBox = await items.nth(0).boundingBox();
+    const secondBox = await items.nth(1).boundingBox();
+    if (!firstBox || !secondBox) throw new Error('rail items have no bounding box');
+    const x = secondBox.x + secondBox.width / 2;
+    await page.mouse.move(x, secondBox.y + secondBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x, firstBox.y + firstBox.height / 2, { steps: 12 });
+    await page.mouse.up();
+
+    await expect.poll(railOrder).toEqual([second, first]);
+
+    // The order reaches the window state, so a renderer reload keeps it.
+    await expect
+      .poll(() => page.evaluate(async () => (await window.electronAPI.getInitialState?.())?.openProjectPaths))
+      .toEqual([second, first]);
+    await page.reload();
+    await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
+    await expect(items).toHaveCount(2);
+    await expect.poll(railOrder).toEqual([second, first]);
+  });
+
   test('register-additional adds a second project and switches activate', async () => {
     await page.evaluate(async (paths) => {
       const reg = await window.electronAPI.invoke('workspace:register-additional', {

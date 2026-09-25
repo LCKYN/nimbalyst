@@ -38,6 +38,12 @@ export interface WindowState {
      * and document caches stay alive even when the project is hidden.
      */
     additionalWorkspacePaths?: string[];
+    /**
+     * Rail order the user dragged the projects into. Applied on top of
+     * `[workspacePath, ...additionalWorkspacePaths]` by `get-initial-state`
+     * so a renderer reload keeps the custom order.
+     */
+    railOrder?: string[];
     documentEdited: boolean;
 
     // Tab management (optional for backward compatibility)

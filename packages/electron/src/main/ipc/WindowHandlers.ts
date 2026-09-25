@@ -11,6 +11,7 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { hasFocusedWindow } from '../services/analytics/dailyActiveHeartbeat';
 import { getPackageRoot } from '../utils/appPaths';
 import { resolveImageExtension } from '../utils/imageFormat';
+import { applyRailOrder } from '../utils/railOrder';
 import { resolveWorkspaceAttachmentStagingDirectory } from '../services/attachments/attachmentStagingRoot';
 
 /** Timestamp of last app_foregrounded event, used to throttle to once per 30 minutes */
@@ -41,8 +42,11 @@ export function registerWindowHandlers() {
         if (!state) return null;
 
         if (state.mode === 'workspace' && state.workspacePath) {
-            const openProjectPaths = [state.workspacePath, ...(state.additionalWorkspacePaths ?? [])]
-                .filter((path, index, paths) => typeof path === 'string' && path.length > 0 && paths.indexOf(path) === index);
+            const openProjectPaths = applyRailOrder(
+                [state.workspacePath, ...(state.additionalWorkspacePaths ?? [])]
+                    .filter((path, index, paths) => typeof path === 'string' && path.length > 0 && paths.indexOf(path) === index),
+                state.railOrder,
+            );
             const activeWorkspacePath =
                 state.activeWorkspacePath && openProjectPaths.includes(state.activeWorkspacePath)
                     ? state.activeWorkspacePath
