@@ -173,7 +173,6 @@ import {
 import { useProjectOrg } from './hooks/useProjectOrg';
 import { shouldLeaveOrgMode } from '../shared/orgProjectWalk';
 import { TrayPanelApp } from './components/TrayPanel/TrayPanelApp';
-import { MenuBarIslandApp } from './components/MenuBarIsland/MenuBarIslandApp';
 import { TerminalBottomPanel } from './components/TerminalBottomPanel';
 import { SessionLaunchPopup } from './components/UnifiedAI/SessionLaunchPopup';
 import { TrackerQuickCreatePopup } from './components/TrackerQuickCreate/TrackerQuickCreatePopup';
@@ -191,6 +190,7 @@ import { organizationDirectoryAtom, personalAccountsAtom } from './store/atoms/s
 import {
   activeWorkspacePathAtom,
   multiProjectModeAtom,
+  openProjectsAtom,
   addOpenProjectAtom as addOpenProjectAction,
 } from './store/atoms/openProjects';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
@@ -587,12 +587,6 @@ export default function App() {
   // Menu-bar sessions panel. A frameless tray-anchored window with no title.
   if (windowMode === 'tray-panel') {
     return <TrayPanelApp />;
-  }
-
-  // The menu bar island: the fleet strip drawn in the menu bar row itself,
-  // expanding into the same session rows the panel above shows.
-  if (windowMode === 'menu-bar-island') {
-    return <MenuBarIslandApp />;
   }
 
   // IMPORTANT: These are refs, not state, to prevent re-renders when the active file changes.
@@ -2401,16 +2395,17 @@ export default function App() {
             if (initialState.workspacePath) {
               await initWindowMode(initialState.workspacePath);
               // Initialize unified navigation history
-              await initNavigationHistory(initialState.workspacePath);
+              await initNavigationHistory(initialState.workspacePath, { setActive: false });
 
-              // Seed the multi-project rail: this window's primary
-              // workspace is always represented in the rail (visible only
-              // when multiProjectMode is on, hidden otherwise).
-              addOpenProject({
-                path: initialState.workspacePath,
-                name: initialState.workspaceName ?? initialState.workspacePath,
-                openedAt: Date.now(),
-              });
+              // Preserve the restored selection if the primary is already
+              // present. Adding it again would activate it after these awaits.
+              if (!store.get(openProjectsAtom).some(project => project.path === initialState.workspacePath)) {
+                addOpenProject({
+                  path: initialState.workspacePath,
+                  name: initialState.workspaceName ?? initialState.workspacePath,
+                  openedAt: Date.now(),
+                });
+              }
             }
           }
         }

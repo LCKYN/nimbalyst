@@ -18,6 +18,11 @@ function snapshot(overrides: Partial<SyncStatusSnapshot> = {}): SyncStatusSnapsh
 }
 
 describe('summarizeSyncStatus', () => {
+  it('does not report healthy sync while the connected transport has a closed write gate', () => {
+    expect(summarizeSyncStatus(snapshot({ personalSyncWriteGate: { state: 'unverified', reason: null, detail: null } }), NOW)).toMatchObject({ tone: 'idle', detail: 'Checking session sync…' });
+    expect(summarizeSyncStatus(snapshot({ personalSyncWriteGate: { state: 'blocked', reason: 'update-required', detail: 'Old client' } }), NOW)).toMatchObject({ tone: 'error', needsAttention: true });
+  });
+
   it('has nothing to say when the user is not signed in', () => {
     expect(summarizeSyncStatus(snapshot({ appConfigured: false }), NOW)).toBeNull();
   });
@@ -35,6 +40,16 @@ describe('summarizeSyncStatus', () => {
     expect(detail(NOW - 2 * 86_400_000)).toBe('Synced 2d ago');
     // Connected but never synced must not read as "Synced null".
     expect(detail(null)).toBe('Connected');
+  });
+
+  it('reports skipped rows as an advisory while sync stays healthy', () => {
+    const result = summarizeSyncStatus(snapshot({ skippedRowCount: 2 }), NOW);
+    expect(result).toMatchObject({ tone: 'ok', needsAttention: false });
+    expect(result?.notice).toContain('2 synced sessions');
+  });
+
+  it.each([{}, { skippedRowCount: 0 }])('omits the notice when no skipped sessions are reported (%j)', overrides => {
+    expect(summarizeSyncStatus(snapshot(overrides), NOW)?.notice).toBeUndefined();
   });
 
   it('does not flag a project the user deliberately opted out of', () => {

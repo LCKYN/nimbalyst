@@ -16,6 +16,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { store } from '@nimbalyst/runtime/store';
 import {
+  sessionStoreAtom,
+  setSessionWorkspaceOpenAtom,
   sessionHasPendingInteractivePromptAtom,
   sessionProcessingAtom,
   sessionPendingPromptsAtom,
@@ -38,6 +40,7 @@ import {
   workstreamActiveChildAtom,
   workstreamStatesLoadedAtom,
 } from '../atoms/workstreamState';
+import { TranscriptStreamAccumulator } from '../transcriptStreamAccumulator';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 function seedRegistry(entries: Array<Partial<SessionMeta> & { id: string }>): void {
@@ -707,6 +710,62 @@ describe('direct prompt events: AskUserQuestion', () => {
     expect(store.get(sessionHasPendingInteractivePromptAtom(sid))).toBe(false);
     expect(store.get(sessionPendingPromptsAtom(sid))).toHaveLength(0);
   });
+
+  // GitHub #1549. A question that is aborted or cancelled never produced an
+  // answer, so nothing cleared this flag: the session kept advertising a widget
+  // the transcript had already terminalized. Cancellation settles the prompt on
+  // the same terms an answer does.
+  it('ai:askUserQuestionCancelled clears pending and removes prompt', () => {
+    const sid = uniqueSessionId('auq-cancel');
+    const qid = 'q-1';
+    const cancelled = handlers.get('ai:askUserQuestionCancelled');
+    expect(cancelled).toBeTypeOf('function');
+
+    handlers.get('ai:askUserQuestion')!({ sessionId: sid, questionId: qid, questions: [] });
+    expect(store.get(sessionHasPendingInteractivePromptAtom(sid))).toBe(true);
+
+    cancelled!({ sessionId: sid, questionId: qid });
+
+    expect(store.get(sessionHasPendingInteractivePromptAtom(sid))).toBe(false);
+    expect(store.get(sessionPendingPromptsAtom(sid))).toHaveLength(0);
+  });
+
+  // Regression: the resolve handler removed only the settled prompt from the
+  // array but hard-cleared the aggregate flag, so cancelling or answering Q1
+  // stopped the sidebar advertising Q2. The flag has to be recomputed from
+  // what is left.
+  it('keeps the aggregate flag set when a sibling question is still pending', () => {
+    const sid = uniqueSessionId('auq-two');
+    handlers.get('ai:askUserQuestion')!({ sessionId: sid, questionId: 'q-1', questions: [] });
+    handlers.get('ai:askUserQuestion')!({ sessionId: sid, questionId: 'q-2', questions: [] });
+    expect(store.get(sessionPendingPromptsAtom(sid))).toHaveLength(2);
+
+    handlers.get('ai:askUserQuestionCancelled')!({ sessionId: sid, questionId: 'q-1' });
+
+    expect(store.get(sessionHasPendingInteractivePromptAtom(sid))).toBe(true);
+    const remaining = store.get(sessionPendingPromptsAtom(sid));
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].promptId).toBe('q-2');
+
+    handlers.get('ai:askUserQuestionCancelled')!({ sessionId: sid, questionId: 'q-2' });
+
+    expect(store.get(sessionHasPendingInteractivePromptAtom(sid))).toBe(false);
+    expect(store.get(sessionPendingPromptsAtom(sid))).toHaveLength(0);
+  });
+
+  // The array holds every interactive prompt kind, so a question settling must
+  // not clear a tool permission the user has not answered yet.
+  it('keeps the aggregate flag set when a tool permission is still pending', () => {
+    const sid = uniqueSessionId('auq-perm');
+    handlers.get('ai:askUserQuestion')!({ sessionId: sid, questionId: 'q-1', questions: [] });
+    handlers.get('ai:toolPermission')!({ sessionId: sid, requestId: 'perm-1', request: { toolName: 'Bash' } });
+    expect(store.get(sessionPendingPromptsAtom(sid))).toHaveLength(2);
+
+    handlers.get('ai:askUserQuestionAnswered')!({ sessionId: sid, questionId: 'q-1' });
+
+    expect(store.get(sessionHasPendingInteractivePromptAtom(sid))).toBe(true);
+    expect(store.get(sessionPendingPromptsAtom(sid))).toHaveLength(1);
+  });
 });
 
 describe('direct prompt events: ExitPlanMode', () => {
@@ -758,6 +817,14 @@ describe('direct prompt events: ToolPermission', () => {
 });
 
 describe('direct prompt events: GitCommitProposal', () => {
+  it('does not request user input for a proposal already approved automatically', () => {
+    const sid = uniqueSessionId('gcp-auto');
+    handlers.get('ai:gitCommitProposal')!({ sessionId: sid, proposalId: 'auto-1', autoApproved: true });
+
+    expect(store.get(sessionHasPendingInteractivePromptAtom(sid))).toBe(false);
+    expect(store.get(sessionPendingPromptsAtom(sid))).toHaveLength(0);
+  });
+
   it('ai:gitCommitProposal sets pending true and pushes prompt', () => {
     const sid = uniqueSessionId('gcp-set');
     const pid = 'gcp-1';
@@ -971,6 +1038,35 @@ describe('processing reconcile on terminal events', () => {
       expect(store.get(sessionProcessingAtom(child))).toBe(false); // healed via children union
     } finally {
       vi.useRealTimers();
+    }
+  });
+});
+
+
+describe('closed project transcript retention', () => {
+  it('unloads streamed histories on close or completion while preserving an open project', () => {
+    const apply = vi.spyOn(TranscriptStreamAccumulator.prototype, 'apply');
+    const workspacePath = '/ws/cache-cleanup';
+    const ids = ['idle', 'running', 'other'].map(uniqueSessionId);
+    try {
+      for (const [index, sessionId] of ids.entries()) {
+        store.set(sessionStoreAtom(sessionId), { id: sessionId, workspacePath: index === 2 ? '/other' : workspacePath, messages: [] } as any);
+        handlers.get('transcript:event')!({ id: index + 1, sessionId, sequence: 1, createdAt: new Date(), eventType: 'assistant_message', searchableText: 'retained response', payload: {}, parentEventId: null, searchable: true, subagentId: null, provider: 'claude-code', providerToolCallId: null });
+      }
+      const accumulator = apply.mock.instances[0] as TranscriptStreamAccumulator;
+      expect(accumulator.hasPendingFlush(ids[0])).toBe(true);
+      store.set(sessionProcessingAtom(ids[1]), true);
+      store.set(setSessionWorkspaceOpenAtom, { workspacePath, isOpen: false });
+      expect(accumulator.hasPendingFlush(ids[0])).toBe(false);
+      expect(accumulator.hasPendingFlush(ids[1])).toBe(true);
+      expect(accumulator.hasPendingFlush(ids[2])).toBe(true);
+      handlers.get('ai-session-state:event')!({ type: 'session:completed', sessionId: ids[1], workspacePath });
+      expect(accumulator.hasPendingFlush(ids[1])).toBe(false);
+      expect(accumulator.hasPendingFlush(ids[2])).toBe(true);
+    } finally {
+      apply.mockRestore();
+      store.set(setSessionWorkspaceOpenAtom, { workspacePath, isOpen: true });
+      for (const id of ids) store.set(sessionStoreAtom(id), null);
     }
   });
 });

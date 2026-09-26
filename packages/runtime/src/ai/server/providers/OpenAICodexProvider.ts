@@ -1,3 +1,4 @@
+import { codexSessionConfigurationKey } from '../protocols/codexAppServer/windowsSandbox';
 import path from 'path';
 import crypto from 'crypto';
 import OpenAI from 'openai';
@@ -120,10 +121,11 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     contextWindow: number;
     maxTokens: number;
   }> = [
-    // Codex hides gpt-6-astra from its own picker (`"visibility": "hide"`) but
-    // marks it `"supported_in_api": true`, so it only appears when we name it
-    // explicitly. Its catalog entry requires codex >= 0.153.0.
-    { id: 'gpt-6-astra', name: 'GPT-6 Astra', contextWindow: 372000, maxTokens: 128000 },
+    // GPT-6 catalog entries require codex >= 0.153.0 (Astra) and >= 0.155.0
+    // (Sol, Luna); the catalog lists a 272k default context window for all three.
+    { id: 'gpt-6-sol', name: 'GPT-6 Sol', contextWindow: 272000, maxTokens: 128000 },
+    { id: 'gpt-6-astra', name: 'GPT-6 Astra', contextWindow: 272000, maxTokens: 128000 },
+    { id: 'gpt-6-luna', name: 'GPT-6 Luna', contextWindow: 272000, maxTokens: 128000 },
     { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', contextWindow: 372000, maxTokens: 128000 },
     { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra', contextWindow: 372000, maxTokens: 128000 },
     { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', contextWindow: 372000, maxTokens: 128000 },
@@ -132,6 +134,8 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', contextWindow: 400000, maxTokens: 128000 },
   ];
   private static readonly MODEL_FALLBACK_PRIORITY: ReadonlyArray<string> = [
+    'gpt-6-sol',
+    'gpt-6-luna',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
     'gpt-5.6-luna',
@@ -519,7 +523,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   static normalizeModelSelection(modelId: string): string {
     const normalized = modelId.trim().toLowerCase();
     if (OpenAICodexProvider.LEGACY_MODEL_ALIASES.has(normalized)) {
-      return 'openai-codex:gpt-5.6-sol';
+      return OpenAICodexProvider.DEFAULT_MODEL;
     }
 
     const parsed = ModelIdentifier.tryParse(modelId);
@@ -1066,7 +1070,12 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       //   2. A persisted thread id (`this.sessions.getSessionId`) from a prior
       //      Nimbalyst process. Call `resumeSession` to attach to it.
       //   3. Otherwise, `createSession`.
-      const permissionKey = `${permissionDecision.permissionMode ?? 'none'}:${permissionDecision.agentVerified === true}`;
+      // Include authorized sibling roots in the cache key so new worktrees take effect next turn.
+      const additionalDirectories = OpenAICodexProvider.additionalDirectoriesLoader
+        ? OpenAICodexProvider.additionalDirectoriesLoader(workspacePath)
+        : [];
+
+      const permissionKey = codexSessionConfigurationKey(permissionDecision.permissionMode, permissionDecision.agentVerified === true, workspacePath, additionalDirectories);
       let cachedLiveSession = sessionId ? this.liveProtocolSessions.get(sessionId) : undefined;
       if (
         sessionId &&
@@ -1127,15 +1136,6 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       }
 
       const resolvedModel = await this.getConfiguredModel();
-
-      // Sibling worktrees and the parent project root the agent is allowed to
-      // write to, in addition to its workingDirectory. Without this, Codex's
-      // workspace-write sandbox blocks orchestrator edits across worktrees and
-      // `git rebase --continue` from inside a worktree (the .git common dir
-      // sits outside the worktree). Issue #37 problem 1.
-      const additionalDirectories = OpenAICodexProvider.additionalDirectoriesLoader
-        ? OpenAICodexProvider.additionalDirectoriesLoader(workspacePath)
-        : [];
 
       const sessionOptions = {
         workspacePath,
@@ -1924,7 +1924,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     const resolved = parsed ? parsed.model : configured.replace(/^openai-codex:/, '');
     const normalized = resolved.toLowerCase();
     if (normalized === 'openai-codex-cli' || normalized === 'default' || normalized === 'cli') {
-      return 'gpt-5.6-sol';
+      return 'gpt-6-sol';
     }
 
     // Pass the model directly to the Codex SDK without pre-validation.

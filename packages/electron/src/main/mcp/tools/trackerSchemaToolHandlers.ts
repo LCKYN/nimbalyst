@@ -1,10 +1,18 @@
 import * as path from 'path';
-import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel';
+import { globalRegistry } from '@nimbalyst/tracker-schema';
 import type {
   TrackerDataModel,
   TrackerSchemaPatch,
 } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
-import { resolveTrackerSchemaChangeGate } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/trackerSchemaChangeClassifier';
+import {
+  classifyPredicateRegistryChanges,
+  destructivePredicateRegistryChanges,
+  resolveTrackerSchemaChangeGate,
+  validatePredicateRegistry,
+  validateTrackerTypePredicateDeclarations,
+  type PredicateDeclaringType,
+  type PredicateDefinition,
+} from '@nimbalyst/tracker-schema';
 import { getCurrentIdentity } from '../../services/TrackerIdentityService';
 import {
   deleteWorkspaceTrackerSchema,
@@ -29,6 +37,7 @@ import {
   materializeTrackerTypeDef,
   removeTrackerTypeDef,
 } from '../../services/tracker/trackerTypeDefStore';
+import { writeWorkspacePredicateRegistry } from '../../services/tracker/trackerPredicateRegistryFile';
 import { getDocumentServiceForWorkspace } from './trackerToolItemAccess';
 import {
   destructiveSchemaChangeToolResult,
@@ -120,9 +129,73 @@ function buildTrackerSchemaFromArgs(args: any): any {
     fileName: _fileName,
     overwrite: _overwrite,
     promoteExistingItems: _promoteExistingItems,
+    predicates: _predicates,
     ...rest
   } = args ?? {};
   return rest;
+}
+
+/**
+ * Apply a `predicates:` declaration (knowledge-scopes 4.1): replace the
+ * project's registry.
+ *
+ * Replace, not merge, matching how the room publishes it -- see
+ * `TrackerDataModelRegistry.setPredicates`. That makes removal expressible,
+ * which is why the destructive gate below is not optional: removing a
+ * predicate, narrowing its `subjectKinds`, or making a qualifier required
+ * invalidates statements already written on teammates' items, exactly as
+ * removing a field does, so it goes through the same
+ * additive-versus-destructive rule type schemas get.
+ *
+ * Returns a tool error result, or null when the registry was applied.
+ */
+async function applyPredicateRegistryArgs(
+  workspacePath: string,
+  args: any,
+): Promise<{ error: McpToolResult } | { applied: PredicateDefinition[]; summary: string }> {
+  const validation = validatePredicateRegistry(args.predicates);
+  if (!validation.valid) {
+    return {
+      error: {
+        content: [{
+          type: 'text',
+          text: `Error: invalid predicate registry.\n${validation.issues
+            .map(issue => `- ${issue.code} at '${issue.path}': ${issue.message}`)
+            .join('\n')}`,
+        }],
+        isError: true,
+      },
+    };
+  }
+
+  const { classification, changes } = classifyPredicateRegistryChanges(
+    globalRegistry.getAllPredicates(),
+    validation.predicates,
+  );
+  if (classification === 'destructive' && args?.confirmDestructive !== true) {
+    const destructive = destructivePredicateRegistryChanges(changes);
+    return {
+      error: {
+        content: [{
+          type: 'text',
+          text: `This predicate registry change is destructive and needs \`confirmDestructive: true\`:\n${destructive
+            .map(change => `- ${change.kind} on '${change.predicateId}'`)
+            .join('\n')}\nStatements already written under these predicates stop validating.`,
+        }],
+        isError: true,
+      },
+    };
+  }
+
+  await writeWorkspacePredicateRegistry(workspacePath, validation.predicates);
+  globalRegistry.setPredicates(validation.predicates);
+
+  return {
+    applied: validation.predicates,
+    summary: classification === 'none'
+      ? `Predicate registry unchanged (${validation.predicates.length} predicate(s)).`
+      : `Wrote ${validation.predicates.length} predicate(s) to .nimbalyst/predicates.yaml (${classification} change).`,
+  };
 }
 
 async function persistAttributedTrackerSchemaEdit(
@@ -159,7 +232,11 @@ export async function handleTrackerListTypes(
     const includeCustom = args?.includeCustom !== false;
     const search = typeof args?.search === 'string' ? args.search.trim().toLowerCase() : '';
 
-    const items = getAllTrackerSchemas()
+    const allSchemas = getAllTrackerSchemas();
+    const registeredTypes = new Set(allSchemas.map((model) => model.type));
+    const items = allSchemas
+      // Same rule as `globalRegistry.getListed()`: a type waiting on another is not offered.
+      .filter((model) => !model.hiddenUntilType || registeredTypes.has(model.hiddenUntilType))
       .filter((model) => {
         const builtin = isBuiltinTrackerSchema(model.type);
         if (builtin && !includeBuiltin) return false;
@@ -244,6 +321,32 @@ export async function handleTrackerDefineType(
     // Load existing custom types so a redefine collides with the right file and
     // an agent doesn't think the type is missing (NIM-760).
     ensureWorkspaceTrackerSchemasLoaded(workspacePath);
+
+    // Predicates first: a type declaring `predicate:` on a field needs the verb
+    // to exist before the declaration below is checked against the registry.
+    let predicateSummary = '';
+    if (Array.isArray(args?.predicates)) {
+      const outcome = await applyPredicateRegistryArgs(workspacePath, args);
+      if ('error' in outcome) return outcome.error;
+      predicateSummary = outcome.summary;
+      // A registry-only call is complete here.
+      if (!args?.schema && !args?.patch && typeof args?.type !== 'string') {
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              structured: {
+                action: 'defined-predicates' as const,
+                count: outcome.applied.length,
+                predicates: outcome.applied,
+              },
+              summary: predicateSummary,
+            }),
+          }],
+          isError: false,
+        };
+      }
+    }
 
     const requestedDefinition = args?.patch ?? (
       args?.schema && typeof args.schema === 'object' && !Array.isArray(args.schema)
@@ -357,6 +460,30 @@ export async function handleTrackerDefineType(
         isError: true,
       };
     }
+    // A field's `predicate:` is checked against the registry HERE, not at the
+    // first item write: the defect is in the schema, and reporting it when
+    // someone later tries to save an item points the wrong person at the wrong
+    // thing. `validate()` still reports the same codes at write time, for a
+    // registry that moved after the type was authored.
+    const predicateIssues = Array.isArray(schema.fields)
+      ? validateTrackerTypePredicateDeclarations(
+          schema as PredicateDeclaringType,
+          (id) => globalRegistry.getPredicate(id),
+          (type) => globalRegistry.get(type)?.extends,
+        )
+      : [];
+    if (predicateIssues.length > 0) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Error: tracker type '${schema.type}' declares predicates this project does not support.\n${predicateIssues
+            .map(issue => `- ${issue.code} at '${issue.path}': ${issue.message}`)
+            .join('\n')}`,
+        }],
+        isError: true,
+      };
+    }
+
     const { model: writtenModel, filePath, backupPath } = await upsertWorkspaceTrackerSchema(workspacePath, schema, {
       fileName: args?.fileName,
       overwrite: args?.overwrite === true,

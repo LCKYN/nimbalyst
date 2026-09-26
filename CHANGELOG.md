@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Run sessions in your own Cloudflare sandbox with machine navigation, the shared composer, attachments and Actions, and profile/account selections remembered per project.
 - The AI Usage Report has a new Sessions tab breaking down cost and tokens per session, grouped by phase or tag, split between input, output, main and sub-agent usage, sortable by any column with per-group totals, and each row opens its session.
 - The AI Usage Report opens in the main window from the sidebar, and scopes every panel to one workspace and a shared date range; hovering the activity heatmap reports that hour's activity and token usage.
+- Opt into unlimited open projects with a scrollable project rail and cleanup of unused project resources.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -32,6 +33,146 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 <!-- Removed features go here -->
+
+## [0.78.5] - 2026-09-24
+
+
+### Added
+<!-- New features go here -->
+- Claude Opus 5.5 is available in the Claude API model picker and is the new Claude API default.
+- GPT-6 Sol and GPT-6 Luna are available for Codex and OpenAI API sessions, and GPT-6 Sol is the new default for both.
+- Knowledge extension (off by default) gives agents a shared ontology for team knowledge graphs: entities, claims, questions, findings, the verbs that connect them, and a hierarchy of areas.
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+<!-- Bug fixes go here -->
+- The macOS menu bar island follows the dark theme again instead of showing light colors
+- Tracker lists grouped by type, and row type badges, show type names instead of raw type ids
+- Codex sessions can read the reference files that come with extension skills
+- Find in markdown files highlights and moves between matches again after switching between raw and rich view, and Cmd+G / Cmd+Shift+G now step through matches
+- Extensions that are off by default no longer give agents their skills until they are enabled
+
+### Removed
+<!-- Removed features go here -->
+- The `tracker_install_pack` agent tool; the Knowledge extension replaces knowledge packs.
+
+## [0.78.4] - 2026-09-22
+
+
+### Added
+<!-- New features go here -->
+- Use Opus 5.5 in Claude Agent and Claude Code CLI while keeping older Opus versions selectable.
+- Fenced code blocks in the chat panel show a copy button with confirmation.
+- Agents can install knowledge packs that add claim, entity, question, finding, and investigation trackers, with citations pinned to the exact version of the item they cite.
+
+### Changed
+<!-- Changes to existing functionality go here -->
+- The menu bar island loads only what it displays instead of the full app, reducing its memory use.
+
+### Fixed
+<!-- Bug fixes go here -->
+- Mobile session creation reports sync failures accurately, and sync status shows when session writes are unavailable.
+- Review with AI starts a pull request review without requiring a custom slash command (#1556).
+- Codex can ask interactive questions when tool approval is set to never (#1553).
+- Spawned sessions run correctly in projects opened through symlinks or different path casing (#1551).
+- Foreground commands no longer trigger background-task wake-ups, and genuine completions are delivered once (#1493).
+- Cancelling a question clears its waiting state without hiding other pending prompts (#1549).
+- Tracker field edits preserve untouched frontmatter comments, formatting, dates, and line endings (#1552).
+- A failed organization directory lookup is reported as unavailable and retried instead of showing an empty organization list.
+- An agent edit to a long, list-heavy markdown file no longer freezes the editor while its inline diff is computed.
+- Memory extension re-indexing skips unchanged files and records instead of rebuilding its whole search index for each batch.
+- OpenCode sessions resume after a permission prompt instead of stalling (#1563).
+
+## [0.78.2] - 2026-09-18
+
+
+### Added
+- Open shared documents in the browser from their document menu.
+- Share Namenym naming projects for collaborative editing and individual favorites on desktop and the web.
+
+### Fixed
+- Codex honors writable directories, detects unexpected read-only sessions, and offers Windows sandbox setup (#1544).
+- Codex file tracking handles rebuilds, slow commands, restarts, and overlapping sessions without false edits or warnings.
+- Browser previews no longer remain over the app after switching tabs (#1547).
+- Claude usage consistently shows percent used, matching its progress bars (#1546).
+- Image previews refresh after external edits and recover from failed loads (#1543).
+- Pasting tracker values across grouped rows keeps each value aligned with its record (#1548).
+- Organizations recover after startup sign-in delays instead of appearing empty.
+- Cloudflare sandbox failures show clearer errors and refresh connection status before retrying.
+- Workspace windows stay on-screen after disconnecting or rearranging monitors (#1535).
+- Claude plugins no longer load duplicate, unconfigured copies (#1465).
+- Personal session sync keeps publishing when some server entries use another device's key (#1545, #1542).
+- Selecting Stable while running a newer build no longer rolls the app back on every launch (#1545).
+- Unreadable sync credentials preserve the existing encryption key (#1542).
+
+## [0.78.1] - 2026-09-17
+
+
+### Added
+<!-- New features go here -->
+- Browse trackers comfortably on phones with stacked lists, compact filters, and an explicit plan editing mode.
+- Try GPT Live voice on iOS with session context, spoken prompt handling, audio routing, synced-file access, and desktop announcements.
+- Manage paired computers by hiding, restoring, or renaming devices when using a compatible sync server.
+- Navigate the AI model, effort, and Actions menus entirely by keyboard.
+- Optionally follow external Claude Code and Codex CLI sessions live, including their names, from Agent Features settings.
+
+### Changed
+<!-- Changes to existing functionality go here -->
+- Claude sessions use an updated SDK for more reliable MCP tools and resume while respecting enterprise restrictions.
+- iOS computer switching opens from the top-right computer status button.
+- Required Claude approvals default to Deny and allow only one-time approval.
+- Settings diagnostics distinguish agent-verified trust from user-authored configuration.
+
+### Fixed
+<!-- Bug fixes go here -->
+- iOS session search, loading, transcript ordering, and reconnect recovery remain reliable across app lifecycle changes.
+- Consumed prompts stay out of the iOS queue and delivery warnings clear when the desktop starts or finishes processing.
+- iPhone fleet Live Activities recover after expiration or reconnecting and stay visible while using the Mac with an updated sync server.
+- The session sidebar stays visible when rotating iPhone to landscape.
+- Restarting Nimbalyst preserves open projects.
+- File-linked sessions and Actions metadata refresh without missed changes or repeated background lookups.
+- On Windows, Gemini connects to the open Antigravity editor and offers current Flash models.
+- In-app HTML previews render UTF-8 text correctly even when the document omits a charset declaration.
+- Commit proposals stay in the session worktree and reject unsupported checkout overrides.
+- Codex turns survive transient reconnects and keep tracking shell edits after tool failures.
+- Shared CSVs retain all rows and concurrent edits, and custom-editor reviews complete after Keep or Revert.
+- Landscape PDF pages use the correct page size and text alignment.
+- Packaged file search uses the bundled ripgrep reliably.
+- On Linux, the taskbar and window switcher show the Nimbalyst icon instead of a generic one (#697).
+- Internal MCP servers accept Streamable HTTP clients that omit a required response media type.
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.78.0] - 2026-09-14
+
+
+### Added
+- Run remote sessions in your own Cloudflare sandbox with attachments, Actions, and saved account preferences.
+- Claude usage shows model-specific weekly allowances remaining and reset times, including Fable.
+- Active transcript turns show elapsed time.
+
+### Changed
+- Canvas boards gain richer editing controls, zoomed-out previews, and screen navigation with editable titles and screenshot links.
+- GPT Live voice previews play instantly offline without an API key.
+- Prisma diagrams gain clearer relationship routing and layout controls while preserving source text during layout-only saves.
+
+### Fixed
+- Voice mode starts more reliably, communicates with coding agents, sleeps through silent audio, and reports auto-approved commits.
+- Editor screenshots avoid freezes and support unopened Markdown, code, image, and extension files.
+- Open files recover from missed disk changes, preserve unsaved edits, and block saves when the disk version cannot be verified.
+- Accepting large document rewrites preserves paragraph order; rejecting them restores the original formatting.
+- SQLite migrations retain progress, verify the switch after restart, and preserve recovery copies when history cannot be copied.
+- Git pushes stay connected during long checks and report SSH disconnects and termination signals clearly.
+- The GitHub panel clears unrelated AI sessions when the selected PR or issue has no matching session.
+- Slash-command search ranks exact matches first, then prefixes, with alphabetical ordering among equal matches.
+- Menu bar status colors match the panel: green for running sessions and blue for unread sessions.
+- iOS avoids launch hangs, reports sync failures, and preserves newer settings and drafts across reconnects.
+- Mobile-created sessions target the desktop, open without restarting, and report creation failures.
+- Consumed messages stay out of the mobile queue, and slash commands sync automatically after reconnecting.
+- Removing a Cloudflare sandbox also removes its container application.
 
 ## [0.77.5] - 2026-09-09
 

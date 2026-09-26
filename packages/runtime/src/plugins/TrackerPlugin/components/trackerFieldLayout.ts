@@ -11,7 +11,7 @@ import { globalRegistry } from '../models';
 import type {
   FieldDefinition,
   TrackerSchemaRole,
-} from '../models/TrackerDataModel';
+} from '@nimbalyst/tracker-schema';
 import type { TrackerRecord } from '../../../core/TrackerRecord';
 
 /** Semantic roles, in the order a reader scans them. */
@@ -93,6 +93,23 @@ export function formatTrackerFieldLabel(name: string): string {
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, (character) => character.toUpperCase())
     .trim();
+}
+
+const SELF_ANONYMOUS_FIELD_TYPES = new Set([
+  'date', 'datetime', 'url', 'user', 'relationship', 'reference', 'citation',
+]);
+
+/** Empty pills already show their field name. Selected option icons identify compact selects. */
+export function shouldLabelTrackerField(
+  field: FieldDefinition,
+  value: unknown,
+  labelFields = false,
+): boolean {
+  if (isTrackerFieldEmpty(value)) return false;
+  if (SELF_ANONYMOUS_FIELD_TYPES.has(field.type)) return true;
+  if (!labelFields) return false;
+  return field.type !== 'select'
+    || !field.options?.find(option => option.value === value)?.icon;
 }
 
 /** True when a field value should render as "not set". */

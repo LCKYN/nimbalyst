@@ -76,6 +76,24 @@ describe('SettingsService', () => {
     try { fs.unlinkSync(STORE_FALLBACK); } catch { /* ok if missing */ }
   });
 
+  it('persists unlimited projects and rejects non-boolean values', async () => {
+    const { getSettingsService } = await import('../SettingsService');
+    const svc = getSettingsService();
+    expect(svc.get('projects.allowUnlimited')).toBe(false);
+    svc.set('projects.allowUnlimited', true);
+    vi.resetModules();
+    const reloaded = (await import('../SettingsService')).getSettingsService();
+    expect(reloaded.get('projects.allowUnlimited')).toBe(true);
+    for (const value of [0, 8, 16, 32, 'true', null]) {
+      expect(() => reloaded.set('projects.allowUnlimited', value as any)).toThrow(/schema validation failed/);
+    }
+    expect(reloaded.get('projects.allowUnlimited')).toBe(true);
+    reloaded.set('projects.allowUnlimited', false);
+    expect(reloaded.getAll()['projects.allowUnlimited']).toBe(false);
+    reloaded.delete('projects.allowUnlimited');
+    expect(reloaded.get('projects.allowUnlimited')).toBe(false);
+  });
+
   it('returns descriptor defaults for keys never written', async () => {
     const { getSettingsService } = await import('../SettingsService');
     const svc = getSettingsService();
@@ -90,6 +108,40 @@ describe('SettingsService', () => {
     expect(svc.get('ai.provider.claude-code-cli')).toMatchObject({ enabled: false });
     // Codex (app server) is on by default.
     expect(svc.get('ai.provider.openai-codex')).toMatchObject({ enabled: true });
+  });
+
+  it.each([undefined, null, 'true', 1, {}, []].map(value => [value]))('keeps external following off for absent or malformed saved value %j', async (value) => {
+    const file = path.join(tmpDir, 'app-settings.json');
+    const legacy = { developerMode: true, releaseChannel: 'alpha', externalSessionFollowEnabled: value };
+    fs.writeFileSync(file, JSON.stringify(legacy));
+    const { getSettingsService } = await import('../SettingsService');
+    const svc = getSettingsService();
+    expect(svc.get('app.externalSessionFollowEnabled')).toBe(false);
+    expect(svc.getAll()['app.externalSessionFollowEnabled']).toBe(false);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(JSON.parse(JSON.stringify(legacy)));
+  });
+
+  it('persists explicit external-follow opt-in and opt-out across service reloads', async () => {
+    const key = 'app.externalSessionFollowEnabled';
+    const { getSettingsService } = await import('../SettingsService');
+    const svc = getSettingsService();
+    expect(svc.get(key)).toBe(false);
+    const events: Array<{ key: string; value: unknown }> = [];
+    const unsubscribe = svc.subscribe((key, value) => events.push({ key, value }));
+    for (const invalid of ['true', 1, null, {}]) {
+      expect(() => svc.set(key, invalid as any)).toThrow(/schema validation failed/);
+    }
+    expect(events).toEqual([]);
+    svc.set(key, true);
+    expect(JSON.parse(fs.readFileSync(path.join(tmpDir, 'app-settings.json'), 'utf8')).externalSessionFollowEnabled).toBe(true);
+    expect(events).toEqual([{ key, value: true }]);
+    unsubscribe();
+    vi.resetModules();
+    const reloaded = (await import('../SettingsService')).getSettingsService();
+    expect(reloaded.get(key)).toBe(true);
+    reloaded.set(key, false);
+    vi.resetModules();
+    expect((await import('../SettingsService')).getSettingsService().get(key)).toBe(false);
   });
 
   it('persists a claude-code-cli hidden-model denylist round-trip', async () => {

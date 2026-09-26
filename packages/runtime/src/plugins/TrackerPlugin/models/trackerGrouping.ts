@@ -2,7 +2,7 @@ import type { TrackerIdentity } from '../../../core/DocumentService';
 import type { TrackerRecord } from '../../../core/TrackerRecord';
 import { getFieldByRole, getRecordPriority, getRecordStatus } from '../trackerRecordAccessors';
 import { getCollectionField } from './trackerCollections';
-import { globalRegistry, type FieldDefinition, type TrackerRelationshipValue } from './TrackerDataModel';
+import { globalRegistry, type FieldDefinition, type TrackerRelationshipValue } from '@nimbalyst/tracker-schema';
 import { isRelationshipField, normalizeRelationshipValue } from './trackerRelationships';
 
 export const TRACKER_GROUPING_AXES = [
@@ -55,6 +55,13 @@ function titleCase(value: string): string {
     .split(/[-_]/)
     .map(part => part ? part[0].toUpperCase() + part.slice(1) : part)
     .join(' ');
+}
+
+/** Schema names for badges and group headings; unknown types keep their id. */
+export function getTrackerTypeLabel(type: string, plural = false): string {
+  const model = globalRegistry.get(type);
+  if (!model) return type;
+  return (plural && model.displayNamePlural) || model.displayName;
 }
 
 function groupKey(axis: TrackerGroupingAxis, value: string | null): string {
@@ -206,7 +213,8 @@ export function resolveTrackerGroups(
     case 'priority':
       return [scalarGroup(axis, getRecordPriority(item))];
     case 'type':
-      return [scalarGroup(axis, item.primaryType)];
+      return [scalarGroup(axis, item.primaryType,
+        globalRegistry.get(item.primaryType) ? getTrackerTypeLabel(item.primaryType, true) : undefined)];
     case 'assignee': {
       const identity = identityParts(getFieldByRole(item, 'assignee'));
       return [identity ? scalarGroup(axis, identity.value, identity.label) : resolveEmptyTrackerGroup(axis)];

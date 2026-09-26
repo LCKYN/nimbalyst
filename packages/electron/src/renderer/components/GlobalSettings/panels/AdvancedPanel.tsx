@@ -31,6 +31,7 @@ import {
   openProjectsAtom,
   activeWorkspacePathAtom,
   restorePreviousProjectsAtom,
+  allowUnlimitedProjectsAtom,
 } from '../../../store/atoms/openProjects';
 
 /** Reusable compact dropdown row */
@@ -356,7 +357,7 @@ export function AdvancedPanel() {
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
         <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Release Channel</h4>
         <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-          Choose which release stream Nimbalyst pulls auto-updates from. Alpha and beta features are configured separately on each feature&apos;s settings page.
+          Choose which release stream Nimbalyst pulls auto-updates from. Switching channels keeps your installed version until a newer release is available. Installing an older version requires a manual download and install. Alpha and beta features are configured separately on each feature&apos;s settings page.
         </p>
 
         <div className="setting-item py-3">
@@ -398,6 +399,8 @@ export function AdvancedPanel() {
         <h4 className="provider-panel-section-title text-base font-semibold mb-2 text-[var(--nim-text)]">General</h4>
 
         <MultiProjectModeToggle />
+
+        <UnlimitedProjectsToggle />
 
         <RestorePreviousProjectsToggle />
 
@@ -677,6 +680,32 @@ function MultiProjectModeToggle() {
       name="Multi-project Mode"
       description="Open multiple projects in a single window via a project rail. When off, each project opens in its own window."
     />
+  );
+}
+
+function UnlimitedProjectsToggle() {
+  const [allowUnlimited, setAllowUnlimited] = useAtom(allowUnlimitedProjectsAtom);
+  const enabled = useAtomValue(multiProjectModeAtom);
+  const [error, setError] = useState<string | null>(null);
+  if (!enabled) return null;
+
+  return (
+    <div className="project-limit-setting" data-testid="project-limit-setting">
+      <SettingsToggle
+        name="Allow unlimited projects"
+        checked={allowUnlimited}
+        onChange={async checked => {
+          setError(null);
+          try {
+            await setAllowUnlimited(checked);
+          } catch {
+            setError('Could not save this setting. Please try again.');
+          }
+        }}
+        description="Open more than eight projects per window. More projects can use more memory and CPU. Turning this off keeps current and restored projects open."
+      />
+      {error && <p role="alert" className="text-sm text-[var(--nim-error)]">{error}</p>}
+    </div>
   );
 }
 

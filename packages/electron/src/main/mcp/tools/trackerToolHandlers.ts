@@ -1,4 +1,4 @@
-import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel';
+import { globalRegistry } from '@nimbalyst/tracker-schema';
 import type { TrackerItem } from '@nimbalyst/runtime';
 import { getCurrentIdentity } from '../../services/TrackerIdentityService';
 import {
@@ -16,11 +16,13 @@ import { isLocalIssueKey, resolveDisplayIssueKey } from '../../../shared/localIs
 import { applyHeadlessBodyMarkdown, initializeHeadlessBodyMarkdown } from '../../services/MainBodyDocService';
 import { initialTrackerBodyCache } from '../../services/tracker/trackerBodySnapshot';
 import { applyRelationshipFieldWrites } from '../../services/tracker/relationshipFieldWrite';
+import { pinCitedRevisions } from '../../services/tracker/citationPins';
 import { appendActivity } from '../../services/tracker/trackerActivity';
 import { assignLocalKeysToRows } from '../../services/tracker/localKeyAllocator';
 import { workspaceLocalKeyStore } from '../../services/tracker/workspaceLocalKeyStore';
 import { extractItemCustomFields } from '../../services/tracker/trackerRowCustomFields';
 import { nestRelationshipFieldsIntoCustomFields, readStoredFieldValue, writeStoredFieldValue } from '../../services/tracker/relationshipFieldStorage';
+import { reindexItemRelationshipsAfterWrite } from '../../services/tracker/trackerRelationshipIndexStore';
 import {
   isRelationshipField,
   matchesFilterSet,
@@ -34,7 +36,7 @@ import {
   isTerminalStatus,
   statusCategoryOfItem,
   type StatusCategory,
-} from '@nimbalyst/runtime/plugins/TrackerPlugin/models/trackerStatusCategory';
+} from '@nimbalyst/tracker-schema';
 import { computeReadiness, type Readiness } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/trackerReadiness';
 import {
   describeUnresolvedBlockers,
@@ -884,6 +886,12 @@ export const trackerToolSchemas = [
           type: "object",
           description:
             "Delta override for a tracker type (required: `type`). Merge semantics: `fields[]` by name (`{name, set?, options?, remove?}`); select options by value (`options: {set?: [{value,label,icon?,color?,category?}], remove?: [value], order?: [value]}`); scalars (displayName, icon, color, inlineTemplate, sharing, draftByDefault) last-writer; `roles` shallow-merged. On the workflow-status field, `category` declares where the status sits in the lifecycle — 'backlog', 'unstarted', 'started', 'done', or 'cancelled' — and is what makes an item count as closed for progress rollups and the Open/Closed filter. ALWAYS set it when adding a status; an omitted category is guessed from the value's name and defaults to open. Example — add a way to close something you are not going to do: {\"type\":\"feature\",\"fields\":[{\"name\":\"status\",\"options\":{\"set\":[{\"value\":\"wont-do\",\"label\":\"Won't Do\",\"icon\":\"do_not_disturb_on\",\"color\":\"#64748b\",\"category\":\"cancelled\"}]}}]}.",
+        },
+        predicates: {
+          type: "array",
+          items: { type: "object" },
+          description:
+            "Replace the project's PREDICATE REGISTRY: the declared vocabulary of relationship verbs that a field can bind to with `predicate: <id>`. Each entry is {id, label, inverseLabel?, subjectKinds: [type|'*'], valueShape: entity|text|boolean-assessment|quantity|select, direction: directed|symmetric, transitive?, qualifiers?}. A qualifier is {type: string|number|boolean|date|select|relationship|array, required?, itemType?, options?, targetTrackerTypes?} and its values ride on each relationship value under `qualifiers`. Replaces the whole registry, so omitting a predicate removes it; removals, narrowing `subjectKinds`, and making a qualifier required are destructive and need `confirmDestructive`. May be sent alone or alongside `schema`/`patch`, in which case the predicates are applied first. Persisted to .nimbalyst/predicates.yaml.",
         },
         fileName: {
           type: "string",
@@ -1996,6 +2004,7 @@ export async function handleTrackerCreate(
         isError: true,
       };
     }
+    await pinCitedRevisions(db, workspacePath, id, data, globalRegistry.get(args.type)?.fields ?? []);
 
     const validationResult = globalRegistry.validate(args.type, data);
     if (!validationResult.valid) {
@@ -2140,6 +2149,19 @@ export async function handleTrackerCreate(
         console.error('[MCP Server] tracker_create issue key wait failed:', awaitError);
       }
     }
+
+    // This tool inserts into `tracker_items` directly rather than going through
+    // `createNativeTrackerItem`, so it owns its own edge projection: an agent
+    // can set `subject`/`object` in the same call that creates the item. Last,
+    // after every read this handler depends on, because the projection is
+    // derived state and nothing above it should be able to see a partial one.
+    await reindexItemRelationshipsAfterWrite(
+      workspacePath,
+      id,
+      data,
+      globalRegistry.get(args.type)?.fields ?? [],
+      new Date().toISOString(),
+    );
 
     const createdRef = createdItem || { id };
     const createdKeyContext = {
@@ -2634,6 +2656,7 @@ export async function handleTrackerUpdate(
           isError: true,
         };
       }
+      await pinCitedRevisions(db, row.workspace, row.id, data, globalRegistry.get(row.type)?.fields ?? []);
 
       const validationResult = globalRegistry.validate(row.type, data);
       if (!validationResult.valid) {
@@ -2864,6 +2887,18 @@ export async function handleTrackerUpdate(
         analyticsRow.id,
         analyticsRow.type,
         shouldSyncTrackerItem(analyticsPolicy, rowToTrackerItem(analyticsRow)),
+      );
+
+      // This tool writes `tracker_items` directly, so it owns its own edge
+      // projection for the same reason tracker_create does. Last, after every
+      // read this handler depends on, including the inverse propagation above
+      // which writes its own targets.
+      await reindexItemRelationshipsAfterWrite(
+        row.workspace,
+        row.id,
+        data,
+        globalRegistry.get(row.type)?.fields ?? [],
+        new Date().toISOString(),
       );
 
       const updateSummaryParts: string[] = [];

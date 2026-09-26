@@ -1,3 +1,4 @@
+import type { PermissionPromptHints } from './permissions/permissionPromptPolicy';
 /**
  * Common types for AI provider abstraction
  */
@@ -291,14 +292,14 @@ export function shouldBlockStartedSessionProviderSwitch(
  * `fable` is the Fable tier above Opus (currently Fable 5.1). `fable-5` is the
  * pinned previous-generation Fable. Both run a 1M window natively.
  */
-export const CLAUDE_CODE_VARIANTS = ['fable', 'fable-5', 'opus', 'opus-4-8', 'opus-4-7', 'opus-4-6', 'sonnet', 'sonnet-4-6', 'haiku'] as const;
+export const CLAUDE_CODE_VARIANTS = ['fable', 'fable-5', 'opus', 'opus-5', 'opus-4-8', 'opus-4-7', 'opus-4-6', 'sonnet', 'sonnet-4-6', 'haiku'] as const;
 
 /**
  * Resolves a configured model string to the SDK model value.
  *
  * Key behaviors:
- * - Canonical variants (opus, sonnet, haiku) are passed straight through — the
- *   SDK maps these to the current-generation model.
+ * - Canonical variants use an explicit model ID when mapped (Opus/Fable);
+ *   other aliases are passed through for the SDK to resolve.
  * - Pinned variants (opus-4-6, ...) are substituted for their full Anthropic
  *   model ID from CLAUDE_CODE_PINNED_SDK_MODELS, so they always resolve to a
  *   specific version regardless of what "latest" becomes.
@@ -864,7 +865,7 @@ export type InteractivePromptStatus = 'pending' | 'resolved' | 'cancelled';
 /**
  * Permission request message - persisted when SDK needs tool approval
  */
-export interface PermissionRequestContent {
+export interface PermissionRequestContent extends PermissionPromptHints {
   type: 'permission_request';
   requestId: string;
   toolName: string;
