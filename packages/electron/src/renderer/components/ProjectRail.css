@@ -14,7 +14,9 @@
 }
 
 .project-rail-projects {
-  flex: 1;
+  /* Size to content so the add button sits right below the last project;
+     shrink and scroll only when the list outgrows the rail. */
+  flex: 0 1 auto;
   min-height: 0;
   align-self: stretch;
   display: flex;
