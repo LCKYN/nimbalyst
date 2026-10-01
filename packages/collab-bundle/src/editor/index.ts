@@ -38,6 +38,23 @@ export type {
   BrowserExtensionEditorHost,
   BrowserExtensionEditorHostOptions,
 } from './browserExtensionHost';
+// Live tracker reference views. The node renderer registered in
+// `./referenceNodes` uses these; hosts reuse them for surfaces outside the
+// document (a wiki page's backlinks) under the same resolver context. The
+// resolver and its provider come from `./trackers-ui`.
+export {
+  LiveTrackerReferenceRenderer,
+  TrackerReferenceChipView,
+  TrackerReferenceResolverProvider,
+} from '@nimbalyst/collab-client/trackers-ui/references';
+export type {
+  LiveTrackerReferenceRendererProps,
+  TrackerReferenceViewKind,
+} from '@nimbalyst/collab-client/trackers-ui/references';
+// Tracker body seeding carries the Markdown/Lexical codec, so it ships here
+// and hosts inject it into `BrowserTrackerDataSource` from `./trackers-ui`.
+export { seedTrackerBody } from '@nimbalyst/collab-client/trackers/body';
+export type { TrackerBodyRoom, TrackerBodySeeder } from '@nimbalyst/collab-client/trackers/body';
 export { installCollabEditorBridge } from './bridge';
 export type {
   BridgeAuthResponse,
@@ -73,6 +90,7 @@ export type {
   TeamRoomIdentity,
   TeamRoomSource,
   TextFormatType,
+  TrackerReferenceResolver,
 } from './types';
 export {
   asTeamJwt,

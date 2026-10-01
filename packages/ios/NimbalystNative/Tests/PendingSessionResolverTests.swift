@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import NimbalystNative
 import GRDB
 
@@ -8,6 +9,58 @@ import GRDB
 /// what made notification taps silently do nothing.
 @MainActor
 final class PendingSessionResolverTests: XCTestCase {
+
+    func testHostObservationDoesNotReplayOnViewUpdatesAndReplacesAccountSource() {
+        let navigation = WorkspaceNavigationState()
+        let first = CurrentValueSubject<[DeviceInfo], Never>([])
+        let second = CurrentValueSubject<[DeviceInfo], Never>([])
+        var invalidations = 0
+        let observation = navigation.objectWillChange.sink { invalidations += 1 }
+        defer { observation.cancel() }
+
+        navigation.observeHosts(source: first, publisher: first.eraseToAnyPublisher())
+        XCTAssertEqual(invalidations, 1)
+        for _ in 0..<10 {
+            navigation.observeHosts(source: first, publisher: first.eraseToAnyPublisher())
+        }
+        XCTAssertEqual(invalidations, 1, "Rendering must not re-subscribe and replay the current roster")
+        navigation.observeHosts(source: second, publisher: second.eraseToAnyPublisher())
+        XCTAssertEqual(invalidations, 2)
+        first.send([])
+        XCTAssertEqual(invalidations, 2, "The old account must no longer update navigation")
+        second.send([])
+        XCTAssertEqual(invalidations, 3, "Live updates must still arrive from the new account")
+        navigation.stopObservingHosts()
+        second.send([])
+        XCTAssertEqual(invalidations, 3, "Removing the sync manager must cancel its subscription")
+    }
+
+    func testDefaultHostDoesNotInvalidateNavigationWhileDisconnected() {
+        let navigation = WorkspaceNavigationState()
+        var invalidations = 0
+        let observation = navigation.objectWillChange.sink { invalidations += 1 }
+        defer { observation.cancel() }
+
+        // SwiftUI may resubscribe to the current device list during layout.
+        for _ in 0..<3 { navigation.adoptDefaultHost(from: []) }
+        XCTAssertEqual(invalidations, 0, "An absent default must not trigger another layout/subscription")
+
+        func device(_ id: String, _ type: String) -> DeviceInfo {
+            DeviceInfo(deviceId: id, name: id, type: type, platform: "test", appVersion: nil,
+                       connectedAt: 0, lastActiveAt: 0, isFocused: nil, status: nil)
+        }
+        let devices = [device("sandbox", "headless"), device("desktop", "desktop")]
+        navigation.adoptDefaultHost(from: devices)
+        XCTAssertEqual(navigation.hostDeviceId, "desktop")
+        XCTAssertEqual(invalidations, 1)
+        navigation.adoptDefaultHost(from: devices)
+        navigation.adoptDefaultHost(from: [])
+        XCTAssertEqual(invalidations, 1, "Repeated presence must preserve an existing selection")
+        navigation.hostDeviceId = "chosen-offline-host"
+        navigation.adoptDefaultHost(from: devices)
+        XCTAssertEqual(navigation.hostDeviceId, "chosen-offline-host")
+        XCTAssertEqual(invalidations, 2)
+    }
 
     /// Sessions carry a foreign key to their project, so every fixture needs one.
     private func makeDatabase(projectId: String = "p1") throws -> DatabaseManager {
@@ -69,6 +122,29 @@ final class PendingSessionResolverTests: XCTestCase {
         navigation.openSession("late", database: db)
         XCTAssertEqual(navigation.project?.id, "p1")
         XCTAssertEqual(navigation.selection, .session("late"))
+    }
+
+    func testOpeningDesktopCreatedSessionKeepsADesktopSelected() throws {
+        let db = try makeDatabase()
+        let navigation = WorkspaceNavigationState()
+        let device = { (id: String, type: String) in
+            DeviceInfo(deviceId: id, name: id, type: type, platform: "test", appVersion: nil, connectedAt: 0, lastActiveAt: 0, isFocused: nil, status: nil)
+        }
+        let roster = CurrentValueSubject<[DeviceInfo], Never>([device("mac", "desktop"), device("studio", "desktop"), device("vm", "headless")])
+        navigation.observeHosts(source: roster, publisher: roster.eraseToAnyPublisher())
+        try db.upsertSession(makeSession(id: "unattributed"))
+        var owned = makeSession(id: "owned")
+        owned.hostDeviceId = "vm"
+        try db.upsertSession(owned)
+
+        navigation.hostDeviceId = "studio"
+        navigation.openSession("unattributed", database: db)
+        XCTAssertEqual(navigation.hostDeviceId, "studio")
+
+        navigation.openSession("owned", database: db)
+        XCTAssertEqual(navigation.hostDeviceId, "vm")
+        navigation.openSession("unattributed", database: db)
+        XCTAssertEqual(navigation.hostDeviceId, "mac", "A headless host never lists unattributed sessions")
     }
 
     func testComposeStateSurvivesColumnRemountAndRejectsOldRemoteDrafts() {

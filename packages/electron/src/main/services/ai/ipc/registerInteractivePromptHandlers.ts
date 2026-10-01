@@ -1,3 +1,5 @@
+import { reservePromptAnswer } from '../PromptAnswerReservation';
+import { warnIfUnpublished } from '@nimbalyst/runtime/sync/pushOutcome';
 import { registerAskUserQuestionAnswerHandler } from './registerAskUserQuestionAnswerHandler';
 import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
 import { configureCodexQuestionDelivery, deliverCodexQuestionAnswer } from '../codexQuestionDelivery';
@@ -5,7 +7,7 @@ import { TrayManager } from '../../../tray/TrayManager';
 import { safeHandle } from '../../../utils/ipcRegistry';
 import { logger } from '../../../utils/logger';
 import { getSyncProvider } from '../../SyncManager';
-import { persistAskUserQuestionTerminalResult } from '.././askUserQuestionFallbackResolution';
+import { persistInteractivePromptTerminalResult } from '.././askUserQuestionFallbackResolution';
 import { buildToolPermissionResponseRecord } from '.././claudeCliToolPermission';
 import { setSessionPendingPrompt } from '.././pendingPromptPersistence';
 import { type AIServiceContext } from './AIServiceContext';
@@ -67,10 +69,15 @@ export function registerInteractivePromptHandlers(ctx: AIServiceContext): void {
       TrayManager.getInstance().onPromptResolved(sessionId);
       const syncProvider = getSyncProvider();
       if (syncProvider) {
-        syncProvider.pushChange(sessionId, {
-          type: 'metadata_updated',
-          metadata: { hasPendingPrompt: false, updatedAt: Date.now() },
-        });
+        try {
+          const outcome = await syncProvider.pushChange(sessionId, {
+            type: 'metadata_updated',
+            metadata: { hasPendingPrompt: false, updatedAt: Date.now() },
+          });
+          warnIfUnpublished(message => logger.main.warn(message), sessionId, '[AIService] Failed to publish sync change', outcome);
+        } catch (error) {
+          logger.main.warn(`[AIService] Failed to publish sync change for session ${sessionId}:`, error);
+        }
       }
 
       return { success: true };
@@ -112,6 +119,8 @@ export function registerInteractivePromptHandlers(ctx: AIServiceContext): void {
     if (session.provider === 'openai-codex') {
       return deliverCodexQuestionAnswer(resolvedSessionId, questionId, { answers: {}, cancelled: true, respondedBy: 'desktop' });
     }
+
+    if (!reservePromptAnswer(resolvedSessionId, 'question', questionId, { answers: {}, cancelled: true })) return { success: false, error: 'Question already answered.' };
 
     // Missing provider is non-fatal here too (claude-code-cli has no in-process
     // instance) — fall through to the MCP/IPC cancel emit + DB fallback. NIM-806.
@@ -186,7 +195,7 @@ export function registerInteractivePromptHandlers(ctx: AIServiceContext): void {
       // Issue #1116: clearing the pending-prompt bit dismissed the session-level
       // indicator but left the tool call pending, so the cancelled widget came
       // back on the next session switch. Write the terminal result too.
-      await persistAskUserQuestionTerminalResult({
+      await persistInteractivePromptTerminalResult({
         sessionId: resolvedSessionId,
         questionId,
         answers: {},
@@ -231,6 +240,8 @@ export function registerInteractivePromptHandlers(ctx: AIServiceContext): void {
       logger.main.warn(`[AIService] Session not found for tool permission: ${sessionId}`);
       return { success: false, error: 'Session not found' };
     }
+
+    if (!reservePromptAnswer(sessionId, 'permission', requestId, response)) return { success: false, error: 'Permission already answered or delivery is unknown.' };
 
     // SDK path (ClaudeCodeProvider) resolves via the in-process provider.
     const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
@@ -299,6 +310,8 @@ export function registerInteractivePromptHandlers(ctx: AIServiceContext): void {
       logger.main.warn(`[AIService] Session not found for tool permission cancel: ${sessionId}`);
       return { success: false, error: 'Session not found' };
     }
+
+    if (!reservePromptAnswer(sessionId, 'permission', requestId, { decision: 'deny', scope: 'once' })) return { success: false, error: 'Permission already answered.' };
 
     // SDK path: reject via the in-process provider and abort the turn.
     const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);

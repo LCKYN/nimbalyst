@@ -20,10 +20,11 @@ import type { SessionCreateResult } from '../../shared/ipc/types';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { trackCreateAiSession } from '../services/analytics/sessionLaunchAnalytics';
 import { SessionCommitService } from '../services/SessionCommitService';
-import { findSessionAttributionForFile } from '../services/sessionFilesByPath';
+import { getSessionsForFile } from '../services/fileSessionLookup';
 import { normalizeSessionPhaseMetadataUpdate } from '../services/session/sessionPhaseTransition';
 import { destroyProviderForArchivedSession } from '../services/ai/archiveSessionProviderLifecycle';
 import { resolveSessionModelSelection } from '../services/ai/sessionModelSelection';
+import { inheritedOwnership, stripOwnerControlledMetadata } from '../services/extensionSessions/sessionOwnership';
 
 // Initialize session manager
 const sessionManager = new SessionManager();
@@ -245,6 +246,12 @@ export async function registerSessionHandlers() {
                 worktreeId: session.worktreeId || null,
                 agentRole: session.agentRole || 'standard',
                 createdBySessionId: session.createdBySessionId || null,
+                // Written with the row, so a directive or notifyParent is never
+                // missing when the first turn reads it. Ownership is assigned
+                // only by the host (extension session broker, spawn inheritance).
+                ...(session.metadata && typeof session.metadata === 'object'
+                    ? { metadata: normalizeSessionPhaseMetadataUpdate(stripOwnerControlledMetadata(session.metadata)) }
+                    : {}),
             };
             // console.log('[SessionHandlers] Creating session with payload:', JSON.stringify(createPayload));
 
@@ -256,11 +263,6 @@ export async function registerSessionHandlers() {
                 launchSource,
                 hadPrefilledPrompt,
             });
-
-            // Update with full metadata
-            if (session.metadata) {
-                await AISessionsRepository.updateMetadata(session.id, { metadata: session.metadata });
-            }
 
             return { success: true, id: session.id };
         } catch (error) {
@@ -357,6 +359,9 @@ export async function registerSessionHandlers() {
                 }
             }
 
+            if (updates.metadata) {
+                updates.metadata = stripOwnerControlledMetadata(updates.metadata);
+            }
             await AISessionsRepository.updateMetadata(sessionId, updates);
 
             if (updates.isArchived === true) {
@@ -402,7 +407,7 @@ export async function registerSessionHandlers() {
         try {
             // Extract sessionType and metadata from updates
             const { sessionType, ...rawMetadataFields } = updates;
-            const metadataFields = normalizeSessionPhaseMetadataUpdate(rawMetadataFields);
+            const metadataFields = normalizeSessionPhaseMetadataUpdate(stripOwnerControlledMetadata(rawMetadataFields));
 
             // Build update payload
             const updatePayload: any = {};
@@ -644,6 +649,9 @@ export async function registerSessionHandlers() {
                 providedModel,
             );
 
+            // A child made under an extension-owned session stays owned by that
+            // extension (never inheriting its directive), written at creation.
+            const parentRow = await AISessionsRepository.get(parentSessionId);
             const createPayload = {
                 id: sessionId,
                 provider,
@@ -652,6 +660,7 @@ export async function registerSessionHandlers() {
                 workspaceId: workspacePath,
                 parentSessionId,  // Link to parent
                 worktreeId: worktreeId || null,  // Inherit from parent if provided
+                metadata: inheritedOwnership(parentRow?.metadata),
             };
 
             await AISessionsRepository.create(createPayload as any);
@@ -879,70 +888,7 @@ export async function registerSessionHandlers() {
     // Get sessions by file path (cross-worktree aware)
     safeHandle('sessions:get-by-file', async (event, workspaceId: string, filePath: string) => {
         try {
-            const { database } = await import('../database/PGLiteDatabaseWorker');
-            const { resolveProjectPath, isWorktreePath } = await import('../utils/workspaceDetection');
-
-            // Compute relative path for cross-workspace matching
-            const relativePath = filePath.startsWith(workspaceId)
-                ? filePath.slice(workspaceId.length) // includes leading /
-                : null;
-
-            const projectPath = resolveProjectPath(workspaceId);
-
-            const fileSessions = await findSessionAttributionForFile(database, {
-                workspaceId,
-                projectPath,
-                relativePath,
-                filePath,
-            });
-
-            const sessionIds = fileSessions.map(s => s.id);
-            const fileAttribution = new Map(fileSessions.map(s => [s.id, s]));
-            if (sessionIds.length === 0) {
-                return [];
-            }
-
-            // Get list entries with messageCount (only available for current workspace sessions)
-            const listEntries = await AISessionsRepository.list(workspaceId);
-            const entriesMap = new Map(listEntries.map(entry => [entry.id, entry]));
-
-            // Use batch query instead of N individual get() calls
-            const sessionsData = await AISessionsRepository.getMany(sessionIds);
-
-            // Map and enrich with entry data
-            // Sort: current workspace sessions first, then others by updatedAt desc
-            const sessions = sessionsData
-                .map(session => {
-                    const entry = entriesMap.get(session.id);
-                    const sessionWorkspaceId = session.workspacePath || '';
-                    // Worktree-aware matching: when viewing from a worktree, match
-                    // sessions whose worktreePath equals this worktree. When viewing
-                    // from the main project, match sessions with no worktree association.
-                    const isCurrentWs = isWorktreePath(workspaceId)
-                        ? session.worktreePath === workspaceId
-                        : !session.worktreePath && sessionWorkspaceId === workspaceId;
-                    return {
-                        id: session.id,
-                        title: session.title || 'Untitled Session',
-                        provider: session.provider,
-                        model: session.model,
-                        createdAt: session.createdAt,
-                        updatedAt: session.updatedAt,
-                        messageCount: entry?.messageCount || 0,
-                        worktreeId: (session as any).worktreeId || null,
-                        isCurrentWorkspace: isCurrentWs,
-                        ...fileAttribution.get(session.id),
-                    };
-                })
-                .sort((a, b) => {
-                    // Current workspace sessions first
-                    if (a.isCurrentWorkspace !== b.isCurrentWorkspace) {
-                        return a.isCurrentWorkspace ? -1 : 1;
-                    }
-                    return (b.updatedAt || 0) - (a.updatedAt || 0);
-                });
-
-            return sessions;
+            return await getSessionsForFile(database, AISessionsRepository, workspaceId, filePath);
         } catch (error) {
             console.error('[SessionHandlers] Error getting sessions by file:', error);
             return [];

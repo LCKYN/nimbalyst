@@ -30,6 +30,7 @@ import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu } from './menu/ApplicationMenu';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
 import { restoreSessionState, saveSessionState } from './session/SessionState';
+import { createRestartShutdown } from './session/restartShutdown';
 import { setSafeModeSessionStateProtection } from './session/safeModeSessionState';
 import { isSafeModeArgument } from './session/startupSafeMode';
 import { getRestartSignalPath } from './utils/appPaths';
@@ -38,7 +39,8 @@ import {
     dispatchAppActionLink,
     type AppAction,
 } from './utils/appActionLinks';
-import { createWorkspaceManagerWindow, setupWorkspaceManagerHandlers, wasWorkspaceManagerManuallyClosed } from './window/WorkspaceManagerWindow.ts';
+import { createWorkspaceManagerWindow, getWorkspaceManagerWindow, setupWorkspaceManagerHandlers, wasWorkspaceManagerManuallyClosed } from './window/WorkspaceManagerWindow.ts';
+import { initializeApplicationWindowRecovery } from './window/ApplicationWindowRecovery';
 import { createTeamManagementWindow, setupTeamManagementHandlers } from './window/TeamManagementWindow';
 import { setupTrayPanelHandlers } from './window/TrayPanelWindow';
 import { setupMenuBarIslandHandlers } from './window/MenuBarIslandWindow';
@@ -63,6 +65,7 @@ import { registerActionPromptHandlers } from './ipc/ActionPromptHandlers';
 import { registerClaudeCodeHandlers } from './ipc/ClaudeCodeHandlers';
 import { registerCodexAuthHandlers } from './ipc/CodexAuthHandlers';
 import { initializeClaudeCodeSessionHandlers } from './ipc/ClaudeCodeSessionHandlers';
+import { getExternalSessionService, stopExternalSessionService } from './services/externalSessions/ExternalSessionService';
 import { registerNotificationHandlers } from './ipc/NotificationHandlers';
 import { registerPermissionHandlers } from './ipc/PermissionHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
@@ -163,10 +166,10 @@ import { initEnhancedPath, getEnhancedPath, getShellEnvironment } from './servic
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState, getActiveExtensionShortNames } from './mcp/httpServer';
 import { writeMcpEndpointDescriptor, removeMcpEndpointDescriptor, type EndpointWorkspace } from './mcp/mcpEndpointDescriptor';
 import {
-  startWorkspaceBackendModules,
-  syncEnabledBackendModulesOnStartup,
+  WorkspaceBackendLifecycle,
   getDefaultBackendModuleLifecycleDeps,
 } from './extensions/backendModuleLifecycle';
+import { onWorkspaceUsageChanged } from './file/GitWatcherLifecycle';
 // MCP consolidation Phase 7: sessionContextServer / settingsServer no longer run
 // as standalone HTTP servers; their tool dispatch + schemas are imported by the
 // unified httpServer instead. Nothing to start/shutdown from here.
@@ -280,6 +283,7 @@ import { initTrackerSchemaService, updateTrackerSchemaWorkspace } from './servic
 import { registerTrackerLifecycleIpc } from './services/tracker/trackerLifecycleService';
 import { initTrackerNavigationService } from './services/TrackerNavigationService';
 import { initTrackerSavedViewService } from './services/TrackerSavedViewService';
+import { initTrackerRevisionService } from './services/tracker/trackerRevisionService';
 import {
   registerTeamHandlers,
   autoMatchTeamForWorkspace,
@@ -1160,7 +1164,12 @@ async function handleDeepLink(url: string): Promise<void> {
  * Workspaces we've already kicked backend-module startup for, so the per-document
  * `mcp:updateDocumentState` events don't re-scan extension dirs on every update.
  */
-const backendModulesStartedForWorkspace = new Set<string>();
+const workspaceBackendLifecycle = new WorkspaceBackendLifecycle(getDefaultBackendModuleLifecycleDeps());
+onWorkspaceUsageChanged(() => {
+    // Startup can wait for consent. Closing a window must not wait for it.
+    void workspaceBackendLifecycle.prune().catch(error => logger.main.error('Failed to release workspace extensions:', error));
+    void sweepOpenWindowsForBackendModules().catch(error => logger.main.error('Failed to start workspace extensions:', error));
+});
 
 /**
  * Start the backend modules of every enabled extension across the workspaces of
@@ -1189,12 +1198,11 @@ async function sweepOpenWindowsForBackendModules(): Promise<boolean> {
             }
         }
     }
-    const fresh = workspaces.filter((p) => !backendModulesStartedForWorkspace.has(p));
-    if (fresh.length === 0) return false;
-    for (const p of fresh) backendModulesStartedForWorkspace.add(p);
-    const deps = { ...getDefaultBackendModuleLifecycleDeps(), collectWorkspaces: () => fresh };
-    await syncEnabledBackendModulesOnStartup(deps);
-    return true;
+    let started = false;
+    for (const workspacePath of workspaces) {
+        started = (await workspaceBackendLifecycle.open(workspacePath)) || started;
+    }
+    return started;
 }
 
 function collectOpenWorkspaces(): EndpointWorkspace[] {
@@ -1721,6 +1729,7 @@ BrowserWindow.prototype.focus = function(this: BrowserWindow) {
 
 // App ready handler
 app.whenReady().then(async () => {
+    workspaceBackendLifecycle.observeModuleStarts();
     checkpoint('app-ready');
 
     // Windows opened from here on are revealed without activating; the app is
@@ -1975,6 +1984,7 @@ app.whenReady().then(async () => {
     registerClaudeCodeHandlers();
     registerCodexAuthHandlers();
     initializeClaudeCodeSessionHandlers();  // Initialize Claude Code session import
+    getExternalSessionService().initialize(); // Explicit opt-in only; waits for first usable before watching.
     registerAnalyticsHandlers();
     registerFeatureUsageHandlers();
     registerNotificationHandlers();
@@ -2025,6 +2035,7 @@ app.whenReady().then(async () => {
     registerTrackerLifecycleIpc(); // Promote to team / archive, from the UI
     initTrackerNavigationService();
     initTrackerSavedViewService();
+    initTrackerRevisionService();
 
     // Initialize commit-tracker linking (listens to GitRefWatcher for all commits)
     commitTrackerLinker.initialize({ getDatabase: () => database });
@@ -2687,6 +2698,7 @@ app.whenReady().then(async () => {
       };
       ClaudeCodeProvider.setSecurityLogger(securityLogger);
       OpenAICodexProvider.setSecurityLogger(securityLogger);
+      OpenCodeProvider.setSecurityLogger(securityLogger);
       OpenAICodexACPProvider.setSecurityLogger(securityLogger);
       GrokBuildProvider.setSecurityLogger(securityLogger);
       CursorAgentProvider.setSecurityLogger(securityLogger);
@@ -2699,6 +2711,10 @@ app.whenReady().then(async () => {
     OpenAICodexProvider.setPermissionPatternSaver(patternSaver);
     OpenAICodexProvider.setPermissionPatternChecker(patternChecker);
     OpenAICodexProvider.setTrustChecker(trustChecker);
+
+    OpenCodeProvider.setPermissionPatternSaver(patternSaver);
+    OpenCodeProvider.setPermissionPatternChecker(patternChecker);
+    OpenCodeProvider.setTrustChecker(trustChecker);
 
     OpenAICodexACPProvider.setPermissionPatternSaver(patternSaver);
     OpenAICodexACPProvider.setPermissionPatternChecker(patternChecker);
@@ -3106,13 +3122,10 @@ app.whenReady().then(async () => {
             // so it doubles as the startup path for already-enabled extensions
             // and the open-path for newly-opened workspaces. startModule is
             // idempotent, so the guard is only an efficiency measure.
-            if (!backendModulesStartedForWorkspace.has(state.workspacePath)) {
-                backendModulesStartedForWorkspace.add(state.workspacePath);
-                const ws = state.workspacePath;
-                void startWorkspaceBackendModules(ws, getDefaultBackendModuleLifecycleDeps()).catch(
-                    (err) => logger.mcp.error(`Backend-module start failed for workspace ${ws}:`, err)
-                );
-            }
+            const ws = state.workspacePath;
+            void workspaceBackendLifecycle.open(ws).catch(
+                (err) => logger.mcp.error(`Backend-module start failed for workspace ${ws}:`, err)
+            );
             // Issue #146: also allow `nim-asset://` to serve images from the
             // workspace. addNimAssetRoot is idempotent.
             addNimAssetRoot(state.workspacePath);
@@ -3466,20 +3479,32 @@ app.whenReady().then(async () => {
     });
 });
 
-// Activate handler (macOS)
-app.on('activate', () => {
-    // Avoid resurrecting windows while quitting
-    if (isAppQuitting) return;
-    // Only create window if app is ready (screen module requires app to be ready)
-    if (!app.isReady()) return;
-    // On macOS, show WorkspaceManager when dock icon is clicked and no windows are open
-    if (BrowserWindow.getAllWindows().length === 0) {
-        createWorkspaceManagerWindow();
-    }
+initializeApplicationWindowRecovery({
+    // quit-and-install strips before-quit, so isAppQuitting never flips on that path.
+    isQuitting: () => isAppQuitting || isAppRestarting || AutoUpdaterService.isUpdatingApp(),
+    getPreferredProjectWindow: getMostRecentlyFocusedWorkspaceWindow,
+    getWorkspaceManagerWindow,
+    createWorkspaceManagerWindow,
+    wasWorkspaceManagerManuallyClosed,
 });
 
-// Before quit handler
 let migrationQuitDraining = false;
+const shutdownForRestart = createRestartShutdown({
+    beginRestart: () => {
+        console.log('[QUIT] Restart signal detected, saving session state before restart');
+        isAppRestarting = true;
+        isAppQuitting = true;
+        if (sessionSaveInterval) clearInterval(sessionSaveInterval);
+        sessionSaveInterval = null;
+    },
+    stopExternalSessions: stopExternalSessionService,
+    saveSessionState,
+    flushPendingBackups: flushPendingCollabBackups,
+    quit: () => {
+        console.log('[QUIT] Session state saved for restart');
+        app.quit();
+    },
+});
 app.on('before-quit', async (event) => {
     if (migrationQuitDraining || migrationNeedsQuitDrain()) {
         event.preventDefault();
@@ -3504,41 +3529,27 @@ app.on('before-quit', async (event) => {
 
     // If auto-updater is updating, don't prevent quit
     if (AutoUpdaterService.isUpdatingApp()) {
+        void stopExternalSessionService(); // Revoke immediately, including the updater's early-exit path.
         console.log('[QUIT] Auto-updater is updating, allowing quit');
+        return;
+    }
+
+    // Handle repeated restart requests before the already-quitting shortcut.
+    if (fs.existsSync(getRestartSignalPath())) {
+        try {
+            await shutdownForRestart(event);
+        } catch (error) {
+            console.error('[QUIT] Error saving session state for restart:', error);
+            dialog.showErrorBox('Unable to restart Nimbalyst',
+                'Restart stopped before closing your project windows. Please try restarting again.\n\n' +
+                (error instanceof Error ? error.message : String(error)));
+        }
+        // Don't delete the file here - dev-loop.sh needs it to know to restart
         return;
     }
 
     // If we're already quitting, don't prevent default to avoid infinite loop
     if (isAppQuitting) {
-        console.log('[QUIT] Already quitting, allowing default behavior');
-        return;
-    }
-
-    // Check if this is a programmatic restart request (from MCP restart_nimbalyst tool)
-    const restartSignalPath = getRestartSignalPath();
-    if (fs.existsSync(restartSignalPath)) {
-        console.log('[QUIT] Restart signal detected, saving session state before restart');
-        // Mark as restarting BEFORE saving to prevent window close handlers from overwriting
-        isAppRestarting = true;
-        // Stop the periodic session-save timer and mark quitting so NO further
-        // save can fire after windows tear down. Without this the periodic save
-        // (guarded only by !isAppQuitting) could run over an emptied windows map
-        // and overwrite the good state with `{ windows: [] }` -- the restart
-        // would then come back to the Workspace Manager with no projects (NIM-869).
-        isAppQuitting = true;
-        if (sessionSaveInterval) {
-            clearInterval(sessionSaveInterval);
-            sessionSaveInterval = null;
-        }
-        // Save session state so the session is restored after restart
-        try {
-            await saveSessionState();
-            await flushPendingCollabBackups();
-            console.log('[QUIT] Session state saved for restart');
-        } catch (error) {
-            console.error('[QUIT] Error saving session state for restart:', error);
-        }
-        // Don't delete the file here - dev-loop.sh needs it to know to restart
         return;
     }
 
@@ -3588,6 +3599,9 @@ app.on('before-quit', async (event) => {
 
     // Mark app as quitting to prevent interval operations
     isAppQuitting = true;
+
+    // Revoke source readers and drain their commits before database shutdown.
+    await stopExternalSessionService();
 
     // Live collaboration backups are debounced. Flush the latest decrypted
     // snapshots before renderer teardown so a quick quit cannot drop them.
@@ -4119,35 +4133,6 @@ app.on('before-quit', async (event) => {
         console.log(`[QUIT] [${t16}] Calling app.exit(0) (${t16-t15}ms after timeout set)`);
         try { app.exit(0); } catch {}
     }, 50);
-});
-
-// Window all closed handler
-app.on('window-all-closed', () => {
-  logger.main.info('All windows closed');
-  if (isAppQuitting) {
-    // App is quitting, allow normal quit to proceed
-    app.quit();
-    return;
-  }
-
-  // Check if the WorkspaceManager itself was manually closed by the user
-  // In that case, don't reopen it (quit on Windows/Linux, stay running on macOS)
-  if (wasWorkspaceManagerManuallyClosed()) {
-    if (process.platform !== 'darwin') {
-      logger.main.info('WorkspaceManager manually closed on non-macOS platform, quitting app');
-      app.quit();
-    } else {
-      logger.main.info('WorkspaceManager manually closed on macOS, app stays running (dock icon can reopen)');
-    }
-    return;
-  }
-
-  // A project window was closed (not the WorkspaceManager)
-  // Show the WorkspaceManager so user can open another project
-  if (app.isReady()) {
-    logger.main.info('Project window closed, showing WorkspaceManager');
-    createWorkspaceManagerWindow();
-  }
 });
 
 // Windows-specific shutdown signal handlers

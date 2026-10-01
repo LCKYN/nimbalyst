@@ -17,6 +17,7 @@
 import {
   CLAUDE_MODELS,
   OPENAI_MODELS,
+  canDisableClaudeThinking,
   CLAUDE_CODE_VARIANT_VERSIONS,
   CLAUDE_CODE_MODEL_LABELS,
   type ClaudeCodeVariant,
@@ -273,10 +274,14 @@ export function supportsEffortLevel(modelId?: string): boolean {
   const variant = extractClaudeCodeVariant(modelId);
   if (
     variant === 'fable' ||
+    variant === 'fable-5' ||
     variant === 'opus' ||
+    variant === 'opus-5' ||
+    variant === 'opus-4-8' ||
     variant === 'opus-4-7' ||
     variant === 'opus-4-6' ||
     variant === 'sonnet' ||
+    variant === 'sonnet-5' ||
     variant === 'sonnet-4-6'
   ) return true;
   // OpenAI Codex models support reasoning effort (both SDK and ACP transports)
@@ -286,18 +291,10 @@ export function supportsEffortLevel(modelId?: string): boolean {
   return false;
 }
 
-/**
- * Check if a model supports explicit Claude Agent extended-thinking toggling.
- * Fable/Haiku-style lightweight variants do not accept the SDK thinking option.
- *
- * Matches every opus/sonnet variant (including pinned ones like `opus-4-7` and
- * `sonnet-4-6`) so this stays in lock-step with the server-side
- * `canDisableThinkingForModel` gate in sdkOptionsBuilder. If the two drift, a
- * model can have thinking disabled on the server with no UI toggle to restore it.
- */
+/** Whether this agent model allows users to turn adaptive thinking off. */
 export function supportsThinkingToggle(modelId?: string): boolean {
   if (!modelId) return false;
   const variant = extractClaudeCodeVariant(modelId);
   if (!variant) return false;
-  return variant.startsWith('opus') || variant.startsWith('sonnet');
+  return canDisableClaudeThinking(variant);
 }

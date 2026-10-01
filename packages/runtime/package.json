@@ -234,10 +234,6 @@
       "import": "./dist/host/hostEnvironment.js",
       "types": "./dist/host/hostEnvironment.d.ts"
     },
-    "./plugins/TrackerPlugin/models/TrackerDataModel": {
-      "import": "./dist/plugins/TrackerPlugin/models/TrackerDataModel.js",
-      "types": "./dist/plugins/TrackerPlugin/models/TrackerDataModel.d.ts"
-    },
     "./plugins/TrackerPlugin/models": {
       "import": "./dist/plugins/TrackerPlugin/models/index.js",
       "types": "./dist/plugins/TrackerPlugin/models/index.d.ts"
@@ -245,10 +241,6 @@
     "./plugins/TrackerPlugin/models/localIssueKey": {
       "import": "./dist/plugins/TrackerPlugin/models/localIssueKey.js",
       "types": "./dist/plugins/TrackerPlugin/models/localIssueKey.d.ts"
-    },
-    "./plugins/TrackerPlugin/models/trackerTypeIdentity": {
-      "import": "./dist/plugins/TrackerPlugin/models/trackerTypeIdentity.js",
-      "types": "./dist/plugins/TrackerPlugin/models/trackerTypeIdentity.d.ts"
     },
     "./ai/permissions": {
       "import": "./dist/ai/permissions/index.js",
@@ -302,6 +294,7 @@
       "import": "./dist/sync/SyncedSessionStore.js",
       "types": "./dist/sync/SyncedSessionStore.d.ts"
     },
+    "./sync/pushOutcome": { "node": { "types": "./dist-node/sync/pushOutcome.d.ts", "import": "./dist-node/sync/pushOutcome.js" }, "import": "./dist/sync/pushOutcome.js", "types": "./dist/sync/pushOutcome.d.ts" },
     "./sync/types": {
       "node": {
         "types": "./dist-node/sync/types.d.ts",
@@ -347,7 +340,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.20.0",
-    "@anthropic-ai/claude-agent-sdk": "0.3.257",
+    "@anthropic-ai/claude-agent-sdk": "0.3.284",
     "@anthropic-ai/sdk": "^0.115.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
@@ -377,9 +370,11 @@
     "@monaco-editor/react": "^4.7.0",
     "@nimbalyst/collab-adapters": "*",
     "@nimbalyst/collab-protocol": "*",
+    "@nimbalyst/tracker-schema": "0.1.0",
+    "@nimbalyst/tracker-engine": "0.1.0",
     "@nimbalyst/extension-sdk": "*",
     "@nimbalyst/tracker-core": "0.1.0",
-    "@openai/codex-sdk": "^0.153.1",
+    "@openai/codex-sdk": "^0.159.2",
     "@opencode-ai/sdk": "^1.3.0",
     "@types/js-yaml": "^4.0.9",
     "@types/mdast": "^4.0.4",

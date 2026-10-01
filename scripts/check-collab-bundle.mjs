@@ -25,20 +25,32 @@ export const COLLAB_BUNDLE_EAGER_GZIP_BUDGET_BYTES = {
   // hands to a pinned extension, and nothing else. If this jumps, the comment
   // UI has grown an editor or transport dependency it should not have.
   // Initially 29,203 gzip bytes; same ~26% headroom as the shells above.
-  'commenting-ui': 37_000,
+  // Measured at 39,571 gzip bytes on 2026-09-12: the comment UI itself did not
+  // change, but its static path includes the shared floating-ui chunk, which
+  // grew when the canvas selection bar and context menu started using
+  // FloatingFocusManager and useListNavigation. Reset with ~11% headroom.
+  'commenting-ui': 44_000,
   // Project Canvas: React Flow, the card tree, the binding, and the SDK's
   // collaborative-editor hook. Measured at 94,278 gzip bytes on first build;
   // same ~26% headroom as the shells above. This entry is never eager in a
   // host -- the console imports it only when a board opens -- so the ceiling
   // is about the board's own cost, not the console's first paint.
-  canvas: 118_000,
+  // Measured at 145,660 gzip bytes on 2026-09-12 after the canvas controls
+  // landed (command registry, selection bar, context menu, zoom widget, tool
+  // rail, keyboard map, lock/group, plus the floating-ui focus and list
+  // navigation hooks their menus use). Reset with ~10% headroom.
+  canvas: 160_000,
   editor: 320_000,
   // Measured at 70,625 gzip bytes on 2026-09-08, when the list took over
   // folder browsing from the tree for the browser console (folder rows, the
   // browse scope, the row "more" action). The row context menu itself is
   // lazy-loaded from the list and is not in this graph; a static import of
   // `SharedDocsItemMenu` is what would push this over again.
-  'docs-ui': 74_000,
+  // Measured at 75,122 gzip bytes on 2026-09-12. The docs UI did not change;
+  // its static path includes the shared floating-ui chunk, which grew when the
+  // canvas menus started using FloatingFocusManager and useListNavigation.
+  // Reset with ~6% headroom.
+  'docs-ui': 80_000,
   // Sep 5 privacy-aware document transport graph measured 35,049 bytes.
   // Keep a narrow allowance for the supported response/refresh contract.
   'feedback-ui': 35_500,
@@ -51,7 +63,24 @@ export const COLLAB_BUNDLE_EAGER_GZIP_BUDGET_BYTES = {
   // (with `OutboxDrainer`, which brings js-yaml) are all eager here. The grid
   // alone is several times `docs-ui`'s remaining headroom, which is why this is
   // a separate entry rather than a line item added there.
-  'trackers-ui': 128_000,
+  //
+  // Measured at 129,651 gzip bytes on 2026-09-22, over the previous 128,000
+  // ceiling. The check did its job first: the citation field editor's
+  // `@floating-ui/react` import landed eager here (160,086 bytes) and was made
+  // lazy rather than budgeted for. What remains had to be eager. 1,978 of those
+  // bytes are the three knowledge-scopes evidence
+  // builtins (`source`, `capture`, `citation`), measured by building with and
+  // without them: builtin schemas are resolved synchronously, so a lazily
+  // loaded builtin would be a builtin that is absent on first paint. The rest
+  // is the citation locator validator, which `TrackerDataModel.validate` calls
+  // directly and which exists precisely so the browser rejects a locator the
+  // same way the desktop does. Reset with ~5% headroom.
+  // StatusBar field-pill header exported for the web console knowledge wiki: 171,945 gzip bytes + ~3% headroom.
+  // 2026-09-24: 178,920 bytes. The ontology inspector (208,658 with it eager)
+  // was made lazy and its inspector-only helpers left the entry. What remains
+  // is the wiki home's content-health check and the schema store's predicate
+  // registry read, both needed on first paint. Reset with ~2% headroom.
+  'trackers-ui': 182_500,
   // Deliberately tight. This entry is a WebSocket client over the protocol
   // package and nothing else; anything that makes it jump has dragged a UI
   // graph in behind it.
@@ -430,6 +459,12 @@ function checkSingletonPeerContract() {
 }
 
 function checkPublicJwtTypeBoundary() {
+  // This checks the public editor facade's re-export path and rejects brands
+  // declared directly in that facade. The internal runtime jwtScopes declaration
+  // now re-exports from @nimbalyst/collab-protocol; types/ no longer owns the
+  // unique-symbol declarations. This check does not follow that re-export or
+  // verify that consumers resolve one canonical protocol brand identity. Passing
+  // it is not proof that the transitive JWT declarations are self-contained.
   const publicTypesPath = path.join(packageRoot, 'types/editor.d.ts');
   const publicTypes = fs.readFileSync(publicTypesPath, 'utf8');
   const bundledRuntimeBrandPath = './internal/runtime/src/auth/jwtScopes';

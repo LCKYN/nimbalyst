@@ -1,3 +1,7 @@
+import { warnIfUnpublished } from './pushOutcome';
+import { isSessionConnectionRefused } from './sessionConnectionAdmission';
+export { isSessionConnectionRefused };
+import { createSessionWriteOutbox, type SessionWriteOutboxOptions } from './sessionWriteOutbox';
 /**
  * SyncedSessionStore - Decorator that adds sync capabilities to any SessionStore.
  *
@@ -121,20 +125,24 @@ export function createSyncedSessionStore(
     }
   }
 
-  // Push a change to sync (fire and forget)
+  // Await publication so asynchronous failures cannot escape the warning path.
   // metadata_updated changes can flow via the index channel even without a session room connection,
   // so we allow them through regardless of connectedSessions state.
-  function pushToSync(sessionId: string, change: SessionChange): void {
+  async function pushToSync(sessionId: string, change: SessionChange): Promise<void> {
     if (!connectedSessions.has(sessionId) && change.type !== 'metadata_updated') return;
 
     try {
-      syncProvider.pushChange(sessionId, change);
+      const outcome = await syncProvider.pushChange(sessionId, change);
+      warnIfUnpublished(message => console.warn(message), sessionId, '[SyncedSessionStore] Failed to publish change', outcome);
     } catch (error) {
       console.warn(`[SyncedSessionStore] Failed to push change for ${sessionId}:`, error);
     }
   }
 
   return {
+    findByProviderSessionId: baseStore.findByProviderSessionId?.bind(baseStore),
+    getMany: baseStore.getMany?.bind(baseStore),
+
     async ensureReady(): Promise<void> {
       return baseStore.ensureReady();
     },
@@ -156,7 +164,8 @@ export function createSyncedSessionStore(
         if (payload.workspaceId !== undefined) {
           metadata.workspaceId = payload.workspaceId;
         }
-        pushToSync(payload.id, {
+        // First render must not wait for index publication; pushToSync catches internally.
+        void pushToSync(payload.id, {
           type: 'metadata_updated',
           metadata: metadata as unknown as SyncedSessionMetadata,
         });
@@ -196,7 +205,8 @@ export function createSyncedSessionStore(
       // Creating a WebSocket connection for every metadata update (like draft input changes)
       // causes massive performance issues when many session tabs are open.
       // If the session isn't connected yet, the update will be synced when it is.
-      pushToSync(sessionId, {
+      // Draft writes must not queue behind index publication; pushToSync catches internally.
+      void pushToSync(sessionId, {
         type: 'metadata_updated',
         metadata: syncMetadata as unknown as SyncedSessionMetadata,
       });
@@ -230,7 +240,7 @@ export function createSyncedSessionStore(
     async delete(sessionId: string): Promise<void> {
       // Push deletion to sync first
       if (connectedSessions.has(sessionId)) {
-        pushToSync(sessionId, { type: 'session_deleted' });
+        await pushToSync(sessionId, { type: 'session_deleted' });
         syncProvider.disconnect(sessionId);
         connectedSessions.delete(sessionId);
       }
@@ -257,7 +267,8 @@ export function createSyncedSessionStore(
       // This is critical for mobile sync - title changes must reach other devices
       if (result) {
         await ensureSyncConnected(sessionId);
-        pushToSync(sessionId, {
+        // Naming must not wait for index publication; pushToSync catches internally.
+        void pushToSync(sessionId, {
           type: 'metadata_updated',
           metadata: { title, updatedAt: Date.now() },
         });
@@ -268,13 +279,30 @@ export function createSyncedSessionStore(
   };
 }
 
+export interface MessageSyncHandlerOptions {
+  /**
+   * Hold rows a session could not publish live (no room socket, e.g. every
+   * slot busy) and send them over a short-lived socket. The desktop enables
+   * this; the headless node already retains and retries its own rows.
+   */
+  outbox?: SessionWriteOutboxOptions;
+}
+
+function isRetryableUnpublished(outcome: PushChangeOutcome | void): boolean {
+  return !!outcome && !outcome.published && outcome.retryable !== false;
+}
+
 /**
  * Creates a message sync handler that can be attached to AgentMessagesRepository.
  *
  * This is separate from the session store because messages have their own
  * repository pattern.
  */
-export function createMessageSyncHandler(syncProvider: SyncProvider) {
+export function createMessageSyncHandler(syncProvider: SyncProvider, options: MessageSyncHandlerOptions = {}) {
+  const outbox = options.outbox && syncProvider.sendSessionMessages
+    ? createSessionWriteOutbox(syncProvider, options.outbox)
+    : null;
+
   // Rate-limit the "Failed to connect session" log line. Without this, a
   // single hung CollabV3 connection (e.g. JWT/personal-member mismatch) produces one
   // error per agent message -- 1686 of 4986 main.log lines during a mobile
@@ -328,6 +356,11 @@ export function createMessageSyncHandler(syncProvider: SyncProvider) {
         };
       }
 
+      // Later rows queue behind earlier unsent ones so the room keeps transcript order.
+      if (outbox?.hasPending(message.sessionId)) {
+        return outbox.enqueue(message, sessionUpdatedAt, 'queued behind earlier unsent messages');
+      }
+
       // Auto-connect session if not already connected
       if (!syncProvider.isConnected(message.sessionId)) {
         // console.log(`[MessageSyncHandler] Session ${message.sessionId} not connected, auto-connecting...`);
@@ -335,6 +368,9 @@ export function createMessageSyncHandler(syncProvider: SyncProvider) {
           await syncProvider.connect(message.sessionId);
           // console.log(`[MessageSyncHandler] Successfully connected session ${message.sessionId}`);
         } catch (error) {
+          if (outbox && isSessionConnectionRefused(error)) {
+            return outbox.enqueue(message, sessionUpdatedAt, (error as Error).message);
+          }
           logConnectFailure(message.sessionId, error);
           return {
             published: false,
@@ -356,19 +392,31 @@ export function createMessageSyncHandler(syncProvider: SyncProvider) {
         type: 'message_added',
         message,
       });
+      if (outbox && isRetryableUnpublished(outcome)) {
+        return outbox.enqueue(message, sessionUpdatedAt, outcome!.reason ?? 'not published');
+      }
+      warnIfUnpublished(message => console.warn(message), message.sessionId, '[MessageSyncHandler] Failed to publish message', outcome);
 
       // Also update the session index with the same timestamp used in local DB
-      // This ensures updated_at matches exactly for sync comparisons
-      if (sessionUpdatedAt !== undefined) {
-        await syncProvider.pushChange(message.sessionId, {
+      // This ensures updated_at matches exactly for sync comparisons. Skipped
+      // while the row is unsent: a timestamp ahead of it hides the gap from the
+      // startup reconcile, so the row would never reach the phone (#1391).
+      if (sessionUpdatedAt !== undefined && !isRetryableUnpublished(outcome)) {
+        const metadataOutcome = await syncProvider.pushChange(message.sessionId, {
           type: 'metadata_updated',
           metadata: { updatedAt: sessionUpdatedAt },
         });
+        warnIfUnpublished(message => console.warn(message), message.sessionId, '[MessageSyncHandler] Failed to publish timestamp', metadataOutcome);
       }
 
       // A provider that reports nothing is assumed to have published: that is
       // what every caller assumed before outcomes existed.
       return outcome ?? { published: true };
+    },
+
+    /** Stop the outbox's timers and drop anything still queued. */
+    dispose(): void {
+      outbox?.dispose();
     },
 
     /**

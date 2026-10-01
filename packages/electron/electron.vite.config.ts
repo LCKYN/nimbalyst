@@ -115,6 +115,8 @@ const claudeAgentSdkVersion = (() => {
   }
   return 'unknown';
 })();
+const trackerSchemaSrcDir = resolve(__dirname, '../tracker-schema/src');
+const trackerEngineSrcDir = resolve(__dirname, '../tracker-engine/src');
 const trackerCoreSrcDir = resolve(__dirname, '../tracker-core/src');
 const collabProtocolSrcDir = resolve(__dirname, '../collab-protocol/src');
 const runtimeSrcDir = resolve(__dirname, '../runtime/src');
@@ -263,7 +265,13 @@ const staticFileTypeInJimp = () => {
   };
 };
 
-export default defineConfig({
+// `dev-loop.sh` keeps the renderer dev server alive across `/restart` in its
+// own process (scripts/renderer-dev-server.mjs), so the per-restart
+// `electron-vite dev` builds main and preload only. Without this, every restart
+// recompiled ~2,600 renderer modules cold, ~30s before any window could paint.
+const externalRenderer = process.env.NIMBALYST_EXTERNAL_RENDERER === '1';
+
+const config = {
   main: {
     define: {
       'process.env.OFFICIAL_BUILD': JSON.stringify(isOfficialBuild ? 'true' : 'false'),
@@ -307,6 +315,8 @@ export default defineConfig({
         // Explicit subpath imports still resolve straight to runtime source.
         { find: '@nimbalyst/runtime', replacement: runtimeSrcDir },
         { find: '@nimbalyst/tracker-core', replacement: trackerCoreSrcDir },
+        { find: '@nimbalyst/tracker-schema', replacement: trackerSchemaSrcDir },
+        { find: '@nimbalyst/tracker-engine', replacement: trackerEngineSrcDir },
         { find: '@nimbalyst/collab-protocol', replacement: collabProtocolSrcDir },
         // The public SDK barrel includes renderer hooks which import the public
         // runtime barrel. Main only needs validation and protocol helpers.
@@ -315,7 +325,8 @@ export default defineConfig({
       ]
     },
     build: {
-      target: 'node16',
+      // Target modern Node syntax supported by the bundled Electron runtime.
+      target: 'node22',
       sourcemap: isDev,
       rollupOptions: {
         input: {
@@ -355,7 +366,9 @@ export default defineConfig({
     resolve: {
       alias: {
         '@nimbalyst/runtime': runtimeSrcDir,
-        '@nimbalyst/tracker-core': trackerCoreSrcDir
+        '@nimbalyst/tracker-core': trackerCoreSrcDir,
+        '@nimbalyst/tracker-schema': trackerSchemaSrcDir,
+        '@nimbalyst/tracker-engine': trackerEngineSrcDir
       }
     },
     build: {
@@ -530,7 +543,8 @@ export default defineConfig({
       sourcemap: isDev,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html')
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          island: resolve(__dirname, 'src/renderer/island.html'),
         }
       }
     },
@@ -539,6 +553,8 @@ export default defineConfig({
         // Ensure renderer also points runtime imports at source
         { find: '@nimbalyst/runtime', replacement: runtimeSrcDir },
         { find: '@nimbalyst/tracker-core', replacement: trackerCoreSrcDir },
+        { find: '@nimbalyst/tracker-schema', replacement: trackerSchemaSrcDir },
+        { find: '@nimbalyst/tracker-engine', replacement: trackerEngineSrcDir },
         ...extensionSdkSourceSubpaths,
         // Redirect `import ... from 'prismjs'` (exact match only) to a shim
         // that returns the window.Prism instance loaded by the classic
@@ -562,6 +578,7 @@ export default defineConfig({
         // which cause "registerNodeTransform: Type Class not in this Editor" errors
         '@lexical/clipboard',
         '@lexical/code',
+        '@lexical/code-core',
         '@lexical/devtools-core',
         '@lexical/dragon',
         '@lexical/file',
@@ -584,6 +601,8 @@ export default defineConfig({
         '@lexical/utils',
         '@lexical/yjs',
         '@nimbalyst/runtime',
+        '@nimbalyst/tracker-schema',
+        '@nimbalyst/tracker-engine',
         '@nimbalyst/tracker-core'
       ]
     },
@@ -604,6 +623,7 @@ export default defineConfig({
         '@floating-ui/react',
         '@lexical/clipboard',
         '@lexical/code',
+        '@lexical/code-core',
         '@lexical/dragon',
         '@lexical/extension',
         '@lexical/hashtag',
@@ -722,6 +742,8 @@ export default defineConfig({
         '@shikijs/langs',
         'prettier',
         '@nimbalyst/runtime',
+        '@nimbalyst/tracker-schema',
+        '@nimbalyst/tracker-engine',
         '@nimbalyst/tracker-core',
         // RevoGrid is a Stencil bundle: its runtime lazy-imports its own
         // component entry chunks at render time. Pre-bundled, those dynamic
@@ -741,4 +763,6 @@ export default defineConfig({
       }
     }
   }
-})
+};
+
+export default defineConfig(externalRenderer ? { ...config, renderer: undefined } : config);

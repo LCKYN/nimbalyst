@@ -73,6 +73,9 @@ runs:
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      with:
+        # The action's default also requests the unavailable legacy "tools" package.
+        packages: 'platform-tools'
 
     - name: Install Android platform and build-tools
       shell: bash
@@ -105,6 +108,21 @@ runs:
         echo "Transcript bundle built successfully"
         du -sh packages/android/dist-transcript
         du -sh packages/android/dist-transcript/assets
+
+    # The sync<Variant>EditorAssets Gradle task throws if packages/android/dist-editor
+    # is missing, so the document editor bundle must exist before any Gradle build.
+    - name: Build editor bundle
+      shell: bash
+      run: npm run build:editor --prefix packages/android
+
+    - name: Verify editor bundle exists
+      shell: bash
+      run: |
+        if [ ! -f "packages/android/dist-editor/editor.html" ]; then
+          echo "Error: editor.html not found in packages/android/dist-editor/"
+          exit 1
+        fi
+        du -sh packages/android/dist-editor
 
     # Fail loudly if this is a signed release build without a Firebase config:
     # shipping a signed AAB with push silently disabled is a launch-blocking

@@ -15,12 +15,14 @@ import {selectedMachineAtom, machineSessionSelectionsAtom} from './remoteMachine
  * 4. Use addSessionAtom/removeSessionAtom for optimistic updates
  */
 
-import { atom } from 'jotai';
+import { atom, type Getter } from 'jotai';
 import { atomFamily } from '../debug/atomFamilyRegistry';
 import { store } from '@nimbalyst/runtime/store';
-import { ModelIdentifier, type ChatAttachment, type SessionData, type TranscriptViewMessage } from '@nimbalyst/runtime/ai/server/types';
+import { ModelIdentifier, type ChatAttachment, type SessionData } from '@nimbalyst/runtime/ai/server/types';
+import { stripMcpPrefix } from '@nimbalyst/runtime/ai/server/interactivePromptTools';
 import type { SessionMeta } from '@nimbalyst/runtime';
 import deepEqual from 'fast-deep-equal';
+import { captureTranscriptMessages, reconcileTranscriptMessages } from '../transcriptReconciliation';
 import { sessionLaunchCountsAtom } from './sessionLaunchCounts';
 import { sessionListMetadata } from './sessionListMetadata';
 import { workstreamStateAtom, setWorkstreamActiveChildAtom } from './workstreamState';
@@ -330,9 +332,7 @@ const INTERACTIVE_PROMPT_TOOLS = new Set([
 // MCP tools arrive as `mcp__<server>__<toolName>` (server name may contain dashes).
 // Match the bare name first; if not found, peel off the MCP prefix and recheck.
 export function isInteractivePromptTool(toolName: string): boolean {
-  if (INTERACTIVE_PROMPT_TOOLS.has(toolName)) return true;
-  const match = toolName.match(/^mcp__[^_]+(?:_[^_]+)*__(.+)$/);
-  return !!match && INTERACTIVE_PROMPT_TOOLS.has(match[1]);
+  return INTERACTIVE_PROMPT_TOOLS.has(toolName) || INTERACTIVE_PROMPT_TOOLS.has(stripMcpPrefix(toolName));
 }
 
 /**
@@ -695,6 +695,12 @@ interface SessionUpdateFields extends Partial<SessionData> {
 
 const EMPTY_SESSION_TODOS: unknown[] = [];
 
+/** Update fields mirrored into sessionRegistryAtom by updateSessionStoreAtom. */
+const REGISTRY_UPDATE_FIELDS = [
+  'title', 'updatedAt', 'isArchived', 'isPinned', 'parentSessionId', 'worktreeId',
+  'provider', 'model', 'sessionType', 'uncommittedCount',
+] as const satisfies ReadonlyArray<keyof SessionUpdateFields>;
+
 /**
  * Unified session update atom.
  * SINGLE update point for all session metadata changes.
@@ -718,7 +724,10 @@ export const updateSessionStoreAtom = atom(
       set(sessionStoreAtom(sessionId), { ...current, ...normalizedUpdates });
     }
 
-    // 2. Always update registry with metadata fields
+    // 2. Update registry with metadata fields. Skip updates that carry none
+    // (tokenUsage arrives every assistant step): a new registry Map re-renders
+    // the session list and every session reference in open transcripts.
+    if (!REGISTRY_UPDATE_FIELDS.some(field => updates[field] !== undefined)) return;
     const registry = new Map(get(sessionRegistryAtom));
     const meta = registry.get(sessionId);
     if (meta) {
@@ -1748,6 +1757,64 @@ export const openSessionsAtom = atom<OpenSession[]>([]);
  * IPC round-trip + DB query (2+ seconds each for large sessions).
  */
 const loadSessionPromises = new Map<string, Promise<SessionData | null>>();
+const loadSessionWorkspaces = new Map<string, string>();
+/** Non-atom transcript caches release their references at the same boundary. */
+export const sessionDataReleaseListenersAtom = atom<ReadonlySet<(sessionId: string) => void>>(new Set<(sessionId: string) => void>());
+const closedSessionWorkspacesAtom = atom<Set<string>>(new Set<string>());
+const sessionWorkspaceGenerationsAtom = atom<Map<string, object>>(new Map());
+
+function canReleaseSessionData(get: Getter, sessionId: string): boolean {
+  return !get(sessionProcessingAtom(sessionId)) && !get(sessionHasPendingInteractivePromptAtom(sessionId));
+}
+
+/** Drop full history only. Drafts and atom identities survive close/reopen. */
+export const pruneClosedSessionDataAtom = atom(null, (get, set) => {
+  const closed = get(closedSessionWorkspacesAtom);
+  if (closed.size === 0) return;
+  const derivedCaches = [sessionMessagesAtom, sessionCurrentTeammatesAtom, sessionCurrentTodosAtom, sessionDocumentContextAtom]
+    .map(family => ({ family, ids: new Set(family.getParams()) }));
+  for (const sessionId of sessionStoreAtom.getParams()) {
+    const data = get(sessionStoreAtom(sessionId));
+    if (!data?.workspacePath || !closed.has(data.workspacePath) || !canReleaseSessionData(get, sessionId)) continue;
+    set(sessionStoreAtom(sessionId), null);
+    for (const release of get(sessionDataReleaseListenersAtom)) release(sessionId);
+    // Unmounted derived atoms can otherwise keep their last large value cached.
+    for (const { family, ids } of derivedCaches) {
+      if (ids.has(sessionId)) get<unknown>(family(sessionId));
+    }
+  }
+});
+
+export const setSessionWorkspaceOpenAtom = atom(
+  null,
+  (get, set, { workspacePath, isOpen }: { workspacePath: string; isOpen: boolean }) => {
+    const closed = new Set(get(closedSessionWorkspacesAtom));
+    if (isOpen) {
+      closed.delete(workspacePath);
+    } else {
+      closed.add(workspacePath);
+      const generations = new Map(get(sessionWorkspaceGenerationsAtom));
+      generations.set(workspacePath, {});
+      set(sessionWorkspaceGenerationsAtom, generations);
+      for (const [id, path] of loadSessionWorkspaces) {
+        if (path === workspacePath) {
+          loadSessionPromises.delete(id);
+          loadSessionWorkspaces.delete(id);
+          set(sessionLoadingAtom(id), false);
+        }
+      }
+      for (const [id, reload] of pendingReloads) {
+        if (reload.workspacePath === workspacePath) {
+          reload.aborted = true;
+          pendingReloads.delete(id);
+        }
+      }
+    }
+    set(closedSessionWorkspacesAtom, closed);
+    set(pruneClosedSessionDataAtom);
+  }
+);
+
 
 /**
  * Load session data into the atom.
@@ -1760,6 +1827,10 @@ export const loadSessionDataAtom = atom(
       return null;
     }
 
+    if (get(closedSessionWorkspacesAtom).has(workspacePath) && canReleaseSessionData(get, sessionId)) return null;
+    const generation = get(sessionWorkspaceGenerationsAtom).get(workspacePath);
+    loadSessionWorkspaces.set(sessionId, workspacePath);
+
     // Deduplicate: if a load is already in-flight for this session, reuse its promise
     const existing = loadSessionPromises.get(sessionId);
     if (existing) {
@@ -1771,9 +1842,12 @@ export const loadSessionDataAtom = atom(
     const draftWasHydrated = get(sessionDraftHydratedAtom(sessionId));
     const draftModifiedAtStart = get(sessionDraftLocalModifiedAtAtom(sessionId));
 
+    const messagesAtStart = captureTranscriptMessages(get(sessionStoreAtom(sessionId))?.messages ?? []);
     const loadPromise = (async () => {
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+      if (get(sessionWorkspaceGenerationsAtom).get(workspacePath) !== generation ||
+          (get(closedSessionWorkspacesAtom).has(workspacePath) && canReleaseSessionData(get, sessionId))) return null;
       if (sessionData) {
         // Validate model field (for debugging)
         const model = sessionData.model;
@@ -1781,6 +1855,10 @@ export const loadSessionDataAtom = atom(
           console.warn(`[sessions] Session ${sessionId} has invalid model "${model}" - this indicates a bug in session creation`);
         }
 
+        sessionData.messages = reconcileTranscriptMessages(
+          get(sessionStoreAtom(sessionId))?.messages ?? [], sessionData.messages ?? [],
+          { startedWith: messagesAtStart },
+        );
         // Set sessionStoreAtom - derived atoms (mode, model, archived) will automatically sync
         set(sessionStoreAtom(sessionId), sessionData);
 
@@ -1811,7 +1889,9 @@ export const loadSessionDataAtom = atom(
     } catch (error) {
       console.error(`[sessions] Failed to load session ${sessionId}:`, error);
     } finally {
-      set(sessionLoadingAtom(sessionId), false);
+      if (get(sessionWorkspaceGenerationsAtom).get(workspacePath) === generation) {
+        set(sessionLoadingAtom(sessionId), false);
+      }
     }
 
     return null;
@@ -1821,7 +1901,10 @@ export const loadSessionDataAtom = atom(
     try {
       return await loadPromise;
     } finally {
-      loadSessionPromises.delete(sessionId);
+      if (loadSessionPromises.get(sessionId) === loadPromise) {
+        loadSessionPromises.delete(sessionId);
+        loadSessionWorkspaces.delete(sessionId);
+      }
     }
   }
 );
@@ -1848,7 +1931,7 @@ export const updateSessionDataAtom = atom(
  * When multiple reload requests come in rapidly (e.g., multiple message-logged events),
  * only the latest fetch should update the state to avoid stale data overwrites.
  */
-const pendingReloads = new Map<string, { version: number; aborted: boolean }>();
+const pendingReloads = new Map<string, { version: number; aborted: boolean; workspacePath: string }>();
 
 function preserveEquivalentArrayRef<T>(current: T[] | undefined, next: T[] | undefined): T[] | undefined {
   if (!current || !next) return next;
@@ -1933,6 +2016,8 @@ export const reloadSessionDataAtom = atom(
       return;
     }
 
+    if (get(closedSessionWorkspacesAtom).has(workspacePath) && canReleaseSessionData(get, sessionId)) return;
+
     // Create a new version for this reload request
     const existingPending = pendingReloads.get(sessionId);
     if (existingPending) {
@@ -1941,62 +2026,26 @@ export const reloadSessionDataAtom = atom(
     }
 
     const currentVersion = (existingPending?.version || 0) + 1;
-    const thisReload = { version: currentVersion, aborted: false };
+    const thisReload = { version: currentVersion, aborted: false, workspacePath };
     pendingReloads.set(sessionId, thisReload);
+    const messagesAtStart = captureTranscriptMessages(get(sessionStoreAtom(sessionId))?.messages ?? []);
 
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
 
       // Check if this reload was superseded by a newer one
-      if (thisReload.aborted) {
+      if (thisReload.aborted ||
+          (get(closedSessionWorkspacesAtom).has(workspacePath) && canReleaseSessionData(get, sessionId))) {
         return;
       }
 
       if (sessionData) {
         const current = get(sessionStoreAtom(sessionId));
 
-        // Merge messages: preserve local-only optimistic messages not yet in database.
-        // Optimistic messages (added in-memory by the renderer before the provider
-        // persists them) have negative IDs (id < 0). They must be preserved across
-        // DB reloads so chat bubbles don't flicker away while waiting for the
-        // provider to persist the canonical version.
+        sessionData.messages = reconcileTranscriptMessages(
+          current?.messages ?? [], sessionData.messages ?? [], { startedWith: messagesAtStart },
+        );
         if (current) {
-          const dbMessages = sessionData.messages || [];
-          const localMessages = current.messages || [];
-
-          // Collect optimistic messages (negative IDs) that aren't yet in the DB.
-          // These were added locally before the provider persisted them.
-          // Drop any optimistic message whose type+text matches a DB message
-          // with a similar timestamp (within 5s tolerance). The timestamp check
-          // avoids premature eviction when a user sends two identical messages
-          // (e.g. "yes" twice). Use safe getTime() in case createdAt is a string
-          // after IPC serialization rather than a Date object.
-          const safeGetTime = (d: Date | string | unknown): number => {
-            if (d instanceof Date) return d.getTime();
-            if (typeof d === 'string') return new Date(d).getTime();
-            return 0;
-          };
-          const optimisticMessages = localMessages.filter(
-            (m: TranscriptViewMessage) =>
-              m.id < 0 &&
-              !dbMessages.some(
-                (db: TranscriptViewMessage) =>
-                  db.type === m.type &&
-                  db.text === m.text &&
-                  Math.abs(safeGetTime(db.createdAt) - safeGetTime(m.createdAt)) < 5000
-              )
-          );
-
-          if (optimisticMessages.length > 0) {
-            // Append optimistic messages after DB messages so they appear at
-            // the correct position (end of transcript). They'll be naturally
-            // replaced on the next reload once the provider has persisted
-            // canonical versions with real positive IDs.
-            sessionData.messages = [...dbMessages, ...optimisticMessages];
-          } else {
-            sessionData.messages = dbMessages;
-          }
-
           // Preserve read state
           const preservedTimestamp = current.lastReadMessageTimestamp || 0;
           const dbTimestamp = sessionData.lastReadMessageTimestamp || 0;
@@ -2024,7 +2073,7 @@ export const reloadSessionDataAtom = atom(
     } finally {
       // Clean up if this was the latest reload
       const currentPending = pendingReloads.get(sessionId);
-      if (currentPending?.version === currentVersion) {
+      if (currentPending === thisReload) {
         pendingReloads.delete(sessionId);
       }
     }

@@ -1,3 +1,5 @@
+import { reservePromptAnswer } from './PromptAnswerReservation';
+import { warnIfUnpublished } from '@nimbalyst/runtime/sync/pushOutcome';
 import { sessionInbox } from './sessionInboxService';
 import { resolveProviderApiKey } from './resolveProviderApiKey';
 import { SAVED_CREDENTIAL, withoutProviderConfigCredentials } from '../../../shared/providerCredentials';
@@ -86,6 +88,7 @@ import {
 } from './QueueDriveService';
 import { createWorkspaceWindowResolver } from './resolveWorkspaceWindow';
 import { runQueueDriveAttempt } from './queueDriveAttempt';
+import { wakeParentAfterChildSettle } from './wakeParentAfterChildSettle';
 import { clearStuckRunningState } from './clearStuckRunningState';
 import { publishQueuedPromptsToSync } from './queuedPromptSyncPublisher';
 import { onWorkspaceWindowAvailable } from '../../window/workspaceWindowAvailability';
@@ -543,6 +546,11 @@ export class AIService {
       return { success: false, error: 'Session not found' };
     }
 
+    if (promptType === 'permission_request' || promptType === 'ask_user_question_request') {
+      const answer = promptType === 'permission_request' ? response : { answers: response.answers ?? response, cancelled: response.cancelled === true };
+      if (!reservePromptAnswer(sessionId, promptType === 'permission_request' ? 'permission' : 'question', promptId, answer)) return { success: false, error: 'This prompt was already answered or delivery is unknown.' };
+    }
+
     let responseContent: Record<string, unknown>;
     if (promptType === 'permission_request') {
       responseContent = {
@@ -913,36 +921,15 @@ export class AIService {
       onAfterSettled: async () => {
         try {
           const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
-          const childSession = await AISessionsRepository.get(sessionId);
-          if (!childSession?.createdBySessionId) return;
-
-          // Honor fire-and-forget. spawn_session sets metadata.notifyParent=false
-          // on the child for /launch-new-session-style hand-offs where the parent
-          // does not want to be re-driven when the child settles. Without this
-          // guard, every child settle wakes the parent unconditionally, which
-          // re-drives the meta-agent in a loop. Matches the guard in
-          // MetaAgentService.handleChildSessionEvent.
-          const childMetadata = (childSession.metadata as Record<string, unknown> | undefined) ?? undefined;
-          if (childMetadata && childMetadata.notifyParent === false) return;
-
-          // Do not re-drive the parent when the child chain just settled in
-          // 'error'. A failed child (e.g. an antigravity 429) has no result to
-          // deliver, and waking the parent on every such settle is the meta-agent
-          // spin loop. Native children settle 'completed', so this is a no-op for
-          // them. settledChildErrored is captured in onChainSettled before
-          // endSession evicts the child's in-memory state.
-          if (settledChildErrored) return;
-
-          const metaSession = await AISessionsRepository.get(childSession.createdBySessionId);
-          if (!metaSession?.workspacePath) return;
-
-          const stateManager = getSessionStateManager();
-          const metaState = stateManager.getSessionState(metaSession.id);
-          const metaStatus = metaState?.status || 'idle';
-          if (metaStatus === 'idle' || metaStatus === 'error') {
-            logger.main.info(`[AIService] ${source}: waking meta-agent ${metaSession.id} after child ${sessionId} completed`);
-            this.requestQueueDrive(metaSession.id, metaSession.workspacePath, 'meta-agent');
-          }
+          await wakeParentAfterChildSettle({
+            childSessionId: sessionId,
+            source,
+            settledChildErrored,
+            getSession: (id) => AISessionsRepository.get(id),
+            getSessionStatus: (id) => getSessionStateManager().getSessionState(id)?.status,
+            requestQueueDrive: (id, path) => this.requestQueueDrive(id, path, 'meta-agent'),
+            logInfo: (message) => logger.main.info(message),
+          });
         } catch (metaErr) {
           logger.main.error(`[AIService] ${source}: error checking meta-agent wakeup:`, metaErr);
         }
@@ -1163,12 +1150,9 @@ export class AIService {
             };
 
             // Store /context data in currentContext (snapshot of context window)
-            // Preserve cumulative input/output tokens from modelUsage
+            // Preserve every cumulative counter (tokens, cache, cost, baselines)
             const tokenUsage = {
-              inputTokens: currentUsage.inputTokens,
-              outputTokens: currentUsage.outputTokens,
-              totalTokens: currentUsage.totalTokens,
-              costUSD: currentUsage.costUSD,
+              ...currentUsage,
               // Legacy fields for backward compatibility
               contextWindow: parsedUsage.contextWindow,
               categories: parsedUsage.categories,
@@ -1187,15 +1171,20 @@ export class AIService {
             // Push context usage to mobile sync
             const syncProvider = getSyncProvider();
             if (syncProvider) {
-              syncProvider.pushChange(session.id, {
-                type: 'metadata_updated',
-                metadata: {
-                  currentContext: {
-                    tokens: parsedUsage.totalTokens,
-                    contextWindow: parsedUsage.contextWindow,
+              try {
+                const outcome = await syncProvider.pushChange(session.id, {
+                  type: 'metadata_updated',
+                  metadata: {
+                    currentContext: {
+                      tokens: parsedUsage.totalTokens,
+                      contextWindow: parsedUsage.contextWindow,
+                    },
                   },
-                } as any,
-              });
+                });
+                warnIfUnpublished(message => logger.main.warn(message), session.id, '[AIService] Failed to publish sync change', outcome);
+              } catch (error) {
+                logger.main.warn(`[AIService] Failed to publish sync change for session ${session.id}:`, error);
+              }
             }
 
             // Also send IPC event to update UI immediately

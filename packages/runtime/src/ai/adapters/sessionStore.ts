@@ -9,6 +9,9 @@ export type ChatSession = SessionData;
  * This is the single source of truth for session list/registry items.
  */
 export interface SessionMeta {
+  /** Provider log provenance for sessions followed or imported on this device. */
+  externalSource?: 'claude-code' | 'openai-codex';
+  externalLastActivityAt?: number;
   /** Read-only desktop mirror; execution remains on this remote device. */
   remoteHostDeviceId?: string;
   id: string;
@@ -76,6 +79,14 @@ export interface CreateSessionPayload {
   branchedFromSessionId?: string;  // ID of the session this was forked from
   branchPointMessageId?: number;  // Message ID where this branch diverged
   branchedAt?: number;  // Timestamp when the branch was created
+  /** Session already has a caller-assigned name; suppresses in-band self-naming. */
+  hasBeenNamed?: boolean;
+  /**
+   * Initial `metadata` blob, written in the same insert as the row. Anything a
+   * reader must never see missing (e.g. `sessionOwner`, `sessionDirective`,
+   * `notifyParent`) belongs here rather than in a follow-up updateMetadata.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -124,6 +135,8 @@ export interface SessionStore {
   create(payload: CreateSessionPayload): Promise<void>;
   updateMetadata(sessionId: string, metadata: UpdateSessionMetadataPayload): Promise<void>;
   get(sessionId: string): Promise<SessionData | null>;
+  /** Indexed, workspace-scoped lookup; rejects ambiguous provider resume handles. */
+  findByProviderSessionId?(provider: string, providerSessionId: string, workspaceId: string): Promise<SessionData | null>;
   /**
    * Batch fetch multiple sessions by IDs.
    * More efficient than calling get() multiple times.

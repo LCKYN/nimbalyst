@@ -1,5 +1,9 @@
+import { claimExternalSessionForLocalExecution } from '../externalSessions/ExternalSessionService';
+import { warnIfUnpublished } from '@nimbalyst/runtime/sync/pushOutcome';
+import type { SessionChange } from '@nimbalyst/runtime/sync/types';
 import { sessionInbox } from './sessionInboxService';
 import { codexQuestionTurns } from './codexQuestionTurns';
+import { supersedeOpenQuestions } from './supersedeOpenQuestions';
 /**
  * Streaming message handler for AIService.
  *
@@ -45,8 +49,8 @@ import type { RawDocumentContext } from '@nimbalyst/runtime/ai/services/types';
 import type { DocumentContextService } from '@nimbalyst/runtime/ai/services/DocumentContextService';
 import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
 import { resolveClaudeCodeParentContextWindow } from '@nimbalyst/runtime/ai/modelConstants';
-import { estimateCostUSD } from '@nimbalyst/runtime/ai/pricing/modelPricing';
-import type { TokenUsageBucket } from '@nimbalyst/runtime/ai/server/types';
+import { accumulateClaudeCodeTurnUsage, accumulateProviderTurnUsage } from './tokenUsageAccumulation';
+import { provisionalTitleForFirstMessage } from './provisionalSessionTitle';
 import {
   buildMcpSessionStatusSnapshot,
   type McpSessionStatusInput,
@@ -122,8 +126,12 @@ import { historyManager } from '../../HistoryManager';
 import { addGitignoreBypass } from '../../file/WorkspaceEventBus';
 import { getSyncProvider, isDesktopTrulyAway } from '../SyncManager';
 import { requestMobilePush } from './mobilePushRequest';
-import { setSessionPendingPrompt } from './pendingPromptPersistence';
-import type { PromptKind } from '../../tray/fleetSnapshot';
+import { createAskUserQuestionListeners } from './askUserQuestionListeners';
+import { createTeammateIdleWakeListener } from './teammateIdleWake';
+// The per-session pending-prompt bit is derived from the set of prompts still
+// open, so one prompt settling cannot clear the indicator for another that is
+// still waiting on the user. Refs #1549.
+import { openPrompt, resolvePrompt, hasOpenPrompts } from './openPromptRegistry';
 import { getAgentWorkflowService } from '../AgentWorkflowService';
 import { repairOrphanedSessionMetaCall } from './repairOrphanedSessionMetaCall';
 import { getMetaAgentOpenAITools } from '../../mcp/metaAgentServer';
@@ -318,20 +326,6 @@ async function getWorkspacePathForSession(sessionId: string): Promise<string | n
   return null;
 }
 
-/** Add one turn's `TokenUsageBucket` onto a cumulative session-level bucket. #1496 */
-function addTokenUsageBucket(
-  prev: TokenUsageBucket | undefined,
-  delta: { inputTokens?: number; outputTokens?: number; cacheReadInputTokens?: number; cacheCreationInputTokens?: number; costUSD?: number },
-): TokenUsageBucket {
-  return {
-    inputTokens: (prev?.inputTokens || 0) + (delta.inputTokens || 0),
-    outputTokens: (prev?.outputTokens || 0) + (delta.outputTokens || 0),
-    cacheReadInputTokens: (prev?.cacheReadInputTokens || 0) + (delta.cacheReadInputTokens || 0),
-    cacheCreationInputTokens: (prev?.cacheCreationInputTokens || 0) + (delta.cacheCreationInputTokens || 0),
-    costUSD: (prev?.costUSD || 0) + (delta.costUSD || 0),
-  };
-}
-
 export class MessageStreamingHandler {
   private readonly svc: AIServiceInternal;
   private readonly unsubscribeBatchListener: () => void;
@@ -485,6 +479,10 @@ export class MessageStreamingHandler {
       throw new Error(`Session mismatch: requested ${sessionId} but got ${session.id}`);
     }
 
+    if (session.providerConfig && 'imported' in session.providerConfig && session.providerConfig.imported === true) {
+      await claimExternalSessionForLocalExecution(session.id);
+    }
+
     const inputType = (documentContext as any)?.inputType as string | undefined;
     if (inputType === 'user' && !queuedPromptId) {
       await this.disableParentNotificationsAfterDirectTakeover(session);
@@ -549,10 +547,10 @@ export class MessageStreamingHandler {
     await this.svc.sessionManager.addMessage(userMessage, session.id);
     // logger.main.info(`[AIService] User message added successfully to session ${session.id}`);
 
-    // Update session title if this is the first user message
-    if (session.messages.length === 0 || (session.messages.length === 1 && session.messages[0].type === 'user_message')) {
-      // Generate a provisional title from the first message without locking out auto-naming
-      const title = message.length > 100 ? message.substring(0, 97) + '...' : message;
+    // Provisional title from the first user message, unless the session was named at creation
+    const title = provisionalTitleForFirstMessage(session, message);
+    if (title !== null) {
+      // Without locking out auto-naming
       await this.svc.sessionManager.updateSessionTitle(session.id, title, {
         force: true,
         markAsNamed: false,
@@ -927,7 +925,7 @@ export class MessageStreamingHandler {
     // renderers AND mobile sync. Mirrors what SessionNamingService does for
     // the MCP-tool path so direct repo writes from the provider do not bypass
     // the kanban refresh and iOS push.
-    const onSessionMetadataUpdated = (data: { sessionId: string; metadata: Record<string, unknown> }) => {
+    const onSessionMetadataUpdated = async (data: { sessionId: string; metadata: Record<string, unknown> }) => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) {
           window.webContents.send('sessions:session-updated', data.sessionId, data.metadata);
@@ -935,36 +933,35 @@ export class MessageStreamingHandler {
       }
       const sp = getSyncProvider();
       if (sp && (data.metadata.phase !== undefined || data.metadata.tags !== undefined)) {
-        const syncMeta: Record<string, unknown> = {};
+        const syncMeta: Extract<SessionChange, { type: 'metadata_updated' }>['metadata'] = {};
         if (data.metadata.phase !== undefined) syncMeta.phase = data.metadata.phase as string;
         if (data.metadata.tags !== undefined) syncMeta.tags = data.metadata.tags as string[];
-        sp.pushChange(data.sessionId, {
-          type: 'metadata_updated',
-          metadata: syncMeta as any,
-        });
+        try {
+          const outcome = await sp.pushChange(data.sessionId, {
+            type: 'metadata_updated',
+            metadata: syncMeta,
+          });
+          warnIfUnpublished(message => logger.main.warn(message), data.sessionId, '[AIService] Failed to publish sync change', outcome);
+        } catch (error) {
+          logger.main.warn(`[AIService] Failed to publish sync change for session ${data.sessionId}:`, error);
+        }
       }
     };
     this.installListener(provider, 'session:metadata-updated', onSessionMetadataUpdated);
 
-    // Helper to persist pending-prompt state to ai_sessions.metadata AND
-    // push the change to mobile in one call. See pendingPromptPersistence.ts
-    // for why we persist locally: the in-memory atom can desync from reality
-    // if a resolve event is missed (renderer reload, HMR, late delivery),
-    // and the only recovery is rehydrating from the DB on next list refresh.
+    // Pending-prompt state is now opened/resolved per prompt id through
+    // openPromptRegistry, which persists to ai_sessions.metadata and pushes to
+    // mobile via pendingPromptPersistence. We persist locally because the
+    // in-memory atom can desync from reality if a resolve event is missed
+    // (renderer reload, HMR, late delivery), and the only recovery is
+    // rehydrating from the DB on the next session list refresh. The prompt
     // `kind` colours the menu bar strip's dot: a tap versus thinking required.
-    const syncPendingPrompt = (
-      sessionId: string,
-      hasPendingPrompt: boolean,
-      kind: PromptKind = 'approval',
-    ) => {
-      void setSessionPendingPrompt(sessionId, hasPendingPrompt, kind);
-    };
 
     // Listen for ExitPlanMode confirmation requests and forward to renderer
     const onExitPlanModeConfirm = async (data: { requestId: string; sessionId: string; planSummary: string; timestamp: number }) => {
       logger.main.info('[AIService] ExitPlanMode confirmation requested:', data.requestId);
       safeSend(event, 'ai:exitPlanModeConfirm', { ...data, workspacePath: effectiveWorkspacePath });
-      syncPendingPrompt(data.sessionId, true, 'decision');
+      openPrompt(data.sessionId, data.requestId, 'decision');
 
       // Update session status so all windows show the pending indicator
       getSessionStateManager().updateActivity({
@@ -1000,7 +997,8 @@ export class MessageStreamingHandler {
       timestamp: number;
     }) => {
       logger.main.info('[AIService] ExitPlanMode resolved:', data.requestId, 'approved=', data.approved);
-      syncPendingPrompt(data.sessionId, false);
+      resolvePrompt(data.sessionId, data.requestId);
+      if (hasOpenPrompts(data.sessionId)) return;
 
       getSessionStateManager().updateActivity({
         sessionId: data.sessionId,
@@ -1012,51 +1010,36 @@ export class MessageStreamingHandler {
     };
     this.installListener(provider, 'exitPlanMode:resolved', onExitPlanModeResolved);
 
-    // Listen for AskUserQuestion requests and forward to renderer
-    const onAskUserQuestion = async (data: { questionId: string; sessionId: string; questions: any[]; timestamp: number }) => {
-      // logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
-      safeSend(event, 'ai:askUserQuestion', { ...data, workspacePath: effectiveWorkspacePath });
-      syncPendingPrompt(data.sessionId, true, 'decision');
-
-      // Update session status to waiting_for_input so all windows show the pending indicator
-      getSessionStateManager().updateActivity({
-        sessionId: data.sessionId,
-        status: 'waiting_for_input',
-      }).catch((err) => {
-        logger.main.error('[AIService] Failed to update session status to waiting_for_input:', err);
-      });
-
-      // Show OS notification if app is backgrounded
-      const sessionTitle = await getCurrentSessionTitle(data.sessionId);
-      notificationService.showBlockedNotification(
-        data.sessionId,
-        sessionTitle,
-        'question',
-        effectiveWorkspacePath
-      );
-    };
-    this.installListener(provider, 'askUserQuestion:pending', onAskUserQuestion);
-
-    // Listen for AskUserQuestion answers and forward to renderer to update tool call display
-    const onAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; questions: any[]; answers: Record<string, string>; timestamp: number }) => {
-      // logger.main.info('[AIService] AskUserQuestion answered:', data.questionId);
-      safeSend(event, 'ai:askUserQuestionAnswered', { ...data, workspacePath: effectiveWorkspacePath });
-      syncPendingPrompt(data.sessionId, false);
-
-      // Update session status back to running so all windows clear the pending indicator
-      getSessionStateManager().updateActivity({
-        sessionId: data.sessionId,
-        status: 'running',
-        isStreaming: true,
-      }).catch(() => {});
-    };
-    this.installListener(provider, 'askUserQuestion:answered', onAskUserQuestionAnswered);
+    // AskUserQuestion pending/answered/cancelled lifecycle. Extracted so the
+    // state transitions -- in particular the cancelled path, which must NOT
+    // resurrect a stopped session -- are testable on their own. See #1549.
+    const askUserQuestionListeners = createAskUserQuestionListeners({
+      sendToRenderer: (channel, payload) => { safeSend(event, channel, payload); },
+      openPrompt,
+      resolvePrompt,
+      hasOpenPrompts,
+      updateSessionActivity: (update) => getSessionStateManager().updateActivity(update),
+      getSessionTitle: (sessionId) => getCurrentSessionTitle(sessionId),
+      showBlockedNotification: (sessionId, sessionTitle) => {
+        void notificationService.showBlockedNotification(
+          sessionId,
+          sessionTitle,
+          'question',
+          effectiveWorkspacePath,
+        );
+      },
+      workspacePath: effectiveWorkspacePath,
+      logError: (message, err) => { logger.main.error(`[AIService] ${message}:`, err); },
+    });
+    this.installListener(provider, 'askUserQuestion:pending', askUserQuestionListeners.onPending);
+    this.installListener(provider, 'askUserQuestion:answered', askUserQuestionListeners.onAnswered);
+    this.installListener(provider, 'askUserQuestion:cancelled', askUserQuestionListeners.onCancelled);
 
     // Listen for tool permission requests and forward to renderer
     const onToolPermissionPending = async (data: { requestId: string; sessionId: string; workspacePath: string; request: any; timestamp: number }) => {
       logger.main.info('[AIService] Tool permission requested:', data.requestId);
       safeSend(event, 'ai:toolPermission', data);
-      syncPendingPrompt(data.sessionId, true);
+      openPrompt(data.sessionId, data.requestId, 'approval');
 
       // Update session status so all windows show the pending indicator
       getSessionStateManager().updateActivity({
@@ -1085,7 +1068,8 @@ export class MessageStreamingHandler {
     const onToolPermissionResolved = (data: { requestId: string; sessionId: string; response: any; timestamp: number }) => {
       logger.main.info('[AIService] Tool permission resolved:', data.requestId);
       safeSend(event, 'ai:toolPermissionResolved', { ...data, workspacePath: effectiveWorkspacePath });
-      syncPendingPrompt(data.sessionId, false);
+      resolvePrompt(data.sessionId, data.requestId);
+      if (hasOpenPrompts(data.sessionId)) return;
 
       // Update session status back to running so all windows clear the pending indicator
       getSessionStateManager().updateActivity({
@@ -1131,58 +1115,31 @@ export class MessageStreamingHandler {
     };
     this.installListener(provider, 'session:providerSessionReceived', onProviderSessionReceived);
 
-    // Listen for teammate messages when the lead is idle (no active query).
-    // When the lead is active, messages are delivered via interrupt + streamInput
-    // inside ClaudeCodeProvider.sendMessage(). This handler covers the idle case
-    // by triggering a new sendMessage call with the teammate's message.
-    const onTeammateMessageWhileIdle = async (data: {
-      sessionId: string;
-      message: string;
-    }) => {
-      if (!data.sessionId) {
-        logger.main.warn('[AIService] teammate:messageWhileIdle with no sessionId');
-        return;
-      }
-      // Guard: don't trigger sendMessage if session was already ended
-      // (e.g., all teammates completed between message queue and this handler)
-      const sessionStateManager = getSessionStateManager();
-      if (!sessionStateManager.isSessionActive(data.sessionId)) {
-        logger.main.info(`[AIService] Ignoring teammate message for ended session ${data.sessionId}`);
-        return;
-      }
-      logger.main.info(`[AIService] Teammate message while lead idle, triggering sendMessage for session ${data.sessionId}`);
-      try {
-        // Ensure the session is marked as running so the UI shows the stop button.
-        // sendMessageHandler also calls startSession, but there can be a gap between
-        // the setImmediate and when that runs. Re-calling startSession is safe (idempotent).
-        await sessionStateManager.startSession({
-          sessionId: data.sessionId,
-          workspacePath: effectiveWorkspacePath,
-        });
-
-        const targetWindow = findWindowByWorkspace(effectiveWorkspacePath);
-        if (targetWindow && !targetWindow.isDestroyed()) {
-          // Create a mock event and call sendMessage directly
-          const mockEvent = {
-            sender: targetWindow.webContents,
-            senderFrame: targetWindow.webContents.mainFrame,
-          } as Electron.IpcMainInvokeEvent;
-
-          if (this.svc.sendMessageHandler) {
-            // Fire-and-forget: sendMessage will stream results to the renderer
-            setImmediate(async () => {
-              try {
-                await this.svc.sendMessageHandler!(mockEvent, data.message, {} as any, data.sessionId, effectiveWorkspacePath);
-              } catch (err) {
-                logger.main.error('[AIService] Failed to process teammate message while idle:', err);
-              }
-            });
-          }
+    // Wake the lead when a teammate message or finished background task
+    // arrives after its turn ended. See teammateIdleWake.ts.
+    const sessionStateManagerForWake = getSessionStateManager();
+    const onTeammateMessageWhileIdle = createTeammateIdleWakeListener({
+      isSessionActive: (id) => sessionStateManagerForWake.isSessionActive(id),
+      startSession: (options) => sessionStateManagerForWake.startSession(options),
+      endSession: (id) => sessionStateManagerForWake.endSession(id),
+      turnWorkspacePath: () => effectiveWorkspacePath,
+      resolveOwnerWorkspacePath: getWorkspacePathForSession,
+      findWindow: (wakePath) => findWindowByWorkspace(wakePath),
+      sendMessage: async (targetWindow, message, wakeSessionId, wakePath) => {
+        if (!this.svc.sendMessageHandler) {
+          throw new Error('sendMessageHandler is not registered');
         }
-      } catch (error) {
-        logger.main.error('[AIService] Failed to handle teammate message while idle:', error);
-      }
-    };
+        const mockEvent = {
+          sender: targetWindow.webContents,
+          senderFrame: targetWindow.webContents.mainFrame,
+        } as Electron.IpcMainInvokeEvent;
+        return this.svc.sendMessageHandler(mockEvent, message, {} as any, wakeSessionId, wakePath);
+      },
+      defer: (fn) => { setImmediate(fn); },
+      logInfo: (message) => logger.main.info(message),
+      logWarn: (message) => logger.main.warn(message),
+      logError: (message, error) => logger.main.error(`${message}:`, error),
+    });
     this.installListener(provider, 'teammate:messageWhileIdle', onTeammateMessageWhileIdle);
 
     // Listen for all teammates completing. When the lead finished but teammates
@@ -1295,10 +1252,18 @@ export class MessageStreamingHandler {
     // Mark session as executing for mobile sync (shows "Running" indicator)
     const syncProvider = getSyncProvider();
     if (syncProvider) {
-      syncProvider.pushChange(session.id, {
-        type: 'metadata_updated',
-        metadata: { isExecuting: true } as any,
-      });
+      // First-token latency must not wait for index publication. This task catches failures internally.
+      void (async () => {
+        try {
+          const outcome = await syncProvider.pushChange(session.id, {
+            type: 'metadata_updated',
+            metadata: { isExecuting: true },
+          });
+          warnIfUnpublished(message => logger.main.warn(message), session.id, '[AIService] Failed to publish sync change', outcome);
+        } catch (error) {
+          logger.main.warn(`[AIService] Failed to publish sync change for session ${session.id}:`, error);
+        }
+      })();
     }
 
     // Mirrors this turn's direct Git commands into the workspace Git journal so
@@ -1338,6 +1303,7 @@ export class MessageStreamingHandler {
       inboxTurn = ['claude-code', 'openai-codex'].includes(session.provider)
         ? await sessionInbox.begin(session.id, session.workspacePath ?? workspacePath) : undefined;
       questionTurn = session.provider === 'openai-codex' ? codexQuestionTurns.begin(session.id) : undefined;
+      await supersedeOpenQuestions({ sessionId: session.id, provider: session.provider, context: documentContext });
       let fullResponse = '';
       let lastTextSection = '';  // Track text after the last tool call (for notifications)
       let prevTextSection = '';  // Previous non-empty text section (fallback if last section is empty)
@@ -1668,15 +1634,23 @@ export class MessageStreamingHandler {
               // Push live context usage to mobile sync
               const syncProvider = getSyncProvider();
               if (syncProvider) {
-                syncProvider.pushChange(session.id, {
-                  type: 'metadata_updated',
-                  metadata: {
-                    currentContext: {
-                      tokens: partialContextFill,
-                      contextWindow: partialContextWindow,
-                    },
-                  } as any,
-                });
+                // Streaming chunks must not wait for index publication. This task catches failures internally.
+                void (async () => {
+                  try {
+                    const outcome = await syncProvider.pushChange(session.id, {
+                      type: 'metadata_updated',
+                      metadata: {
+                        currentContext: {
+                          tokens: partialContextFill,
+                          contextWindow: partialContextWindow,
+                        },
+                      },
+                    });
+                    warnIfUnpublished(message => logger.main.warn(message), session.id, '[AIService] Failed to publish sync change', outcome);
+                  } catch (error) {
+                    logger.main.warn(`[AIService] Failed to publish sync change for session ${session.id}:`, error);
+                  }
+                })();
               }
 
               session.tokenUsage = updatedUsage;
@@ -2469,49 +2443,6 @@ export class MessageStreamingHandler {
             // For claude-code: use modelUsage for cumulative tokens and contextWindow
             // For other providers: use tokenUsage from chunk.usage
             if (session.provider === 'claude-code' && modelUsage) {
-              // For claude-code, accumulate tokens from modelUsage (SDK provides per-model breakdown)
-              const currentUsage = session.tokenUsage ?? {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0
-              };
-
-              // Cumulative input/output come from result.usage (chunk.usage), which Anthropic
-              // deduplicates by message.id. Do NOT sum modelUsage tokens for these -- the SDK
-              // over-counts them from duplicated assistant events (each message is emitted 2-3x,
-              // one event per content block), inflating the tooltip totals. See NIM-689.
-              // Cost still derives from modelUsage (the only per-model cost source; not displayed).
-              const newInputTokens = tokenUsage?.input_tokens || 0;
-              const newOutputTokens = tokenUsage?.output_tokens || 0;
-              const newCacheReadTokens = tokenUsage?.cache_read_input_tokens || 0;
-              const newCacheCreationTokens = tokenUsage?.cache_creation_input_tokens || 0;
-              let newCostUSD = 0;
-              for (const modelName of Object.keys(modelUsage)) {
-                newCostUSD += modelUsage[modelName].costUSD || 0;
-              }
-
-              // Main-vs-subagent split and per-model breakdown (#1496). mainUsage/
-              // subagentUsage are this TURN's totals (attributeModelUsageByOrigin
-              // already summed whole `modelUsage` entries by origin), accumulated
-              // onto the session's running buckets. byModel unions every model key
-              // seen in modelUsage across turns, regardless of origin.
-              const updatedByModel: Record<string, TokenUsageBucket> = { ...(currentUsage.byModel ?? {}) };
-              for (const [modelName, modelStats] of Object.entries(modelUsage)) {
-                updatedByModel[modelName] = addTokenUsageBucket(updatedByModel[modelName], {
-                  inputTokens: modelStats.inputTokens,
-                  outputTokens: modelStats.outputTokens,
-                  cacheReadInputTokens: modelStats.cacheReadInputTokens,
-                  cacheCreationInputTokens: modelStats.cacheCreationInputTokens,
-                  costUSD: modelStats.costUSD,
-                });
-              }
-              const updatedMainUsage = chunk.mainUsage
-                ? addTokenUsageBucket(currentUsage.mainUsage, chunk.mainUsage)
-                : currentUsage.mainUsage;
-              const updatedSubagentUsage = chunk.subagentUsage
-                ? addTokenUsageBucket(currentUsage.subagentUsage, chunk.subagentUsage)
-                : currentUsage.subagentUsage;
-
               // Prefer the REAL per-model context window the CLI reports in
               // modelUsage — the registry value is only a static seed and was
               // wrong for models that changed window across CLI versions (the
@@ -2521,33 +2452,16 @@ export class MessageStreamingHandler {
               // the PARENT model's window by matching the session's family.
               // Fall back to the registry seed before the first result arrives.
               const reportedContextWindow = resolveClaudeCodeParentContextWindow(sessionModelId, modelUsage);
-              const contextWindowForDisplay = reportedContextWindow || selectedModelContextWindow || currentUsage.contextWindow;
-
-              const updatedUsage: NonNullable<SessionData['tokenUsage']> = {
-                inputTokens: currentUsage.inputTokens + newInputTokens,
-                outputTokens: currentUsage.outputTokens + newOutputTokens,
-                totalTokens: currentUsage.totalTokens + newInputTokens + newOutputTokens,
-                costUSD: (currentUsage.costUSD || 0) + newCostUSD,
-                cacheReadInputTokens: (currentUsage.cacheReadInputTokens || 0) + newCacheReadTokens,
-                cacheCreationInputTokens: (currentUsage.cacheCreationInputTokens || 0) + newCacheCreationTokens,
-                mainUsage: updatedMainUsage,
-                subagentUsage: updatedSubagentUsage,
-                byModel: updatedByModel,
-                // Both figures go, not just the fill. The meter falls back to
-                // cumulative `totalTokens` over whatever denominator survives,
-                // so clearing the fill alone turns a stale 90% into a confident
-                // 600%. With no denominator it reports plain token totals and
-                // claims nothing about context until a turn measures it.
-                contextWindow: contextCompacted ? undefined : contextWindowForDisplay,
-                // contextFillTokens = input + cacheRead + cacheCreation from last assistant message
-                // This is the actual context fill, not cumulative - updates correctly after compaction
-                // After compaction, clear stale currentContext (next real turn will set accurate value)
-                currentContext: contextCompacted
-                  ? undefined
-                  : (contextFillTokens !== undefined && contextWindowForDisplay)
-                    ? { tokens: contextFillTokens, contextWindow: contextWindowForDisplay }
-                    : currentUsage.currentContext,
-              };
+              const contextWindowForDisplay = reportedContextWindow || selectedModelContextWindow || session.tokenUsage?.contextWindow;
+              const updatedUsage = accumulateClaudeCodeTurnUsage(session.tokenUsage, {
+                usage: tokenUsage,
+                modelUsage,
+                mainUsage: chunk.mainUsage,
+                subagentUsage: chunk.subagentUsage,
+                contextFillTokens,
+                contextCompacted,
+                contextWindow: contextWindowForDisplay,
+              });
 
               await this.svc.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
 
@@ -2561,15 +2475,20 @@ export class MessageStreamingHandler {
               if (contextFillTokens !== undefined && contextWindowForDisplay) {
                 const syncProvider = getSyncProvider();
                 if (syncProvider) {
-                  syncProvider.pushChange(session.id, {
-                    type: 'metadata_updated',
-                    metadata: {
-                      currentContext: {
-                        tokens: contextFillTokens,
-                        contextWindow: contextWindowForDisplay,
+                  try {
+                    const outcome = await syncProvider.pushChange(session.id, {
+                      type: 'metadata_updated',
+                      metadata: {
+                        currentContext: {
+                          tokens: contextFillTokens,
+                          contextWindow: contextWindowForDisplay,
+                        },
                       },
-                    } as any,
-                  });
+                    });
+                    warnIfUnpublished(message => logger.main.warn(message), session.id, '[AIService] Failed to publish sync change', outcome);
+                  } catch (error) {
+                    logger.main.warn(`[AIService] Failed to publish sync change for session ${session.id}:`, error);
+                  }
                 }
               }
 
@@ -2577,134 +2496,30 @@ export class MessageStreamingHandler {
               session.tokenUsage = updatedUsage;
             } else if (tokenUsage && session.provider !== 'claude-code') {
               // For non-claude-code providers, use tokenUsage from chunk
-              const currentUsage = session.tokenUsage ?? {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0
-              };
-
-              // Calculate new tokens for this message
-              const newInputTokens = (tokenUsage.input_tokens || 0);
-              const newOutputTokens = tokenUsage.output_tokens || 0;
-              const newTotalTokens = newInputTokens + newOutputTokens;
               const isCodexProvider = session.provider === 'openai-codex';
               const reportsCurrentContext = agentCapabilitiesForProviderType(
                 session.provider,
               ).contextReporting === 'context-window';
               const codexInitData = isCodexProvider ? (provider as any).getInitData?.() : null;
-              const isResumedCodexThread = codexInitData?.isResumedThread === true;
 
               // #914: only providers measured to report both a live fill and
               // denominator may populate currentContext. A catalog window by
               // itself cannot turn cumulative token spend into a percentage.
               const reportedContextWindow = reportsCurrentContext
-                ? (contextWindowFromChunk || selectedModelContextWindow || currentUsage.contextWindow)
+                ? (contextWindowFromChunk || selectedModelContextWindow || session.tokenUsage?.contextWindow)
                 : undefined;
-              const storedContextWindow = reportedContextWindow || currentUsage.contextWindow;
 
-              // Codex SDK turn.completed usage is cumulative for the provider thread.
-              // Convert to per-session deltas using the last seen cumulative snapshot.
-              let nextInputTokens = currentUsage.inputTokens + newInputTokens;
-              let nextOutputTokens = currentUsage.outputTokens + newOutputTokens;
-              let nextTotalTokens = currentUsage.totalTokens + newTotalTokens;
-              let providerCumulativeInputTokens = currentUsage.providerCumulativeInputTokens;
-              let providerCumulativeOutputTokens = currentUsage.providerCumulativeOutputTokens;
-
-              if (isCodexProvider) {
-                const cumulativeInput = tokenUsage.input_tokens ?? 0;
-                const cumulativeOutput = tokenUsage.output_tokens ?? 0;
-
-                const previousCumulativeInput =
-                  typeof currentUsage.providerCumulativeInputTokens === 'number'
-                    ? currentUsage.providerCumulativeInputTokens
-                    : currentUsage.inputTokens > 0
-                      ? currentUsage.inputTokens
-                      : undefined;
-                const previousCumulativeOutput =
-                  typeof currentUsage.providerCumulativeOutputTokens === 'number'
-                    ? currentUsage.providerCumulativeOutputTokens
-                    : currentUsage.outputTokens > 0
-                      ? currentUsage.outputTokens
-                      : undefined;
-
-                const hasPreviousCumulative =
-                  typeof previousCumulativeInput === 'number' &&
-                  typeof previousCumulativeOutput === 'number';
-
-                const deltaInput = hasPreviousCumulative
-                  ? Math.max(cumulativeInput - previousCumulativeInput, 0)
-                  : (isResumedCodexThread ? 0 : cumulativeInput);
-                const deltaOutput = hasPreviousCumulative
-                  ? Math.max(cumulativeOutput - previousCumulativeOutput, 0)
-                  : (isResumedCodexThread ? 0 : cumulativeOutput);
-
-                nextInputTokens = currentUsage.inputTokens + deltaInput;
-                nextOutputTokens = currentUsage.outputTokens + deltaOutput;
-                nextTotalTokens = currentUsage.totalTokens + deltaInput + deltaOutput;
-                providerCumulativeInputTokens = cumulativeInput;
-                providerCumulativeOutputTokens = cumulativeOutput;
-              }
-
-              // Cache token split (#1496). Best-effort: unlike input/output above,
-              // Codex's cumulative-thread bookkeeping isn't replicated here, so a
-              // resumed Codex thread's cache figures may double-count across
-              // sessions restored from an old snapshot. Low-impact (display only).
-              const newCacheReadTokens = tokenUsage.cache_read_input_tokens || 0;
-              const newCacheCreationTokens = tokenUsage.cache_creation_input_tokens || 0;
-
-              // Cost estimate fallback (#1496): most non-claude-code providers don't
-              // report an exact cost, so fall back to the pricing table keyed off
-              // the session's selected model. Uses the ACTUAL tokens added this
-              // turn (the post-delta-correction figures above), not the raw
-              // (possibly cumulative) `tokenUsage` fields.
-              const effectiveNewInputTokens = nextInputTokens - currentUsage.inputTokens;
-              const effectiveNewOutputTokens = nextOutputTokens - currentUsage.outputTokens;
-              const sdkCostUSD = tokenUsage.costUSD;
-              const estimatedCostUSD = sdkCostUSD === undefined
-                ? estimateCostUSD(sessionModelId, {
-                    inputTokens: effectiveNewInputTokens,
-                    outputTokens: effectiveNewOutputTokens,
-                    cacheReadInputTokens: newCacheReadTokens,
-                    cacheCreationInputTokens: newCacheCreationTokens,
-                  })
-                : undefined;
-              const newCostUSD = sdkCostUSD ?? estimatedCostUSD ?? 0;
-              // Sticky once true: once any turn's cost is an estimate, the whole
-              // session total displays as estimated rather than splitting a total
-              // into exact+estimated portions.
-              const costEstimated = currentUsage.costEstimated || (sdkCostUSD === undefined && estimatedCostUSD !== undefined);
-
-              const updatedUsage: NonNullable<SessionData['tokenUsage']> = {
-                inputTokens: nextInputTokens,
-                outputTokens: nextOutputTokens,
-                totalTokens: isCodexProvider
-                  ? nextTotalTokens
-                  : currentUsage.totalTokens + newTotalTokens,
-                ...(isCodexProvider ? {
-                  providerCumulativeInputTokens,
-                  providerCumulativeOutputTokens,
-                } : {}),
-                costUSD: (currentUsage.costUSD || 0) + newCostUSD,
-                costEstimated,
-                cacheReadInputTokens: (currentUsage.cacheReadInputTokens || 0) + newCacheReadTokens,
-                cacheCreationInputTokens: (currentUsage.cacheCreationInputTokens || 0) + newCacheCreationTokens,
-                // A compaction just replaced the conversation with a summary, so
-                // every fill figure in hand describes context that no longer
-                // exists -- including the one this chunk reports, which is read
-                // off the last assistant message from before the boundary. The
-                // denominator goes with it: the meter otherwise falls back to
-                // cumulative spend over the window and reports a confident,
-                // wrong percentage. Report nothing until a turn measures the new
-                // context. Codex and OpenCode reach this branch.
-                contextWindow: contextCompacted ? undefined : storedContextWindow,
-                currentContext: contextCompacted
-                  ? undefined
-                  : reportsCurrentContext
-                    ? (contextFillTokens !== undefined && reportedContextWindow
-                      ? { tokens: contextFillTokens, contextWindow: reportedContextWindow }
-                      : currentUsage.currentContext)
-                    : currentUsage.currentContext,
-              };
+              const updatedUsage = accumulateProviderTurnUsage(session.tokenUsage, {
+                usage: tokenUsage,
+                // Codex SDK turn.completed usage is cumulative for the provider thread.
+                threadCumulative: isCodexProvider,
+                isResumedThread: codexInitData?.isResumedThread === true,
+                modelId: sessionModelId,
+                reportsCurrentContext,
+                reportedContextWindow,
+                contextFillTokens,
+                contextCompacted,
+              });
 
               await this.svc.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
 
@@ -2718,15 +2533,20 @@ export class MessageStreamingHandler {
               if (reportsCurrentContext && contextFillTokens !== undefined && reportedContextWindow) {
                 const syncProvider = getSyncProvider();
                 if (syncProvider) {
-                  syncProvider.pushChange(session.id, {
-                    type: 'metadata_updated',
-                    metadata: {
-                      currentContext: {
-                        tokens: contextFillTokens,
-                        contextWindow: reportedContextWindow,
+                  try {
+                    const outcome = await syncProvider.pushChange(session.id, {
+                      type: 'metadata_updated',
+                      metadata: {
+                        currentContext: {
+                          tokens: contextFillTokens,
+                          contextWindow: reportedContextWindow,
+                        },
                       },
-                    } as any,
-                  });
+                    });
+                    warnIfUnpublished(message => logger.main.warn(message), session.id, '[AIService] Failed to publish sync change', outcome);
+                  } catch (error) {
+                    logger.main.warn(`[AIService] Failed to publish sync change for session ${session.id}:`, error);
+                  }
                 }
               }
 
@@ -3102,10 +2922,15 @@ export class MessageStreamingHandler {
 
       // Clear executing and pending prompt flags for mobile sync
       if (syncProvider && !this.svc.sessionsProcessingQueue.has(session.id)) {
-        syncProvider.pushChange(session.id, {
-          type: 'metadata_updated',
-          metadata: { isExecuting: false, hasPendingPrompt: false, updatedAt: Date.now() },
-        });
+        try {
+          const outcome = await syncProvider.pushChange(session.id, {
+            type: 'metadata_updated',
+            metadata: { isExecuting: false, hasPendingPrompt: false, updatedAt: Date.now() },
+          });
+          warnIfUnpublished(message => logger.main.warn(message), session.id, '[AIService] Failed to publish sync change', outcome);
+        } catch (error) {
+          logger.main.warn(`[AIService] Failed to publish sync change for session ${session.id}:`, error);
+        }
       }
 
       // Clean up queued prompt tracking
@@ -3199,10 +3024,15 @@ export class MessageStreamingHandler {
 
         // Clear executing and pending prompt flags for mobile sync on error
         if (syncProvider && !this.svc.sessionsProcessingQueue.has(session.id)) {
-          syncProvider.pushChange(session.id, {
-            type: 'metadata_updated',
-            metadata: { isExecuting: false, hasPendingPrompt: false, updatedAt: Date.now() },
-          });
+          try {
+            const outcome = await syncProvider.pushChange(session.id, {
+              type: 'metadata_updated',
+              metadata: { isExecuting: false, hasPendingPrompt: false, updatedAt: Date.now() },
+            });
+            warnIfUnpublished(message => logger.main.warn(message), session.id, '[AIService] Failed to publish sync change', outcome);
+          } catch (error) {
+            logger.main.warn(`[AIService] Failed to publish sync change for session ${session.id}:`, error);
+          }
 
           // Forced (#1268): a session that died unattended is exactly when the
           // user needs to hear about it, so the server -- not this process --

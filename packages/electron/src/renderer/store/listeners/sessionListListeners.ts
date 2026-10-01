@@ -8,6 +8,7 @@
  */
 
 import { store } from '../index';
+import { sessionBackgroundTasksAtom, type BackgroundTaskSummary } from '../atoms/sessionBackgroundTasks';
 import {
   refreshSessionListAtom,
   sessionListWorkspaceAtom,
@@ -16,7 +17,7 @@ import {
   sessionParentIdAtom,
 } from '../atoms/sessions';
 import { workstreamStateAtom } from '../atoms/workstreamState';
-import { sessionRefMapAtom, type SessionRefMeta } from '@nimbalyst/runtime';
+import { sessionRefMapAtom, type SessionRefMeta } from '@nimbalyst/runtime/ui/AgentTranscript/session/sessionRefAtoms';
 
 // Track pending refresh to debounce rapid-fire events
 let pendingRefreshTimer: NodeJS.Timeout | null = null;
@@ -61,6 +62,11 @@ export function initSessionListListeners(): () => void {
   // Updates the registry entry directly without a full refresh
   const handleSessionUpdated = (sessionId: string, updates: Record<string, unknown>) => {
     // console.log('[sessionListListeners] session-updated received:', sessionId, updates);
+    // Live-only drain state; it is not a registry field, so a list refresh cannot drop it.
+    if (Array.isArray(updates.backgroundTasks)) {
+      store.set(sessionBackgroundTasksAtom(sessionId), updates.backgroundTasks as BackgroundTaskSummary[]);
+      if (Object.keys(updates).length === 1) return;
+    }
     const registry = new Map(store.get(sessionRegistryAtom));
     const meta = registry.get(sessionId);
     if (meta) {
@@ -70,6 +76,8 @@ export function initSessionListListeners(): () => void {
         ...(updates.tags !== undefined && { tags: updates.tags as string[] }),
         ...(updates.title !== undefined && { title: updates.title as string }),
         ...(updates.provider !== undefined && { provider: updates.provider as string }),
+        ...((updates.externalSource === 'claude-code' || updates.externalSource === 'openai-codex') && { externalSource: updates.externalSource }),
+        ...(typeof updates.externalLastActivityAt === 'number' && { externalLastActivityAt: updates.externalLastActivityAt }),
         ...(updates.model !== undefined && { model: updates.model as string }),
         ...(updates.sessionType !== undefined && {
           sessionType: updates.sessionType as 'session' | 'workstream' | 'blitz' | 'voice'

@@ -1,4 +1,4 @@
-import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel';
+import { globalRegistry } from '@nimbalyst/tracker-schema';
 import type { TrackerItem } from '@nimbalyst/runtime';
 import { getCurrentIdentity } from '../../services/TrackerIdentityService';
 import {
@@ -16,11 +16,13 @@ import { isLocalIssueKey, resolveDisplayIssueKey } from '../../../shared/localIs
 import { applyHeadlessBodyMarkdown, initializeHeadlessBodyMarkdown } from '../../services/MainBodyDocService';
 import { initialTrackerBodyCache } from '../../services/tracker/trackerBodySnapshot';
 import { applyRelationshipFieldWrites } from '../../services/tracker/relationshipFieldWrite';
+import { pinCitedRevisions } from '../../services/tracker/citationPins';
 import { appendActivity } from '../../services/tracker/trackerActivity';
 import { assignLocalKeysToRows } from '../../services/tracker/localKeyAllocator';
 import { workspaceLocalKeyStore } from '../../services/tracker/workspaceLocalKeyStore';
 import { extractItemCustomFields } from '../../services/tracker/trackerRowCustomFields';
 import { nestRelationshipFieldsIntoCustomFields, readStoredFieldValue, writeStoredFieldValue } from '../../services/tracker/relationshipFieldStorage';
+import { reindexItemRelationshipsAfterWrite } from '../../services/tracker/trackerRelationshipIndexStore';
 import {
   isRelationshipField,
   matchesFilterSet,
@@ -34,7 +36,7 @@ import {
   isTerminalStatus,
   statusCategoryOfItem,
   type StatusCategory,
-} from '@nimbalyst/runtime/plugins/TrackerPlugin/models/trackerStatusCategory';
+} from '@nimbalyst/tracker-schema';
 import { computeReadiness, type Readiness } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/trackerReadiness';
 import {
   describeUnresolvedBlockers,
@@ -884,6 +886,22 @@ export const trackerToolSchemas = [
           type: "object",
           description:
             "Delta override for a tracker type (required: `type`). Merge semantics: `fields[]` by name (`{name, set?, options?, remove?}`); select options by value (`options: {set?: [{value,label,icon?,color?,category?}], remove?: [value], order?: [value]}`); scalars (displayName, icon, color, inlineTemplate, sharing, draftByDefault) last-writer; `roles` shallow-merged. On the workflow-status field, `category` declares where the status sits in the lifecycle — 'backlog', 'unstarted', 'started', 'done', or 'cancelled' — and is what makes an item count as closed for progress rollups and the Open/Closed filter. ALWAYS set it when adding a status; an omitted category is guessed from the value's name and defaults to open. Example — add a way to close something you are not going to do: {\"type\":\"feature\",\"fields\":[{\"name\":\"status\",\"options\":{\"set\":[{\"value\":\"wont-do\",\"label\":\"Won't Do\",\"icon\":\"do_not_disturb_on\",\"color\":\"#64748b\",\"category\":\"cancelled\"}]}}]}.",
+        },
+        predicates: {
+          type: "array",
+          items: { type: "object" },
+          description:
+            "Merge entries into the project's PREDICATE REGISTRY (claim-stored vocabulary: the verbs a claim or a `predicate: <id>` field uses). Each entry is {id, label, inverseLabel?, subjectKinds: [type|'*'], valueShape: entity|text|boolean-assessment|quantity|select, direction: directed|symmetric, transitive?, qualifiers?}. A qualifier is {type: string|number|boolean|date|select|relationship|array, required?, itemType?, options?, targetTrackerTypes?} and its values ride on each relationship value under `qualifiers`. MERGES BY ID: an entry replaces the predicate with the same id or is added; predicates you omit are kept. To delete, list ids in `removePredicates`. Removals, narrowing `subjectKinds`, and making a qualifier required are destructive and need `confirmDestructive`. May be sent alone or alongside `labels`/`schema`/`patch`; predicates are applied first. Persisted to .nimbalyst/predicates.yaml.",
+        },
+        removePredicates: {
+          type: "array",
+          items: { type: "string" },
+          description: "Predicate ids to delete from the registry. Destructive: requires `confirmDestructive`.",
+        },
+        labels: {
+          type: "object",
+          description:
+            "Merge into the project's LABEL REGISTRY (.nimbalyst/labels.yaml). A label is a tag that carries fields; a page may carry several and a label may have several broader labels. Shape: {labels?: [{id, label, pluralLabel?, description?, broader?: [labelId], icon?, color?, role?: page|structure|market-node, properties?: [propertyId|predicateId], expects?: [{property, min?, max?}], factBox?: [propertyId], template?}], properties?: [{id, label, type: string|text|number|date|datetime|select|multiselect|boolean|url|user|relationship|array, options?, qualifiers?, facet?, description?, range?: [labelId], multiValue?}], claimProperties?: {<predicateId>: {range?: [labelId], options?, facet?, description?}}, remove?: {labels?: [id], properties?: [id], claimProperties?: [id]}}. `properties` are FIELD-stored (current value in the item's customFields; stored as {value, qualifiers} when qualifiers are declared); claim-stored vocabulary stays in `predicates`. Properties and predicates share one id namespace. MERGES BY ID: each entry replaces the entry with the same id or is added; entries you omit are kept, so concurrent additions commute. Removing a label or property, removing a property from a label, removing a broader link, retyping a property, or removing an option is destructive and needs `confirmDestructive`. Applied after `predicates`.",
         },
         fileName: {
           type: "string",
@@ -1996,6 +2014,7 @@ export async function handleTrackerCreate(
         isError: true,
       };
     }
+    await pinCitedRevisions(db, workspacePath, id, data, globalRegistry.get(args.type)?.fields ?? []);
 
     const validationResult = globalRegistry.validate(args.type, data);
     if (!validationResult.valid) {
@@ -2140,6 +2159,19 @@ export async function handleTrackerCreate(
         console.error('[MCP Server] tracker_create issue key wait failed:', awaitError);
       }
     }
+
+    // This tool inserts into `tracker_items` directly rather than going through
+    // `createNativeTrackerItem`, so it owns its own edge projection: an agent
+    // can set `subject`/`object` in the same call that creates the item. Last,
+    // after every read this handler depends on, because the projection is
+    // derived state and nothing above it should be able to see a partial one.
+    await reindexItemRelationshipsAfterWrite(
+      workspacePath,
+      id,
+      data,
+      globalRegistry.get(args.type)?.fields ?? [],
+      new Date().toISOString(),
+    );
 
     const createdRef = createdItem || { id };
     const createdKeyContext = {
@@ -2634,6 +2666,7 @@ export async function handleTrackerUpdate(
           isError: true,
         };
       }
+      await pinCitedRevisions(db, row.workspace, row.id, data, globalRegistry.get(row.type)?.fields ?? []);
 
       const validationResult = globalRegistry.validate(row.type, data);
       if (!validationResult.valid) {
@@ -2864,6 +2897,18 @@ export async function handleTrackerUpdate(
         analyticsRow.id,
         analyticsRow.type,
         shouldSyncTrackerItem(analyticsPolicy, rowToTrackerItem(analyticsRow)),
+      );
+
+      // This tool writes `tracker_items` directly, so it owns its own edge
+      // projection for the same reason tracker_create does. Last, after every
+      // read this handler depends on, including the inverse propagation above
+      // which writes its own targets.
+      await reindexItemRelationshipsAfterWrite(
+        row.workspace,
+        row.id,
+        data,
+        globalRegistry.get(row.type)?.fields ?? [],
+        new Date().toISOString(),
       );
 
       const updateSummaryParts: string[] = [];

@@ -1,3 +1,5 @@
+import { reservePromptAnswer } from '../services/ai/PromptAnswerReservation';
+import { cancelCommitProposalOnce, acceptsCommitProposalResponse } from '../services/ai/CommitProposalExecution';
 import { hasLiveInteractivePrompt } from "../mcp/tools/interactivePromptLiveness";
 import { SessionCommitService } from "../services/SessionCommitService";
 import { TranscriptMigrationRepository } from "@nimbalyst/runtime/storage/repositories/TranscriptMigrationRepository";
@@ -12,6 +14,7 @@ import {
 } from "../services/ai/gitCommitProposalPromptUtils";
 import { setSessionPendingPrompt } from "../services/ai/pendingPromptPersistence";
 import { deliverCodexQuestionAnswer } from "../services/ai/codexQuestionDelivery";
+import { isInteractivePromptClosed } from "../services/ai/questionTerminalResultLookup";
 
 export function registerSessionPromptResponseHandler(): void {
   /**
@@ -56,6 +59,15 @@ export function registerSessionPromptResponseHandler(): void {
           }
           return result;
         }
+        // A form closed by a newer user turn (or already answered) must not be
+        // answered again, and must never reach the session fallback channel
+        // where it could settle a newer form with these answers.
+        if (
+          promptType === "request_user_input_request" &&
+          (await isInteractivePromptClosed(sessionId, promptId))
+        ) {
+          return { success: false, error: "This form is already closed." };
+        }
         const { database } = await import("../database/PGLiteDatabaseWorker");
         const timestamp = Date.now();
         const requestUserInputTargets =
@@ -64,8 +76,20 @@ export function registerSessionPromptResponseHandler(): void {
             : null;
         const canonicalPromptId =
           promptType === "git_commit_proposal_request"
-            ? await resolveGitCommitProposalPromptId(sessionId, promptId)
+            ? await resolveGitCommitProposalPromptId(sessionId, promptId, false)
             : promptId;
+
+        if (promptType === 'git_commit_proposal_request' && response.action === 'cancelled' && !await cancelCommitProposalOnce(sessionId, canonicalPromptId)) {
+          return { success: false, error: 'This proposal was already handled.' };
+        }
+        if (promptType === 'git_commit_proposal_request' && !acceptsCommitProposalResponse(sessionId, canonicalPromptId, response)) {
+          return { success: false, error: 'This response does not match the existing commit outcome.' };
+        }
+
+        if (promptType === 'permission_request' || promptType === 'ask_user_question_request') {
+          const answer = promptType === 'permission_request' ? response : { answers: response.answers ?? response, cancelled: response.cancelled === true };
+          if (!reservePromptAnswer(sessionId, promptType === 'permission_request' ? 'permission' : 'question', canonicalPromptId, answer, 'record')) return { success: false, error: 'This prompt was already answered differently.' };
+        }
 
         // Determine response type and content
         let responseContent: any;

@@ -1,15 +1,17 @@
 import { SessionProviderIcon } from './SessionProviderIcon';
 import React, { useState, useCallback, useEffect, useRef, useMemo, memo } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { atom, useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 import { WorktreeIcon } from '../common/WorktreeIcon';
 import { ProviderIcon } from '@nimbalyst/runtime/ui/icons/ProviderIcons';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, sessionWakeupAtom, sessionLastActivityAtom } from '../../store';
-import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
+import { convertToWorkstreamAtom, sessionRegistryAtom } from '../../store/atoms/sessions';
 import { SessionContextMenu } from './SessionContextMenu';
 import { FullTitleTooltip } from './FullTitleTooltip';
+import { settingAtom } from '../../store/atoms/settingAtomFamily';
 import { sessionAgentWakePendingAtom } from '../../store/atoms/teamInbox';
+import { sessionBackgroundTasksAtom, describeBackgroundWait } from '../../store/atoms/sessionBackgroundTasks';
 
 /**
  * Combined status indicator that subscribes to this session's state atoms.
@@ -24,6 +26,8 @@ export const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: n
   const hasAgentWakePending = useAtomValue(sessionAgentWakePendingAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
   const wakeup = useAtomValue(sessionWakeupAtom(sessionId));
+  // Lead turn is over; the session is only draining background shells/sub-agents.
+  const backgroundTasks = useAtomValue(sessionBackgroundTasksAtom(sessionId));
 
   // Priority: waiting for input > processing > pending prompt > scheduled wakeup > unread > message count
   // All interactive prompts (AskUserQuestion, ExitPlanMode, ToolPermission, etc.) show same indicator
@@ -31,6 +35,14 @@ export const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: n
     return (
       <div className="session-list-item-status waiting-for-input flex items-center justify-center w-5 h-5 text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="contact_support" size={14} />
+      </div>
+    );
+  }
+
+  if (isProcessing && backgroundTasks?.length) {
+    return (
+      <div className="session-list-item-status background-wait flex items-center justify-center w-5 h-5 text-[var(--nim-text-muted)] animate-pulse" title={describeBackgroundWait(backgroundTasks, Date.now())}>
+        <MaterialSymbol icon="timelapse" size={14} />
       </div>
     );
   }
@@ -85,6 +97,31 @@ export const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: n
   // }
 
   return null;
+});
+
+// This leaf owns its expiry timer: following never ticks the parent or sibling rows.
+const EXTERNAL_ACTIVITY_RECENT_MS = 30_000;
+const SessionExternalMarker = memo(function SessionExternalMarker({ sessionId }: { sessionId: string }) {
+  const source = useAtomValue(useMemo(() => atom(get => get(sessionRegistryAtom).get(sessionId)?.externalSource), [sessionId]));
+  const lastActivity = useAtomValue(useMemo(() => atom(get => get(sessionRegistryAtom).get(sessionId)?.externalLastActivityAt), [sessionId]));
+  const enabled = useAtomValue(settingAtom('app.externalSessionFollowEnabled')) === true;
+  const [, expire] = useState(0);
+  const age = Date.now() - (lastActivity ?? 0);
+  const following = !!source && enabled && lastActivity !== undefined && age >= 0 && age < EXTERNAL_ACTIVITY_RECENT_MS;
+
+  useEffect(() => {
+    if (!following || lastActivity === undefined) return;
+    const timer = setTimeout(() => expire(value => value + 1), Math.max(0, lastActivity + EXTERNAL_ACTIVITY_RECENT_MS - Date.now()));
+    return () => clearTimeout(timer);
+  }, [source, enabled, lastActivity, following]);
+
+  if (!source) return null;
+  return (
+    <span className="session-list-item-external inline-flex gap-1 whitespace-nowrap text-[var(--nim-text-muted)]" title={`Imported from ${source === 'claude-code' ? 'Claude Code' : 'Codex'}`}>
+      <span>External</span>
+      {following && <span className="session-list-item-following text-[var(--nim-primary)]" title="Recent external session activity">Following</span>}
+    </span>
+  );
 });
 
 const PHASE_STYLES: Record<string, { label: string; color: string; bg: string }> = {
@@ -538,6 +575,7 @@ export const SessionListItem = memo<SessionListItemProps>(function SessionListIt
               <span className="session-list-item-datetime text-[0.6875rem] text-[var(--nim-text-faint)] whitespace-nowrap transition-colors duration-150" title={fullDateTime}>{relativeTime}</span>
               {displayModel && <span className="session-list-item-model overflow-hidden text-ellipsis whitespace-nowrap">{displayModel}</span>}
               {phase && <SessionPhaseBadge phase={phase} />}
+              <SessionExternalMarker sessionId={id} />
             </div>
           </>
         )}

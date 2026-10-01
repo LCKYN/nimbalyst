@@ -11,6 +11,8 @@ const isCaptureMode = new URLSearchParams(window.location.search).get('mode') ==
 // Records nothing until `window.__renderProfiler.start()`.
 // See docs/RENDER_PERFORMANCE.md.
 import './devtools/installRenderProfiler';
+import { installRendererJankMonitor } from './devtools/rendererJankMonitor';
+import { installBodyOverflowMonitor } from './devtools/bodyOverflowMonitor';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -120,6 +122,14 @@ if (isCaptureMode) {
   console.log('[CaptureWindow] Ready - extensions and offscreen editor renderer initialized');
 } else {
 
+// Logs `[PERF] Renderer jank` to main.log: long frames, slow keystrokes, slow commits.
+installRendererJankMonitor();
+
+// Dev only: warns when something is left in <body> outside the viewport.
+if (process.env.NODE_ENV?.toLowerCase() === 'development') {
+  installBodyOverflowMonitor();
+}
+
 // Material Symbols uses text ligatures. Wait for the bundled font before any
 // React chrome can paint, otherwise Chromium exposes names such as
 // `progress_activity` through its fallback text font during startup.
@@ -136,12 +146,6 @@ initializeTheme();
 // before the first paint, otherwise the opaque root flashes over the material.
 if (new URLSearchParams(window.location.search).get('mode') === 'tray-panel') {
   document.documentElement.classList.add('tray-panel-window');
-}
-
-// The island window is transparent so the menu bar shows through everywhere the
-// island itself is not. Same reason as above: mark it before the first paint.
-if (new URLSearchParams(window.location.search).get('mode') === 'menu-bar-island') {
-  document.documentElement.classList.add('menu-bar-island-window');
 }
 
 // Expose offscreen renderer on window for main process access

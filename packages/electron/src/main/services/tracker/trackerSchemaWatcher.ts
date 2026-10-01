@@ -198,15 +198,34 @@ export function watchSchemaDirectory(
   workspacePath: string,
   reloadWorkspaceSchema: (workspacePath: string, filePath: string) => Promise<void>,
   handleSchemaFileDeleted: (workspacePath: string, filePath: string) => Promise<void>,
+  reloadPredicateRegistry: (workspacePath: string) => Promise<void>,
+  reloadLabelRegistry?: (workspacePath: string) => Promise<void>,
 ): void {
   stopSchemaWatcher();
 
   const trackersDir = path.join(workspacePath, '.nimbalyst', 'trackers');
+  const predicateRegistryPath = path.join(workspacePath, '.nimbalyst', 'predicates.yaml');
+  const labelRegistryPath = path.join(workspacePath, '.nimbalyst', 'labels.yaml');
+  // Both registries reload the same way on add, change, and unlink.
+  const reloadRegistry = (filePath: string): boolean => {
+    const resolved = path.resolve(filePath);
+    if (resolved === path.resolve(predicateRegistryPath)) {
+      void reloadPredicateRegistry(workspacePath);
+      return true;
+    }
+    if (resolved === path.resolve(labelRegistryPath)) {
+      if (reloadLabelRegistry) void reloadLabelRegistry(workspacePath);
+      return true;
+    }
+    return false;
+  };
 
-  // Only watch if directory exists
-  if (!fs.existsSync(trackersDir)) return;
+  // Watch the parent even before either artifact exists so creating the first
+  // tracker type or predicate registry is observed without a restart.
+  const nimbalystDir = path.dirname(trackersDir);
+  if (!fs.existsSync(nimbalystDir)) return;
 
-  watcher = chokidar.watch(trackersDir, {
+  watcher = chokidar.watch([trackersDir, predicateRegistryPath, labelRegistryPath], {
     // Ignore dotfiles inside the watched directory, but do not ignore the
     // parent `.nimbalyst` segment itself or chokidar drops every event.
     ignored: (candidatePath: string) => shouldIgnoreTrackerWatchPath(trackersDir, candidatePath),
@@ -217,16 +236,19 @@ export function watchSchemaDirectory(
 
   watcher
     .on('change', (filePath: string) => {
+      if (reloadRegistry(filePath)) return;
       if (isTrackerSchemaFile(filePath)) {
         void reloadWorkspaceSchema(workspacePath, filePath);
       }
     })
     .on('add', (filePath: string) => {
+      if (reloadRegistry(filePath)) return;
       if (isTrackerSchemaFile(filePath)) {
         void reloadWorkspaceSchema(workspacePath, filePath);
       }
     })
     .on('unlink', (filePath: string) => {
+      if (reloadRegistry(filePath)) return;
       if (isTrackerSchemaFile(filePath)) {
         // Async since the handler has to ask whether the team owns a copy, so a
         // throw here would surface as an unhandled rejection rather than on the
