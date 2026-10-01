@@ -500,9 +500,6 @@ export interface SessionData {
       categories?: TokenUsageCategory[]; // Category breakdown from /context
       rawResponse?: string;   // Raw markdown from /context for display on session reload
     };
-    // Cache read/write split, cumulative across the session lifetime (#1496).
-    cacheReadInputTokens?: number;
-    cacheCreationInputTokens?: number;
     // True once any turn's costUSD came from the modelPricing.ts fallback table
     // rather than an SDK/API-reported exact figure. Session-level, not
     // per-turn: once any turn estimates, the whole session total is treated as

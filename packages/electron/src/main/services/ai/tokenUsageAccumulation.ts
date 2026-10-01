@@ -136,7 +136,7 @@ export interface ProviderTurnUsageInput {
   /** A resumed Codex thread with no stored baseline: its first snapshot is not new spend. */
   isResumedThread: boolean;
   /** The session's selected model, for the pricing-table cost fallback. */
-  modelId: string | undefined;
+  modelId?: string;
   reportsCurrentContext: boolean;
   /** The measured window when the provider reports context, else undefined. */
   reportedContextWindow: number | undefined;
