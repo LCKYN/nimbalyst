@@ -108,6 +108,7 @@ import { streamCompletionSignalAtom } from '../../store/atoms/sessionTranscript'
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom, nextOptimisticId, type SessionWakeupView } from '../../store/atoms/sessions';
 import { leadTimeBucket, submitWithDraftCleared, type ScheduleLaterChoice } from './scheduleLater';
 import { settingAtom } from '../../store/atoms/settingAtomFamily';
+import { sessionBackgroundTasksAtom } from '../../store/atoms/sessionBackgroundTasks';
 import { clearAIInputHistoryAtom } from '../../store/atoms/aiInputUndo';
 import {
   cliTerminalExpandedAtom,
@@ -206,6 +207,7 @@ function makeOptimisticUserMessage(
     subagentId: null,
     mode,
     attachments,
+    optimistic: true,
   };
 }
 
@@ -409,6 +411,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
   const [isArchived, setIsArchived] = useAtom(sessionArchivedAtom(sessionId));
   const [isProcessing, setIsProcessing] = useAtom(sessionProcessingAtom(sessionId));
   const hasPendingInteractivePrompt = useAtomValue(sessionHasPendingInteractivePromptAtom(sessionId));
+  const backgroundTasks = useAtomValue(sessionBackgroundTasksAtom(sessionId));
   const worktreeId = useAtomValue(sessionWorktreeIdAtom(sessionId));
   const hasSessionData = useAtomValue(sessionLoadedAtom(sessionId));
   // NOTE: deliberately NOT subscribing to sessionUpdatedAtAtom. updatedAt churns
@@ -2648,6 +2651,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
             promptAdditions={showPromptAdditions ? promptAdditions : null}
             currentTeammates={transcriptTeammates}
             waitingForNoun={waitingForNoun}
+            backgroundTasks={isProcessing && backgroundTasks?.length ? backgroundTasks : undefined}
             appStartTime={appStartTime ?? undefined}
             renderEmbeddedFile={renderEmbeddedFile}
             canEmbedFile={canEmbedFile}

@@ -5,10 +5,7 @@ import type {
   TrackerSchemaPatch,
 } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import {
-  classifyPredicateRegistryChanges,
-  destructivePredicateRegistryChanges,
   resolveTrackerSchemaChangeGate,
-  validatePredicateRegistry,
   validateTrackerTypePredicateDeclarations,
   type PredicateDeclaringType,
   type PredicateDefinition,
@@ -37,9 +34,7 @@ import {
   materializeTrackerTypeDef,
   removeTrackerTypeDef,
 } from '../../services/tracker/trackerTypeDefStore';
-import { writeWorkspacePredicateRegistry } from '../../services/tracker/trackerPredicateRegistryFile';
-import { installKnowledgePack } from '../../services/tracker/knowledgePackInstaller';
-import { KNOWLEDGE_PACKS } from '../../services/tracker/packs/knowledgePacks';
+import { applyLabelRegistryArgs, applyPredicateRegistryArgs } from './trackerVocabularyArgs';
 import { getDocumentServiceForWorkspace } from './trackerToolItemAccess';
 import {
   destructiveSchemaChangeToolResult,
@@ -132,72 +127,11 @@ function buildTrackerSchemaFromArgs(args: any): any {
     overwrite: _overwrite,
     promoteExistingItems: _promoteExistingItems,
     predicates: _predicates,
+    removePredicates: _removePredicates,
+    labels: _labels,
     ...rest
   } = args ?? {};
   return rest;
-}
-
-/**
- * Apply a `predicates:` declaration (knowledge-scopes 4.1): replace the
- * project's registry.
- *
- * Replace, not merge, matching how the room publishes it -- see
- * `TrackerDataModelRegistry.setPredicates`. That makes removal expressible,
- * which is why the destructive gate below is not optional: removing a
- * predicate, narrowing its `subjectKinds`, or making a qualifier required
- * invalidates statements already written on teammates' items, exactly as
- * removing a field does, so it goes through the same
- * additive-versus-destructive rule type schemas get.
- *
- * Returns a tool error result, or null when the registry was applied.
- */
-async function applyPredicateRegistryArgs(
-  workspacePath: string,
-  args: any,
-): Promise<{ error: McpToolResult } | { applied: PredicateDefinition[]; summary: string }> {
-  const validation = validatePredicateRegistry(args.predicates);
-  if (!validation.valid) {
-    return {
-      error: {
-        content: [{
-          type: 'text',
-          text: `Error: invalid predicate registry.\n${validation.issues
-            .map(issue => `- ${issue.code} at '${issue.path}': ${issue.message}`)
-            .join('\n')}`,
-        }],
-        isError: true,
-      },
-    };
-  }
-
-  const { classification, changes } = classifyPredicateRegistryChanges(
-    globalRegistry.getAllPredicates(),
-    validation.predicates,
-  );
-  if (classification === 'destructive' && args?.confirmDestructive !== true) {
-    const destructive = destructivePredicateRegistryChanges(changes);
-    return {
-      error: {
-        content: [{
-          type: 'text',
-          text: `This predicate registry change is destructive and needs \`confirmDestructive: true\`:\n${destructive
-            .map(change => `- ${change.kind} on '${change.predicateId}'`)
-            .join('\n')}\nStatements already written under these predicates stop validating.`,
-        }],
-        isError: true,
-      },
-    };
-  }
-
-  await writeWorkspacePredicateRegistry(workspacePath, validation.predicates);
-  globalRegistry.setPredicates(validation.predicates);
-
-  return {
-    applied: validation.predicates,
-    summary: classification === 'none'
-      ? `Predicate registry unchanged (${validation.predicates.length} predicate(s)).`
-      : `Wrote ${validation.predicates.length} predicate(s) to .nimbalyst/predicates.yaml (${classification} change).`,
-  };
 }
 
 async function persistAttributedTrackerSchemaEdit(
@@ -324,30 +258,40 @@ export async function handleTrackerDefineType(
     // an agent doesn't think the type is missing (NIM-760).
     ensureWorkspaceTrackerSchemasLoaded(workspacePath);
 
-    // Predicates first: a type declaring `predicate:` on a field needs the verb
-    // to exist before the declaration below is checked against the registry.
-    let predicateSummary = '';
-    if (Array.isArray(args?.predicates)) {
+    // Vocabulary first: a type declaring `predicate:` on a field needs the verb
+    // to exist before the declaration below is checked against the registry,
+    // and labels are validated against the predicates they name.
+    const vocabularySummaries: string[] = [];
+    let appliedPredicates: PredicateDefinition[] | null = null;
+    if (Array.isArray(args?.predicates) || Array.isArray(args?.removePredicates)) {
       const outcome = await applyPredicateRegistryArgs(workspacePath, args);
       if ('error' in outcome) return outcome.error;
-      predicateSummary = outcome.summary;
-      // A registry-only call is complete here.
-      if (!args?.schema && !args?.patch && typeof args?.type !== 'string') {
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              structured: {
-                action: 'defined-predicates' as const,
-                count: outcome.applied.length,
-                predicates: outcome.applied,
-              },
-              summary: predicateSummary,
-            }),
-          }],
-          isError: false,
-        };
-      }
+      appliedPredicates = outcome.applied;
+      vocabularySummaries.push(outcome.summary);
+    }
+    let appliedLabels: Awaited<ReturnType<typeof applyLabelRegistryArgs>> | null = null;
+    if (args?.labels !== undefined) {
+      appliedLabels = await applyLabelRegistryArgs(workspacePath, args, appliedPredicates);
+      if ('error' in appliedLabels) return appliedLabels.error;
+      vocabularySummaries.push(appliedLabels.summary);
+    }
+    const vocabularySummary = vocabularySummaries.join('\n');
+    // A vocabulary-only call is complete here.
+    if (vocabularySummaries.length > 0 && !args?.schema && !args?.patch && typeof args?.type !== 'string') {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            structured: {
+              action: 'defined-vocabulary' as const,
+              ...(appliedPredicates ? { count: appliedPredicates.length, predicates: appliedPredicates } : {}),
+              ...(appliedLabels && !('error' in appliedLabels) ? { labels: appliedLabels.applied } : {}),
+            },
+            summary: vocabularySummary,
+          }),
+        }],
+        isError: false,
+      };
     }
 
     const requestedDefinition = args?.patch ?? (
@@ -736,101 +680,6 @@ export async function handleTrackerDeleteType(
         {
           type: "text",
           text: `Error deleting tracker type: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-}
-
-/**
- * Install a knowledge pack: a set of tracker types plus predicates that only
- * make sense together (knowledge-scopes master plan N11).
- *
- * Thin on purpose. Every decision that matters -- ordering, the destructive
- * gate, what to do about a predicate the project already defines differently --
- * belongs to the installer, which is testable without an MCP server.
- */
-export async function handleTrackerInstallPack(
-  args: { packId?: string; replaceExisting?: boolean; confirmDestructive?: boolean },
-  workspacePath: string | undefined,
-): Promise<McpToolResult> {
-  try {
-    if (!workspacePath) {
-      return {
-        content: [{ type: "text", text: "Error: tracker_install_pack requires an open workspace." }],
-        isError: true,
-      };
-    }
-    await ensureWorkspaceTrackerSchemasLoaded(workspacePath);
-
-    if (!args.packId) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              structured: {
-                action: "listed-packs" as const,
-                packs: KNOWLEDGE_PACKS.map(p => ({
-                  id: p.id,
-                  label: p.label,
-                  description: p.description,
-                  types: p.types.map(t => t.type),
-                  predicates: Boolean(p.predicatesYaml),
-                })),
-              },
-              summary: `Available knowledge packs: ${KNOWLEDGE_PACKS.map(p => p.id).join(', ')}. Pass packId to install one.`,
-            }),
-          },
-        ],
-        isError: false,
-      };
-    }
-
-    const result = await installKnowledgePack(workspacePath, args.packId, {
-      replaceExisting: args.replaceExisting,
-      confirmDestructive: args.confirmDestructive,
-    });
-
-    const parts = [`Installed knowledge pack '${result.packId}'.`];
-    if (result.installed.length) parts.push(`Types: ${result.installed.join(', ')}.`);
-    if (result.skipped.length) {
-      parts.push(
-        `Already present, left alone: ${result.skipped.join(', ')} (pass replaceExisting to overwrite).`,
-      );
-    }
-    if (result.predicatesAdded.length) {
-      parts.push(`Predicates added: ${result.predicatesAdded.join(', ')}.`);
-    }
-    if (result.predicateConflicts.length) {
-      parts.push(
-        `Kept this project's existing definition for: ${result.predicateConflicts.join(', ')}. ` +
-        `Statements already using those verbs were written against it.`,
-      );
-    }
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            structured: { action: "installed-pack" as const, ...result },
-            summary: parts.join(' '),
-          }),
-        },
-      ],
-      isError: false,
-    };
-  } catch (error) {
-    if (error instanceof TrackerSchemaChangeBlockedError) {
-      return destructiveSchemaChangeToolResult(error);
-    }
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Error installing knowledge pack: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
       isError: true,

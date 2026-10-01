@@ -1,94 +1,33 @@
-# September 9th, 2026 Release
+# September 30th, 2026 Release
 
 ### New Features
 
-- **GPT-6 Astra** can be selected for Codex sessions, with its Ultra reasoning level.
-- **Agent Files on Right** Choose whether Agent mode opens file tabs above the transcript or in the right pane.
-- **Support for multiple folder and repos roots** Run multiple repos roots and other folders in a single nimbalyst project.
-- **Database recovery in Settings.** Recover preserved database copies and see why a migration is blocked; recovery and rollback keep the original data intact across restarts.
-- **Media Viewer extension.** Open and play `.mp4` files in a tab, including scrubbing through long recordings.
-- **Document questions.** Send a question from a document to your teammates, collect private answers, and let the agent resume once a human settles the outcome. Sent questions show up in Feedback with response progress and links back to each one.
-- **A `.deb` download for Debian and Ubuntu**, which starts on Ubuntu 24.04 and later where the AppImage is blocked by AppArmor's user-namespace restriction.
-- **Decision blocks in documents.** Record a decision inline with solo or collaborative voting; the outcome and who voted for it are preserved in the markdown.
-- **Project Graph gains Atlas, Pulse and Evidence Trails**, with broader source coverage, saved views, and the ability to explore the sources behind a link.
-- **Radar for shared trackers.** A since-you-left digest of teammate activity, status moves, bulk sweeps and stalled work, in both the desktop app and the web console.
-- Jump to unanswered agent questions, and scroll to new ones automatically.
-- The Git panel's Changes tab can show every repository in the project at once, each with its own file list and commit box.
-- A session that launches another session can request the reasoning effort it runs at, rather than leaving it on the app-wide default.
+- **Sonnet 5.5** for Claude Agent and the Claude API. The Sonnet row now runs Sonnet 5.5, and Sonnet 5 stays selectable.
+- **GPT-6.1 Sol** in the Codex and OpenAI model pickers, now the default Codex model.
+- **Crew Extension (alpha, off by default):** persistent agent teammates that work scheduled shifts within token budgets and flag you when something needs you. Use `/crew:hire` in any agent session to design a new Crew member.
+- **Opt-in unlimited open projects**, with a scrollable project rail and cleanup of resources for projects you are not using (#1579, contributed by @jszobody).
+- Extensions can start and drive their own agent sessions.
 
 ### Improvements
 
-- Commit with AI proposes one commit per repository when your changes span several, so you approve each one separately and each gets its own message.
-- Project Memory indexes agent instructions and personal memory as separate sources, can use an optional on-device embedding model, and reports semantic-search readiness accurately.
-- iOS performance and layout fixes releasing to app store soon.
-- The tracker's Type column can show the type's name instead of its icon.
-- Database migration no longer times out while copying large document histories, recovers from slow batches, and copies large session tables more efficiently (#1452).
+- Claude Code sessions waiting on a background shell or sub-agent show a distinct indicator and name the task in the transcript.
+- Quick Track's Cmd+Enter creates the item and closes the popup without switching to Tracker mode, and the title field now spans the popup.
+- Improved load performance for very large Codex sessions.
 
 ### Fixed
 
-**Data and sync**
-
-- Document sync could delete markdown files from your workspace, including files tracked in git.
-- Sync connection errors wrote your authentication token to the application log in plain text.
-- A desktop with a mismatched sync key now pauses session sync and reports the mismatch instead of deleting shared index entries.
-- Waking from sleep could start a second full database backup while one was still running, so both failed. The backup copies setting now also applies to databases still on the older engine.
-- Rapid edits to a shared spreadsheet in the web console no longer let an older asynchronous save overwrite the latest cell value.
-
-**Git and commits**
-
-- Committing changes that spanned repositories reported files as committed that were never committed, and showed only the first repository's commit hash.
-- Approving a commit from your phone failed outright when the changes spanned repositories, including the files that could have been committed.
-- A session running in a worktree silently left out changes in the project's attached folders when committing.
-- Pull requests were missing from the Git panel when the project is a fork checkout; they now list against the upstream repository (#1439).
-- The Git tab jumped back to the previously selected repository when you switched between repositories in a multi-repository project.
-- Git commit details scroll together with the commit list in short panels.
-- A tracker item closed by a commit recorded the close with no author and an unorderable timestamp, and repeated closes merged into one entry when the item synced.
-
-**Agents and sessions**
-
-- Interrupting a turn could let the next queued prompt start alongside the priority prompt that replaced it (#1018).
-- A background task that finished mid-turn produced no visible follow-up turn, and every tool call in it that needed permission was denied without asking.
-- Claude Code CLI sessions ignored the custom Claude executable path in settings and reported Claude as not installed (#1296).
-- The Claude Agent's bundled runtime no longer self-updates out of place; preserved copies are recovered automatically.
-- A queued prompt containing CJK text could have Enter land mid-paste in a Claude CLI session. An undelivered prompt is now reported as failed instead of marked complete (#1387).
-- Codex sessions receive the first answer to a question even when the turn that asked it has already ended, and a session's name, tags or phase no longer silently stops updating when a tool call is dropped in transit.
-- Codex shell edits now appear in file-session links with inferred attribution and live updates.
-- The effort selector offered reasoning levels the selected Codex model does not accept; choosing Max on those models ran at xHigh without saying so.
-- A tool call to an extension that stopped responding waited forever instead of failing, leaving the agent stuck with nothing in the logs.
-- Orchestrating sessions keep up with their children: updates arriving mid-turn are delivered together, a repeat from the same child replaces the earlier one, and coordinating agents read sibling reports without replaying them as extra turns.
-- A file a child session edited several times was listed once per edit in the parent's Files modified list (#1244).
-- A session that had previously reached the complete phase stayed out of the menu bar's Running list for the whole of its next turn.
-- Starting an OpenCode session could wait five minutes before recognizing a server that was already healthy.
-- Worktrees of a project opened through a symlink did not inherit the project's agent permissions, so every tool call asked for approval again.
-- Answers typed into an agent's question were lost if you scrolled the conversation far enough to move the question out of view before submitting.
-
-**Editor and navigation**
-
-- Applying a heading with Cmd/Ctrl+Alt+1 through 9 switched tabs instead of setting the heading level (#353, contributed by @benoitperrin).
-- Cmd+B bolds text again when you are typing in an editor, instead of toggling the sidebar.
-- Typing in a markdown file no longer stutters each time it autosaves in a workspace with a large tracker.
-- Clicking a markdown link to a file in the same folder did nothing unless the document sat at the top level of the project, and embedded file links now resolve relative to their document, with `/` for workspace-root paths.
-- Opening a project from the Project Manager did nothing when the window that project was opened in had since switched to a different project.
-- Deep links and notifications reveal their destination even when an extension panel is open.
-- Workstream session tabs scroll in one row with readable names and a new-session button that stays visible when the strip is full.
-- The New Worktree shortcut on macOS and the Cmd+Shift+K kanban shortcut did nothing.
-- File quick search opens from the Agent mode file viewer, and slash command results are sorted alphabetically.
-- Two dollar amounts on different lines of the same paragraph rendered as math, and display math beginning with a number rendered incorrectly in chat.
-- Embedded mockups repaint after their frame is attached or moved, preventing intermittent blank previews.
-- Animation MP4 exports finish again, and completed HTML, MP4 and GIF exports are revealed in Finder or Explorer.
-
-**Trackers**
-
-- Invalid tracker update requests are rejected instead of changing an unrelated item.
-- The new-item popup saves typed content as the body, accepts pasted or dropped screenshots, and keeps the draft if creation fails. Items whose creation text was lost to that bug offer the saved description for copy or insertion into the body.
-- Tracker rows of a custom type showed a blank Type column instead of the icon the type declares.
-- A tracker item whose title contains a comma showed as two separate values in a relationship column.
-- `tracker_get` left out an item's archived state and its comments (#1224).
-
-**Mobile and web**
-
-- Opening a session on iOS could show another session's transcript under the correct title.
-- Files on iOS load large projects reliably and show sync progress and retryable errors.
-- Project and session lists show loading until sync finishes instead of prematurely reporting that they are empty.
-- Project Graph keeps loaded data visible instead of repeatedly flashing a blank loading view during startup.
-- Simple document questions and their selection outlines stay at a readable width on wide screens, with controls that wrap on narrow screens.
+- Compound Bash commands no longer prompt for permission after a user PreToolUse hook has allowed them (#426, contributed by @yanekm).
+- Overlapping file-tree scans no longer exhaust memory while files change in large projects (#1604, contributed by @jszobody).
+- Agent sessions no longer read and cache large or binary files written into the workspace, which flooded the log and grew memory.
+- Inline diffs no longer freeze the window for agent edits across long, list-heavy markdown files (#1606).
+- A sent prompt no longer stays duplicated below the transcript when the turn is slow to start (#1620).
+- Transcript messages no longer flash and redraw while a session is streaming.
+- Sessions no longer stay marked as running, or lose their waiting-for-you state, around an open question. A question left unanswered by sending a new message now shows as skipped.
+- Claude Agent sessions in an externally created worktree no longer stay stuck on "running" after a background command finishes.
+- Following external Claude Code sessions keeps importing after the agent changes directory, and skips unchanged logs.
+- Codex auto-review and subagent threads no longer appear as separate "# AGENTS.md instructions" sessions.
+- File @-mention suggestions pick up newly created and renamed files without a reload.
+- Clicking the Dock or tray icon brings back the project window after the app sat in the background.
+- Context menus and popovers no longer open under the title bar, where their first item could not be clicked.
+- Workstream sessions in the session list keep their "updated" time current.
+- Tracker types defined in a background project's window now appear in its tracker pane without a reload.

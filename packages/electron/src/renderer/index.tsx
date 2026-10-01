@@ -11,6 +11,8 @@ const isCaptureMode = new URLSearchParams(window.location.search).get('mode') ==
 // Records nothing until `window.__renderProfiler.start()`.
 // See docs/RENDER_PERFORMANCE.md.
 import './devtools/installRenderProfiler';
+import { installRendererJankMonitor } from './devtools/rendererJankMonitor';
+import { installBodyOverflowMonitor } from './devtools/bodyOverflowMonitor';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -119,6 +121,14 @@ if (isCaptureMode) {
   await registerExtensionSystem();
   console.log('[CaptureWindow] Ready - extensions and offscreen editor renderer initialized');
 } else {
+
+// Logs `[PERF] Renderer jank` to main.log: long frames, slow keystrokes, slow commits.
+installRendererJankMonitor();
+
+// Dev only: warns when something is left in <body> outside the viewport.
+if (process.env.NODE_ENV?.toLowerCase() === 'development') {
+  installBodyOverflowMonitor();
+}
 
 // Material Symbols uses text ligatures. Wait for the bundled font before any
 // React chrome can paint, otherwise Chromium exposes names such as

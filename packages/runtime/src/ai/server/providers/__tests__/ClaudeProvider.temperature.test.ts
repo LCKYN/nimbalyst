@@ -21,6 +21,7 @@ describe('ClaudeProvider.supportsTemperature', () => {
     it('returns false for claude-opus-5', () => {
       // Opus 5 (dateless, new default) inherits the Opus 4.7+ deprecation.
       expect(ClaudeProvider.supportsTemperature('claude-opus-5')).toBe(false);
+      expect(ClaudeProvider.supportsTemperature('claude-opus-5-5')).toBe(false);
     });
 
     it('returns false for hypothetical future opus-4-9+', () => {
@@ -75,6 +76,7 @@ describe('ClaudeProvider.supportsTemperature', () => {
 
     it('returns false for a future dated/minor Sonnet 5 id', () => {
       expect(ClaudeProvider.supportsTemperature('claude-sonnet-5-1')).toBe(false);
+      expect(ClaudeProvider.supportsTemperature('claude-sonnet-5-5')).toBe(false);
       expect(ClaudeProvider.supportsTemperature('claude-sonnet-6')).toBe(false);
     });
 

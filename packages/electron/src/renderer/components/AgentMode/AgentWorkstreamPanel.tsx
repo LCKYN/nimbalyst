@@ -30,6 +30,7 @@ import {
   useRole,
   useInteractions,
 } from '@floating-ui/react';
+import { windowControlsClearance } from '@nimbalyst/runtime/ui/floating/windowControlsClearance';
 import {
   ProviderIcon,
   MaterialSymbol,
@@ -218,7 +219,7 @@ const WorkstreamHeaderTagsRow: React.FC<{ workstreamId: string }> = ({ workstrea
     open: overflowOpen,
     onOpenChange: setOverflowOpen,
     placement: 'bottom-end',
-    middleware: [offset(6), flip({ padding: 8 }), shift({ padding: 8 })],
+    middleware: [offset(6), flip({ padding: 8 }), shift({ padding: 8 }), windowControlsClearance()],
   });
   const overflowClick = useClick(overflowContext);
   const overflowDismiss = useDismiss(overflowContext);
@@ -1521,9 +1522,18 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       }
     };
 
+    // An open Lexical find bar takes Find Next / Previous directly; it has no
+    // Cmd+G key handler, so the synthetic keydown only reaches Monaco (#1578).
+    const navigateEditorFind = (activeFilePath: string, direction: 'next' | 'previous') => {
+      if (!SearchReplaceStateManager.navigate(activeFilePath, direction)) {
+        dispatchEditorKeyEvent('g', 'KeyG', true, direction === 'previous');
+      }
+    };
+
     const handleFindNext = () => {
-      if (showEditorTabs && lastFocusedPanelRef.current === 'editor' && editorTabsRef.current?.getActiveFilePath()) {
-        dispatchEditorKeyEvent('g', 'KeyG', true);
+      const activeFilePath = editorTabsRef.current?.getActiveFilePath();
+      if (showEditorTabs && lastFocusedPanelRef.current === 'editor' && activeFilePath) {
+        navigateEditorFind(activeFilePath, 'next');
       } else if (activeSessionId) {
         window.dispatchEvent(new CustomEvent('transcript:find-next', {
           detail: { sessionId: activeSessionId }
@@ -1532,8 +1542,9 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     };
 
     const handleFindPrevious = () => {
-      if (showEditorTabs && lastFocusedPanelRef.current === 'editor' && editorTabsRef.current?.getActiveFilePath()) {
-        dispatchEditorKeyEvent('g', 'KeyG', true, true);
+      const activeFilePath = editorTabsRef.current?.getActiveFilePath();
+      if (showEditorTabs && lastFocusedPanelRef.current === 'editor' && activeFilePath) {
+        navigateEditorFind(activeFilePath, 'previous');
       }
     };
 
