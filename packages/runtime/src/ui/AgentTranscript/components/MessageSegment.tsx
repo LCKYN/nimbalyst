@@ -248,6 +248,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
           onOpenFile={onOpenFile}
           onOpenSession={onOpenSession}
           messageId={message.id}
+          workspacePath={workspacePath}
         />
         {isCollapsed && (
           <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[var(--nim-bg-secondary)] to-transparent pointer-events-none" />

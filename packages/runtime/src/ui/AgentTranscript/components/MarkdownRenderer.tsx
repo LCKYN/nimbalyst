@@ -23,6 +23,7 @@ import {
   isAppActionHref,
 } from '../../../utils/appActionLinks';
 import { copyToClipboard } from '../../../utils/clipboard';
+import { localAssetUrl } from '../../../utils/localAssetUrl';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 
 // Inject MarkdownRenderer styles once (for syntax highlighting, scrollbar, and overflow wrapper)
@@ -372,6 +373,8 @@ interface MarkdownRendererProps {
    *  per-block UI preferences (e.g. the OverflowWrapper Wrap toggle) so
    *  preferences survive react-markdown remounts during streaming. */
   messageId?: string | number;
+  /** Optional: base for relative image paths (the session's working directory). */
+  workspacePath?: string;
 }
 
 function safeDecodeURIComponent(value: string): string {
@@ -583,6 +586,22 @@ export function resolveTranscriptFileTargetFromHref(href?: string): TranscriptFi
   };
 }
 
+/**
+ * Resolve a markdown image `src` to a URL the renderer can load. A bare local
+ * path would resolve against the app's own origin and render as a broken
+ * image, so local paths go through `localAssetUrl`, with relative ones based
+ * on the session's workspace. Web and `data:` sources pass through.
+ */
+export function resolveTranscriptImageSrc(src?: string, workspacePath?: string): string | undefined {
+  if (!src) return src;
+  const absolutePath = resolveTranscriptFilePathFromHref(src);
+  if (absolutePath) return localAssetUrl(absolutePath);
+  const trimmed = src.trim();
+  if (!workspacePath || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(trimmed)) return src;
+  const relativePath = safeDecodeURIComponent(stripQueryAndHash(trimmed)).replace(/^\.\//, '');
+  return localAssetUrl(`${workspacePath}/${relativePath}`);
+}
+
 // Memoized: every new transcript message re-renders the visible rows, and
 // re-parsing each row's unchanged markdown dominated that render.
 export const MarkdownRenderer = React.memo(function MarkdownRenderer({
@@ -590,7 +609,8 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
   isUser = false,
   isSystemMessage = false,
   onOpenFile,
-  messageId
+  messageId,
+  workspacePath
 }: MarkdownRendererProps) {
   // Stable per-block key for the OverflowWrapper wrap-preference cache.
   // Combines the message id (so different messages can never share a slot)
@@ -1091,10 +1111,19 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
         {children}
       </del>
     ),
+    // Images
+    img: ({ node: _node, src, alt, ...props }: any) => (
+      <img
+        {...props}
+        src={resolveTranscriptImageSrc(src, workspacePath)}
+        alt={alt ?? ''}
+        className="max-w-full h-auto rounded"
+      />
+    ),
     // Extension overrides applied last so they can replace any of the
     // core component handlers above.
     ...contributions.components,
-  }), [codeBlockPersistKey, trackerReferencePreviewKey, isUser, onOpenFile, contributions.components]);
+  }), [codeBlockPersistKey, trackerReferencePreviewKey, isUser, onOpenFile, workspacePath, contributions.components]);
 
   return (
     <div

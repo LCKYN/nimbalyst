@@ -165,6 +165,23 @@ describe('MarkdownRenderer reference autolinking', () => {
     expect(screen.getByText('Changed text.')).toBeDefined();
   });
 
+  // Without an `img` override a local path resolved against the app's own
+  // origin and rendered as a broken image.
+  it('serves local image paths through localAssetUrl, resolving relative ones against the workspace', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        content="![rel](./shots/a%20b.png) ![abs](/tmp/c.png) ![web](https://example.com/d.png)"
+        workspacePath="/ws"
+      />,
+    );
+    const srcs = Array.from(container.querySelectorAll('img')).map((img) => img.getAttribute('src'));
+    expect(srcs).toEqual([
+      'file:///ws/shots/a b.png',
+      'file:///tmp/c.png',
+      'https://example.com/d.png',
+    ]);
+  });
+
   it('does not autolink a token whose prefix is not a workspace tracker prefix', () => {
     const { container } = renderWith('Encoding is UTF-8 here.');
     expect(container.querySelector('.tracker-reference-chip')).toBeNull();
