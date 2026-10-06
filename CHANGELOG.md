@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- The AI Usage Report has a new Sessions tab breaking down cost and tokens per session, grouped by phase or tag, split between input, output, main and sub-agent usage, sortable by any column with per-group totals, and each row opens its session.
+- The AI Usage Report opens in the main window from the sidebar, and scopes every panel to one workspace and a shared date range; hovering the activity heatmap reports that hour's activity and token usage; the Tools tab estimates tokens per tool and flags tools that fail often or return oversized results.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -17,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 <!-- Bug fixes go here -->
 - A Mermaid diagram with a syntax error no longer leaves stray error graphics behind that could push a project window's title bar out of view.
+- AI Usage Report charts read correctly: the token axis no longer shows truncated zeros, the heatmap legend renders, and chart colors follow the theme.
+- The Git panel names the signal when a push is killed before it finishes, instead of showing the hook's output as the error.
+- Cursor Agent no longer copies your global MCP server settings, including any secrets, into the project folder.
+- Repository-provided MCP servers no longer start for Grok Build or Cursor Agent in a workspace you have not trusted.
+- The macOS menu bar strip and the panel below it now agree on their status colors: running sessions are green, unread ones blue.
 
 ### Removed
 <!-- Removed features go here -->

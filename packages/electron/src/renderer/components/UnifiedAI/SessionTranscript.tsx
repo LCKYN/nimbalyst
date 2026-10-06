@@ -2722,6 +2722,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
         onCancel={handleCancelQueuedPrompt}
         onEdit={handleEditQueuedPrompt}
         onSendNow={isLoading && !isClaudeCliTerminalSession(provider) ? handleSendNowQueuedPrompt : undefined}
+        blockedOnPrompt={isLoading && hasPendingInteractivePrompt}
       />
 
       {/* Note: All interactive prompts (ToolPermission, ExitPlanMode, AskUserQuestion) use inline widgets in transcript */}
@@ -2742,7 +2743,11 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
         enableSlashCommands={enableSlashCommands}
         onNavigateHistory={enableHistoryNavigation ? handleNavigateHistory : undefined}
         placeholder={
-          mode === 'chat'
+          // A prompt sent while the turn is blocked on a question queues behind
+          // it and does not run until the user responds or interrupts.
+          isLoading && hasPendingInteractivePrompt
+            ? "Respond to the prompt above first. Messages sent now will wait in the queue."
+            : mode === 'chat'
             ? "Ask a question. @ for files, @@ for sessions, / for commands"
             : enableSlashCommands
               ? "Type your message... (Enter to send, Shift+Enter for new line, @ for files, @@ for sessions, / for commands)"

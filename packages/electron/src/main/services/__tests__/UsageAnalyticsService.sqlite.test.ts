@@ -16,7 +16,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { SQLiteDatabase } from '../../database/sqlite/SQLiteDatabase';
 import type { AppDatabase } from '../../database/PGLiteDatabaseWorker';
-import { UsageAnalyticsService } from '../UsageAnalyticsService';
+import { UsageAnalyticsService, type SessionUsageBreakdownRow } from '../UsageAnalyticsService';
 
 const SCHEMA_DIR = path.resolve(__dirname, '../../database/sqlite/schemas');
 
@@ -50,9 +50,12 @@ async function insertSession(
     workspaceId?: string;
     provider?: string;
     model?: string | null;
+    title?: string;
     metadata?: Record<string, unknown>;
     createdAtMs?: number;
     providerSessionId?: string | null;
+    parentSessionId?: string | null;
+    createdBySessionId?: string | null;
   },
 ): Promise<void> {
   const createdAtIso = opts.createdAtMs
@@ -61,16 +64,18 @@ async function insertSession(
   await db.query(
     `INSERT INTO ai_sessions
        (id, workspace_id, title, provider, model, metadata,
-        provider_session_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+        provider_session_id, parent_session_id, created_by_session_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
     [
       opts.id,
       opts.workspaceId ?? 'ws1',
-      `Session ${opts.id}`,
+      opts.title ?? `Session ${opts.id}`,
       opts.provider ?? 'claude',
       opts.model ?? 'claude-sonnet-4',
       JSON.stringify(opts.metadata ?? {}),
       opts.providerSessionId ?? null,
+      opts.parentSessionId ?? null,
+      opts.createdBySessionId ?? null,
       createdAtIso,
     ],
   );
@@ -215,6 +220,98 @@ describe('UsageAnalyticsService on SQLite', () => {
       expect(a!.totalTokens).toBe(150);
       expect(a!.sessionCount).toBe(1);
       expect(a!.lastActivity).toBe(1_700_000_000_000);
+    });
+  });
+
+  describe('getSessionUsageBreakdown (#1496)', () => {
+    it('rolls a workstream up under its root, sorts by cost desc, and tolerates old-shape metadata', async () => {
+      // Root of a workstream: new-shape tokenUsage with the full #1496 fields.
+      await insertSession(db, {
+        id: 'root-session',
+        workspaceId: 'ws1',
+        title: 'Root workstream session',
+        provider: 'claude-code',
+        model: 'claude-code:opus',
+        metadata: {
+          phase: 'in-review',
+          tags: ['bug-fix'],
+          tokenUsage: {
+            inputTokens: 1000,
+            outputTokens: 200,
+            totalTokens: 1200,
+            costUSD: 2.5,
+            cacheReadInputTokens: 50,
+            cacheCreationInputTokens: 10,
+            mainUsage: { inputTokens: 800, outputTokens: 150, costUSD: 2.0 },
+            subagentUsage: { inputTokens: 200, outputTokens: 50, costUSD: 0.5 },
+            byModel: {
+              'claude-opus-5': { inputTokens: 800, outputTokens: 150, costUSD: 2.0 },
+              'claude-haiku-4-5': { inputTokens: 200, outputTokens: 50, costUSD: 0.5 },
+            },
+          },
+        },
+      });
+      // Child of the workstream: OLD-shape tokenUsage -- no cache split, no
+      // mainUsage/subagentUsage/byModel, no costEstimated. Must not crash and
+      // must still roll up under the root.
+      await insertSession(db, {
+        id: 'child-session',
+        workspaceId: 'ws1',
+        title: 'Child workstream session',
+        parentSessionId: 'root-session',
+        metadata: {
+          tokenUsage: { inputTokens: 40, outputTokens: 10, totalTokens: 50, costUSD: 0.1 },
+        },
+      });
+      // Unrelated solo session with NO tokenUsage at all (pre-tracking session).
+      await insertSession(db, {
+        id: 'solo-session',
+        workspaceId: 'ws1',
+        title: 'Solo session',
+        metadata: {},
+      });
+      // Different workspace -- must be excluded by the workspaceId filter.
+      await insertSession(db, {
+        id: 'other-ws-session',
+        workspaceId: 'ws2',
+        metadata: { tokenUsage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 99 } },
+      });
+
+      const rows = await svc.getSessionUsageBreakdown('ws1');
+
+      expect(rows.map((r) => r.id)).toEqual(['root-session', 'child-session', 'solo-session']);
+
+      const root = rows.find((r) => r.id === 'root-session') as SessionUsageBreakdownRow;
+      expect(root.workstreamRootId).toBe('root-session');
+      expect(root.phase).toBe('in-review');
+      expect(root.tags).toEqual(['bug-fix']);
+      expect(root.costUSD).toBe(2.5);
+      expect(root.costEstimated).toBe(false);
+      expect(root.cacheReadInputTokens).toBe(50);
+      expect(root.cacheCreationInputTokens).toBe(10);
+      expect(root.mainUsage).toEqual({ inputTokens: 800, outputTokens: 150, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 2.0 });
+      expect(root.subagentUsage).toEqual({ inputTokens: 200, outputTokens: 50, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.5 });
+      expect(root.byModel).toEqual({
+        'claude-opus-5': { inputTokens: 800, outputTokens: 150, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 2.0 },
+        'claude-haiku-4-5': { inputTokens: 200, outputTokens: 50, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.5 },
+      });
+
+      const child = rows.find((r) => r.id === 'child-session') as SessionUsageBreakdownRow;
+      expect(child.workstreamRootId).toBe('root-session');
+      expect(child.parentSessionId).toBe('root-session');
+      expect(child.costUSD).toBe(0.1);
+      expect(child.mainUsage).toBeUndefined();
+      expect(child.subagentUsage).toBeUndefined();
+      expect(child.byModel).toBeUndefined();
+      expect(child.cacheReadInputTokens).toBe(0);
+      expect(child.cacheCreationInputTokens).toBe(0);
+
+      const solo = rows.find((r) => r.id === 'solo-session') as SessionUsageBreakdownRow;
+      expect(solo.workstreamRootId).toBe('solo-session');
+      expect(solo.totalTokens).toBe(0);
+      expect(solo.costUSD).toBe(0);
+      expect(solo.phase).toBeUndefined();
+      expect(solo.tags).toBeUndefined();
     });
   });
 
@@ -478,6 +575,124 @@ describe('UsageAnalyticsService on SQLite', () => {
       expect(heat).toEqual([
         { dayOfWeek: 1, hourOfDay: 14, activityCount: 2 },
       ]);
+    });
+  });
+
+  // The Overview's panels used to disagree: tokens left out cache, a session's
+  // whole total landed on the day it started, and a range filtered on session
+  // start. Every assertion here is one of those, plus "the panels sum".
+  describe('getUsageOverview', () => {
+    const DAY = 24 * 3_600_000;
+    const day1 = Date.UTC(2026, 5, 1, 12);
+    const day3 = day1 + 2 * DAY;
+    const now = day3 + 3_600_000;
+
+    async function prompts(sessionId: string, times: number[]): Promise<void> {
+      for (const createdAtMs of times) {
+        await insertMessage(db, { sessionId, direction: 'input', content: 'p', createdAtMs });
+      }
+    }
+
+    it('spreads a session over the days its prompts were sent and counts cached input', async () => {
+      await insertSession(db, {
+        id: 'long',
+        provider: 'claude-code',
+        model: 'claude-code:opus',
+        createdAtMs: day1,
+        metadata: {
+          tokenUsage: {
+            inputTokens: 100, outputTokens: 300, cacheReadInputTokens: 3_000, cacheCreationInputTokens: 600,
+            costUSD: 4,
+          },
+        },
+      });
+      await prompts('long', [day1, day3, day3 + 60_000, day3 + 120_000]);
+
+      const all = await svc.getUsageOverview(undefined, undefined, 0, now);
+      expect(all.totals.costUSD).toBeCloseTo(4);
+      expect(all.totals.totalTokens).toBe(4_000);
+      expect(all.trend.map((b) => b.costUSD)).toEqual([1, 0, 3]);
+      expect(all.totals.activeDays).toBe(2);
+
+      // A range that opens after the session started still counts the part of
+      // it that ran inside the range.
+      const recent = await svc.getUsageOverview(undefined, day3 - 3_600_000, 0, now);
+      expect(recent.totals.costUSD).toBeCloseTo(3);
+      expect(recent.totals.sessionCount).toBe(1);
+      expect(recent.byModel[0]).toMatchObject({ model: 'opus' });
+      expect(recent.byModel[0].costUSD).toBeCloseTo(3);
+
+      // The Sessions tab lists the same sessions at the same in-range share, so
+      // its total is the Overview's -- and drops a session idle all range.
+      await insertSession(db, {
+        id: 'idle',
+        createdAtMs: day1,
+        metadata: { tokenUsage: { inputTokens: 1, outputTokens: 1, costUSD: 50 } },
+      });
+      await prompts('idle', [day1]);
+      const rows = await svc.getSessionUsageBreakdown(undefined, day3 - 3_600_000, now);
+      expect(rows.map((r) => r.id)).toEqual(['long']);
+      expect(rows[0].rangeShare).toBe(0.75);
+      expect(rows[0].costUSD).toBeCloseTo(recent.totals.costUSD);
+      expect(rows[0].totalTokens).toBeCloseTo(recent.totals.totalTokens);
+      expect(rows[0].modelLabel).toBe('opus');
+    });
+
+    it('prices what the provider did not, flags what it cannot, and the splits sum to the total', async () => {
+      await insertSession(db, {
+        id: 'priced',
+        provider: 'claude-code',
+        workspaceId: '/work/a',
+        createdAtMs: day1,
+        metadata: {
+          tokenUsage: {
+            inputTokens: 10, outputTokens: 10, costUSD: 2,
+            // Covers only half of the session's cost: tracked from a later turn
+            // on, so it splits the total rather than replacing it.
+            byModel: {
+              'claude-opus-4-8': { inputTokens: 5, outputTokens: 5, costUSD: 0.75 },
+              'claude-haiku-4-5': { inputTokens: 5, outputTokens: 5, costUSD: 0.25 },
+            },
+          },
+        },
+      });
+      await insertSession(db, {
+        id: 'estimated',
+        provider: 'openai',
+        model: 'openai:gpt-4o',
+        workspaceId: '/work/b',
+        createdAtMs: day1,
+        metadata: { tokenUsage: { inputTokens: 1_000_000, outputTokens: 0 } },
+      });
+      await insertSession(db, {
+        id: 'unpriced',
+        provider: 'lmstudio',
+        model: 'lmstudio:local-llama',
+        workspaceId: '/work/b',
+        createdAtMs: day1,
+        metadata: { tokenUsage: { inputTokens: 500, outputTokens: 500 } },
+      });
+
+      const overview = await svc.getUsageOverview(undefined, undefined, 0, now);
+      expect(overview.totals.costUSD).toBeCloseTo(2 + 2.5);
+      expect(overview.totals.costEstimated).toBe(true);
+      expect(overview.totals.unpricedSessionCount).toBe(1);
+
+      const cost = (model: string) => overview.byModel.find((m) => m.model === model)!.costUSD;
+      expect(cost('claude-opus-4-8')).toBeCloseTo(1.5);
+      expect(cost('claude-haiku-4-5')).toBeCloseTo(0.5);
+      expect(overview.byModel.find((m) => m.model === 'local-llama')!.totalTokens).toBe(1_000);
+
+      const sum = (xs: Array<{ costUSD: number }>) => xs.reduce((s, x) => s + x.costUSD, 0);
+      expect(sum(overview.byModel)).toBeCloseTo(overview.totals.costUSD);
+      expect(sum(overview.byProject)).toBeCloseTo(overview.totals.costUSD);
+      expect(sum(overview.trend)).toBeCloseTo(overview.totals.costUSD);
+
+      // The Sessions tab prices with the same rule, so the two tabs agree.
+      const rows = await svc.getSessionUsageBreakdown();
+      const estimated = rows.find((r) => r.id === 'estimated')!;
+      expect(estimated.costUSD).toBeCloseTo(2.5);
+      expect(estimated.costEstimated).toBe(true);
     });
   });
 

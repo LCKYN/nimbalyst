@@ -32,7 +32,8 @@
  *   - No usage at all: copilot-cli, antigravity-gemini-agent. Extension agents
  *     report whatever their ProtocolEvent usage carries.
  */
-import type { SessionData, StreamChunk } from '@nimbalyst/runtime/ai/server/types';
+import { estimateCostUSD } from '@nimbalyst/runtime/ai/pricing/modelPricing';
+import type { SessionData, StreamChunk, TokenUsageBucket } from '@nimbalyst/runtime/ai/server/types';
 
 export type StoredTokenUsage = NonNullable<SessionData['tokenUsage']>;
 type ChunkUsage = NonNullable<StreamChunk['usage']>;
@@ -42,6 +43,20 @@ const EMPTY_USAGE: StoredTokenUsage = { inputTokens: 0, outputTokens: 0, totalTo
 
 function count(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/** Add one turn's `TokenUsageBucket` onto a cumulative session-level bucket. #1496 */
+export function addTokenUsageBucket(
+  prev: TokenUsageBucket | undefined,
+  delta: { inputTokens?: number; outputTokens?: number; cacheReadInputTokens?: number; cacheCreationInputTokens?: number; costUSD?: number },
+): TokenUsageBucket {
+  return {
+    inputTokens: (prev?.inputTokens || 0) + (delta.inputTokens || 0),
+    outputTokens: (prev?.outputTokens || 0) + (delta.outputTokens || 0),
+    cacheReadInputTokens: (prev?.cacheReadInputTokens || 0) + (delta.cacheReadInputTokens || 0),
+    cacheCreationInputTokens: (prev?.cacheCreationInputTokens || 0) + (delta.cacheCreationInputTokens || 0),
+    costUSD: (prev?.costUSD || 0) + (delta.costUSD || 0),
+  };
 }
 
 /** The two cache counters after adding one turn's reads and writes. */
@@ -59,6 +74,9 @@ export interface ClaudeCodeTurnUsageInput {
   contextCompacted: boolean;
   /** The parent model's window, already resolved by the caller. */
   contextWindow: number | undefined;
+  /** This turn's main-agent and sub-agent totals, when the chunk splits them. #1496 */
+  mainUsage?: TokenUsageBucket;
+  subagentUsage?: TokenUsageBucket;
 }
 
 export function accumulateClaudeCodeTurnUsage(
@@ -78,12 +96,22 @@ export function accumulateClaudeCodeTurnUsage(
     newCostUSD += turn.modelUsage[modelName].costUSD || 0;
   }
 
+  // byModel unions every model key seen in modelUsage across turns, regardless
+  // of origin; mainUsage/subagentUsage accumulate this turn's split. #1496
+  const byModel: Record<string, TokenUsageBucket> = { ...(base.byModel ?? {}) };
+  for (const [modelName, stats] of Object.entries(turn.modelUsage)) {
+    byModel[modelName] = addTokenUsageBucket(byModel[modelName], stats);
+  }
+
   return {
     inputTokens: base.inputTokens + newInputTokens,
     outputTokens: base.outputTokens + newOutputTokens,
     totalTokens: base.totalTokens + newInputTokens + newOutputTokens,
     ...withCache(base, count(turn.usage?.cache_read_input_tokens), count(turn.usage?.cache_creation_input_tokens)),
     costUSD: (base.costUSD || 0) + newCostUSD,
+    mainUsage: turn.mainUsage ? addTokenUsageBucket(base.mainUsage, turn.mainUsage) : base.mainUsage,
+    subagentUsage: turn.subagentUsage ? addTokenUsageBucket(base.subagentUsage, turn.subagentUsage) : base.subagentUsage,
+    byModel,
     // Both figures go, not just the fill. The meter falls back to
     // cumulative `totalTokens` over whatever denominator survives,
     // so clearing the fill alone turns a stale 90% into a confident
@@ -112,6 +140,8 @@ export interface ProviderTurnUsageInput {
   reportedContextWindow: number | undefined;
   contextFillTokens: number | undefined;
   contextCompacted: boolean;
+  /** Prices the turn when the provider reports no cost. #1496 */
+  modelId?: string;
 }
 
 export function accumulateProviderTurnUsage(
@@ -124,8 +154,23 @@ export function accumulateProviderTurnUsage(
     ? threadCumulativeCounters(base, turn)
     : perTurnCounters(base, turn.usage);
 
+  // Most providers report no exact cost, so price the tokens this turn actually
+  // added (the deltas above, not Codex's cumulative figures). Once any turn is
+  // an estimate the session total is shown as one.
+  const sdkCostUSD = turn.usage.costUSD;
+  const estimatedCostUSD = sdkCostUSD === undefined
+    ? estimateCostUSD(turn.modelId, {
+        inputTokens: next.inputTokens - base.inputTokens,
+        outputTokens: next.outputTokens - base.outputTokens,
+        cacheReadInputTokens: next.cacheReadInputTokens - count(base.cacheReadInputTokens),
+        cacheCreationInputTokens: next.cacheCreationInputTokens - count(base.cacheCreationInputTokens),
+      })
+    : undefined;
+
   return {
     ...next,
+    costUSD: (base.costUSD || 0) + (sdkCostUSD ?? estimatedCostUSD ?? 0),
+    costEstimated: base.costEstimated || (sdkCostUSD === undefined && estimatedCostUSD !== undefined),
     // A compaction just replaced the conversation with a summary, so
     // every fill figure in hand describes context that no longer
     // exists -- including the one this chunk reports, which is read

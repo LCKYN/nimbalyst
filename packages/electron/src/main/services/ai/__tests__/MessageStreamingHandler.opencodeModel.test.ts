@@ -40,6 +40,9 @@ vi.mock("@nimbalyst/runtime/ai/server", () => ({
   onAgentMessageBatch: vi.fn(() => vi.fn()),
   buildMetaAgentSystemPrompt: vi.fn(),
   buildDevAgentSystemPrompt: vi.fn(),
+  // mcpEndpointRouting builds its endpoint->configKey map at module scope, so
+  // this has to be iterable even though these tests route no MCP traffic.
+  MCP_FIRST_PARTY_TOPOLOGY: [],
 }));
 
 vi.mock("@nimbalyst/runtime/ai/server/SessionStateManager", () => ({
@@ -117,6 +120,9 @@ vi.mock("../../CodexEditWindowRegistry", () => ({
 }));
 
 vi.mock("../../ToolCallMatcher", () => ({
+  // The post-turn matcher runs from a setTimeout and chains `.then()` on this,
+  // so it has to be a promise. Returning undefined threw after the test had
+  // already passed, which surfaces as an unhandled error, not a failure.
   toolCallMatcher: { matchSession: vi.fn(async () => 0) },
   unwrapShellCommand: vi.fn(),
 }));
@@ -168,6 +174,7 @@ vi.mock("../../AgentWorkflowService", () => ({
 
 vi.mock("../../../mcp/metaAgentServer", () => ({
   getMetaAgentOpenAITools: vi.fn(),
+  META_AGENT_TOOL_DEFS: [],
 }));
 
 vi.mock("../../../mcp/devAgentTools", () => ({
@@ -199,6 +206,19 @@ vi.mock("../sessionSettlePolicy", () => ({
 
 vi.mock("../../tutorial/tutorialAnalytics", () => ({
   captureTutorialMilestone: vi.fn(),
+}));
+
+// `handle` opens a session-inbox turn for the claude-code and openai-codex
+// providers only, and that reads ai_agent_messages out of PGLite. The turn
+// config suites below run other providers and never reach it; the claude-code
+// usage suite does, and without this it aborts on "Database not initialized"
+// before any usage is persisted.
+vi.mock("../sessionInboxService", () => ({
+  sessionInbox: {
+    begin: vi.fn(async () => undefined),
+    end: vi.fn(async () => {}),
+    current: vi.fn(() => undefined),
+  },
 }));
 
 import { MessageStreamingHandler } from "../MessageStreamingHandler";
@@ -386,6 +406,11 @@ describe("MessageStreamingHandler OpenCode context usage", () => {
       cacheCreationInputTokens: 0,
       contextWindow: 200_000,
       currentContext: { tokens: 12_500, contextWindow: 200_000 },
+      // #1496: the generic (non-claude-code) merge branch always attempts a
+      // cost estimate, even when the model doesn't resolve to a pricing-table
+      // row (opencode's `anthropic/…` model ids aren't in the table).
+      costUSD: 0,
+      costEstimated: false,
     });
   });
 
@@ -425,6 +450,97 @@ describe("MessageStreamingHandler OpenCode context usage", () => {
     expect(persisted.contextWindow).toBeUndefined();
     // Compaction reset the context, not what the session has spent.
     expect(persisted.totalTokens).toBe(132);
+  });
+});
+
+describe("MessageStreamingHandler claude-code main/subagent + per-model usage (#1496)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.providerFactory.getProvider.mockReturnValue(null);
+  });
+
+  it("persists byModel/mainUsage/subagentUsage/cache split from a claude-code complete chunk", async () => {
+    const updateSessionTokenUsage = vi.fn();
+
+    await runTurn({
+      session: openCodeSession({
+        id: "claude-code-usage-session",
+        provider: "claude-code",
+        model: "claude-code:opus",
+      }),
+      provider: new RecordingProvider([{
+        type: "complete",
+        isComplete: true,
+        usage: {
+          input_tokens: 140,
+          output_tokens: 28,
+          cache_read_input_tokens: 5,
+          cache_creation_input_tokens: 3,
+          total_tokens: 168,
+        },
+        modelUsage: {
+          "claude-sonnet-5": { inputTokens: 100, outputTokens: 20, costUSD: 0.6 },
+          "claude-haiku-4-5": { inputTokens: 40, outputTokens: 8, costUSD: 0.02 },
+        },
+        mainUsage: { inputTokens: 100, outputTokens: 20, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.6 },
+        subagentUsage: { inputTokens: 40, outputTokens: 8, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.02 },
+      }]),
+      sessionManager: { updateSessionTokenUsage },
+    });
+
+    expect(updateSessionTokenUsage).toHaveBeenCalledTimes(1);
+    const persisted = updateSessionTokenUsage.mock.calls[0][1];
+    expect(persisted.inputTokens).toBe(140);
+    expect(persisted.outputTokens).toBe(28);
+    expect(persisted.costUSD).toBeCloseTo(0.62);
+    expect(persisted.cacheReadInputTokens).toBe(5);
+    expect(persisted.cacheCreationInputTokens).toBe(3);
+    expect(persisted.mainUsage).toEqual({
+      inputTokens: 100, outputTokens: 20, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.6,
+    });
+    expect(persisted.subagentUsage).toEqual({
+      inputTokens: 40, outputTokens: 8, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.02,
+    });
+    expect(persisted.byModel).toEqual({
+      "claude-sonnet-5": { inputTokens: 100, outputTokens: 20, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.6 },
+      "claude-haiku-4-5": { inputTokens: 40, outputTokens: 8, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.02 },
+    });
+  });
+
+  it("merges a new-shape chunk onto an old-shape session.tokenUsage without crashing", async () => {
+    // Pre-#1496 sessions never had byModel/mainUsage/subagentUsage/cache fields
+    // in their stored tokenUsage. STATE_PERSISTENCE.md: new code must tolerate
+    // fields missing from data saved before this change.
+    const updateSessionTokenUsage = vi.fn();
+
+    await runTurn({
+      session: openCodeSession({
+        id: "claude-code-old-shape-session",
+        provider: "claude-code",
+        model: "claude-code:opus",
+        tokenUsage: { inputTokens: 500, outputTokens: 100, totalTokens: 600, costUSD: 1.2 },
+      }),
+      provider: new RecordingProvider([{
+        type: "complete",
+        isComplete: true,
+        usage: { input_tokens: 50, output_tokens: 10, total_tokens: 60 },
+        modelUsage: { "claude-opus-5": { inputTokens: 50, outputTokens: 10, costUSD: 0.3 } },
+        mainUsage: { inputTokens: 50, outputTokens: 10, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.3 },
+      }]),
+      sessionManager: { updateSessionTokenUsage },
+    });
+
+    expect(updateSessionTokenUsage).toHaveBeenCalledTimes(1);
+    const persisted = updateSessionTokenUsage.mock.calls[0][1];
+    expect(persisted.inputTokens).toBe(550);
+    expect(persisted.costUSD).toBeCloseTo(1.5);
+    expect(persisted.byModel).toEqual({
+      "claude-opus-5": { inputTokens: 50, outputTokens: 10, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.3 },
+    });
+    expect(persisted.mainUsage).toEqual({
+      inputTokens: 50, outputTokens: 10, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.3,
+    });
+    expect(persisted.subagentUsage).toBeUndefined();
   });
 });
 

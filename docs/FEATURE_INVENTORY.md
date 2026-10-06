@@ -547,8 +547,8 @@ Companion app; pairs with a desktop over encrypted sync. Voice mode is not inclu
 ## Analytics
 
 - PostHog integration (opt-in, anonymous)
-- AI usage report with historical graph and activity heatmap
+- AI usage report scoped by workspace and date range: spend (provider-reported, or estimated from list prices where a provider reports none), tokens including cached input, spend over time, spend by model and by project, and an activity heatmap; a Sessions tab ranks sessions by cost, grouped by workstream, phase or tag, with a main-agent vs sub-agent and per-model split
 - Claude model-specific weekly usage percentages and reset times, including Fable
 - Per-project usage breakdown
-- Per-tool usage tracking (local counters for built-in and MCP/extension tools) surfaced as a Tools section in the AI usage report (top tools, built-in vs MCP split, over-time, per-provider) and as a targeting signal for contextual tips; backfill from past claude-code and codex sessions
+- Per-tool usage tracking (local counters for built-in and MCP/extension tools) surfaced as a Tools section in the AI usage report (tools flagged for frequent failures or oversized results, a sortable table of calls, failure rate and estimated tokens per tool from call and result sizes, built-in vs MCP split, over-time, per-provider) and as a targeting signal for contextual tips; backfill from past claude-code and codex sessions
 - Developer Dashboard Renders tab for inspecting component re-render counts and causes

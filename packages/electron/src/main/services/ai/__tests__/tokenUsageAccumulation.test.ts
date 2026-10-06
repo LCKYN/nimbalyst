@@ -123,3 +123,36 @@ describe('accumulateProviderTurnUsage (per-turn providers)', () => {
     expect(noSplit).toMatchObject({ inputTokens: 14_697, totalTokens: 14_707, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 });
   });
 });
+
+describe('per-session breakdown fields (#1496)', () => {
+  it('keeps per-model buckets and the main/sub-agent split across Claude Code turns', () => {
+    const turn = {
+      ...claudeTurn(10, 20, 0, 0),
+      modelUsage: { 'claude-opus': { inputTokens: 10, outputTokens: 20, costUSD: 0.25 } },
+      mainUsage: { inputTokens: 10, outputTokens: 20, costUSD: 0.25 },
+    };
+    const second = accumulateClaudeCodeTurnUsage(accumulateClaudeCodeTurnUsage(undefined, turn), turn);
+    expect(second.byModel?.['claude-opus']).toMatchObject({ inputTokens: 20, outputTokens: 40, costUSD: 0.5 });
+    expect(second.mainUsage).toMatchObject({ inputTokens: 20, costUSD: 0.5 });
+    expect(second.subagentUsage).toBeUndefined();
+  });
+
+  it('prices a provider turn that reports no cost, and keeps an exact cost exact', () => {
+    const turn = (usage: ProviderTurnUsageInput['usage']): ProviderTurnUsageInput => ({
+      usage,
+      threadCumulative: false,
+      isResumedThread: false,
+      reportsCurrentContext: false,
+      reportedContextWindow: undefined,
+      contextFillTokens: undefined,
+      contextCompacted: false,
+      modelId: 'claude-opus-5',
+    });
+    // 1M input at $5/M + 1M output at $25/M.
+    const estimated = accumulateProviderTurnUsage(undefined, turn({ input_tokens: 1_000_000, output_tokens: 1_000_000, total_tokens: 2_000_000 }));
+    expect(estimated).toMatchObject({ costUSD: 30, costEstimated: true });
+
+    const exact = accumulateProviderTurnUsage(undefined, turn({ input_tokens: 10, output_tokens: 10, total_tokens: 20, costUSD: 0.01 }));
+    expect(exact).toMatchObject({ costUSD: 0.01, costEstimated: false });
+  });
+});
