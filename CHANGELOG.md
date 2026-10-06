@@ -19,14 +19,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 <!-- Bug fixes go here -->
 - AI Usage Report charts read correctly: the token axis no longer shows truncated zeros, the heatmap legend renders, and chart colors follow the theme.
-- The Git panel names the signal when a push is killed before it finishes, instead of showing the hook's output as the error.
-- Cursor Agent no longer copies your global MCP server settings, including any secrets, into the project folder.
-- Repository-provided MCP servers no longer start for Grok Build or Cursor Agent in a workspace you have not trusted.
-- The macOS menu bar strip and the panel below it now agree on their status colors: running sessions are green, unread ones blue.
-- A Mermaid diagram with a syntax error no longer leaves stray error graphics behind that could push a project window's title bar out of view.
 
 ### Removed
 <!-- Removed features go here -->
+
+## [0.80.0] - 2026-10-05
+
+
+### Added
+<!-- New features go here -->
+- Pages: one page tree with nested pages, typed pages with header fields, type pages with an item table, subtypes, drag reordering, and Set type in place.
+- Pages: named relations written as links, with a Links section listing each relation and the sentence that made it.
+- Pages: mark sentences as decided or open, cite prompts, answers, comments and web sources, and place tables, 2x2 charts and decision lists in a page.
+- Pages: history with compare and restore for every page, and a Trash in each section that restores pages with their children.
+- Pages: Home, Search and Types in each section; Search covers page titles and text, Types shows a map or table, and New type works without an agent.
+- Pages: a Personal section that works offline with no account or team.
+- Pages in the web console, and the `nimbalyst-pages` Claude Code plugin and `nim pages` CLI for team pages.
+- Agents can list, search, create, place, reorder, retype and edit pages, cite the session, and read another team project's pages by name.
+
+### Changed
+<!-- Changes to existing functionality go here -->
+- Shared Docs mode is now Pages; it opens on Home, shows only the current project, and the Shared documents list is replaced by Search.
+- Clicking a page opens it in the current tab; Cmd+click opens a new tab, with per-tab Back and Forward (Cmd+[ / Cmd+]).
+- Agent edits to shared pages apply directly, with a version saved to history first.
+- Shared page history shows red and green diffs against the previous or current version.
+- Clicking a link in a document opens it; a hover card offers Edit and Copy.
+- New links in pages are console.nimbalyst.com links that open in the desktop app when possible.
+- Confirmations and errors in the desktop app use in-app dialogs instead of system dialogs.
+- Re-sharing a tracker type the team already owns is refused instead of overwriting the team's definition.
+- Knowledge extension skills write pages, typed pages and relations instead of claim and finding items.
+- Enlarged transcript images support pinch zoom.
+- iOS: session list and header take less space.
+
+### Fixed
+<!-- Bug fixes go here -->
+- A prompt sent while a session is starting is restored to the composer if the app quits first.
+- Structured input form answers submitted after a restart or after the agent call ended now resume the session.
+- Claude Code: a follow-up message runs right away while a background command is still running.
+- Agents can update or archive a tracker item that is missing an unrelated required field.
+- Pages deleted by an agent, or with child pages from the sidebar, go to Trash instead of being deleted permanently.
+- Team tracker sync starts even when one item has a backlog of unsent edits too large to load; oversized edits are refused with an error.
+- Phone sync skips an oversized project file instead of stopping the rest of the upload.
+- Pages team sync no longer stops with "Data source has been disposed" after error recovery.
+- Knowledge graph labels and relation names load for the open project.
+- A Mermaid syntax error no longer pushes the window's title bar out of view.
+- Editor screenshots in the transcript enlarge over the whole window.
+- The Add Project menu stays within the window.
+- No error dialog when a credential lock is released mid-check.
+- macOS: opening the menu bar panel no longer removes Nimbalyst from the Dock and Cmd+Tab.
+- Android: prompts are no longer lost on leaving mid-send or on a silently dropped connection, and offline phones stay signed in.
+- Android: no crash at launch during WebView updates, after moving to a new phone, or without a browser or camera app.
+- iOS: the "Sync interrupted" notice clears on reconnect and is less intrusive.
+- Windows: projects directly under a drive root can send prompts.
+
+### Removed
+<!-- Removed features go here -->
+- Tracker items no longer show the earlier knowledge graph's claim statements and qualifier editors; stored values are kept.
 
 ## [0.79.1] - 2026-09-30
 
