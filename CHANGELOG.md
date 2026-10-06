@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Project rail icons show which projects have sessions waiting for your answer, still running, or finished, and each project can use its logo or an emoji you pick instead of initials.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
+- Projects open in the rail are reopened on launch by default.
 
 ### Fixed
 <!-- Bug fixes go here -->

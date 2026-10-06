@@ -108,6 +108,65 @@
   pointer-events: none;
 }
 
+.project-rail-item-badge.is-awaiting {
+  background-color: var(--nim-warning);
+  color: var(--nim-bg);
+}
+
+.project-rail-item-badge.is-finished {
+  background-color: var(--nim-success);
+  color: var(--nim-bg);
+}
+
+.project-rail-item-emoji {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.project-rail-icon-picker {
+  display: grid;
+  grid-template-columns: repeat(8, 26px);
+  gap: 2px;
+  padding: 2px 8px 4px;
+}
+
+.project-rail-icon-choice {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.project-rail-icon-choice:hover {
+  background-color: var(--nim-bg-hover);
+}
+
+.project-rail-icon-custom {
+  padding: 2px 8px 4px;
+}
+
+.project-rail-icon-custom input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--nim-text);
+  background-color: var(--nim-bg);
+  border: 1px solid var(--nim-border);
+  border-radius: 4px;
+}
+
+.project-rail-item-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 .project-rail-item-close {
   position: absolute;
   top: -4px;

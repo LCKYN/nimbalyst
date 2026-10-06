@@ -68,12 +68,12 @@ export const activeWorkspacePathAtom = atom<string | null>(null);
 export const multiProjectModeAtom = atom<boolean>(false);
 
 /**
- * When true, the rail rehydrates with the projects that were open at last
- * app close. When false (default), the rail starts with only the project
- * the user picked from the launch screen; additional projects are added
+ * When true (default), the rail rehydrates with the projects that were open
+ * at last app close. When false, the rail starts with only the project the
+ * user picked from the launch screen; additional projects are added
  * explicitly via the `+` button.
  */
-export const restorePreviousProjectsAtom = atom<boolean>(false);
+export const restorePreviousProjectsAtom = atom<boolean>(true);
 
 /**
  * Ordered list of open projects in the rail. First entry is leftmost.
