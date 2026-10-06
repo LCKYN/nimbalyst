@@ -536,6 +536,8 @@ export interface WorkspaceState {
   remoteSessionDrafts?: Record<string, { text: string; options?: import("@nimbalyst/runtime/sync/types").RemoteTurnOptions; attachments: import("@nimbalyst/runtime/ai/server/types").ChatAttachment[] }>;
   /** Explicit Cloudflare choices for this project; authentication stays in Wrangler. */
   cloudflareSandboxSelection?: { profileName: string; accountId: string | null };
+  /** When the Personal Home page was seeded; set once so a removed Home stays removed. */
+  personalPagesHomeSeededAt?: number;
   workspacePath: string;
   /**
    * Additional top-level folders attached to this workspace, as absolute paths.
@@ -591,6 +593,8 @@ export interface WorkspaceState {
     // Stable first-class folder id most recently used. Null means Team root.
     lastSharedFolderId?: string | null;
   };
+  /** Pages-mode sidebar sections the user collapsed or expanded; unset = default. */
+  pagesSidebarCollapsed?: { team?: boolean; personal?: boolean };
   collabPendingUpdates?: Record<string, {
     mergedUpdateBase64: string;
     updatedAt: number;
@@ -979,6 +983,7 @@ function createDefaultWorkspaceState(workspacePath: string): WorkspaceState {
       expandedFolders: [],
       customFolders: [],
     },
+    pagesSidebarCollapsed: undefined,
     collabPendingUpdates: {},
     trackerSharingMigration: undefined,
     trackerSharingMigrationSeenAt: undefined,

@@ -30,6 +30,7 @@ import {
   sessionRegistryAtom,
 } from '../../store';
 import { useAIInputUndo } from '../../hooks/useAIInputUndo';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 import type { AIInputSnapshot } from '../../store/atoms/aiInputUndo';
 import { ScheduleLaterMenu } from './ScheduleLaterMenu';
 import type { ScheduleLaterChoice } from './scheduleLater';
@@ -1059,7 +1060,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         if (!validation.valid) {
           pasteUndoCountRef.current.delete(processingId);
           console.error('[AIInput] File validation failed:', validation.error);
-          alert(validation.error || 'Invalid file');
+          errorNotificationService.showError('Attachment Rejected', validation.error || 'Invalid file');
           return;
         }
 
@@ -1094,14 +1095,14 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           onChange(value + (value ? ' ' : '') + reference);
         } else {
           console.error('[AIInput] Failed to save attachment:', result.error);
-          alert(result.error || 'Failed to save attachment');
+          errorNotificationService.showError('Attachment Failed', result.error || 'Failed to save attachment');
         }
       } catch (error) {
         // Remove from processing state on error
         setProcessingAttachments(prev => prev.filter(p => p.id !== processingId));
         pasteUndoCountRef.current.delete(processingId);
         console.error('[AIInput] Error handling file attachment:', error);
-        alert('Failed to attach file');
+        errorNotificationService.showError('Attachment Failed', 'Failed to attach file');
       }
     }, [onAttachmentAdd, sessionId, value, onChange, getUndoCount]);
 

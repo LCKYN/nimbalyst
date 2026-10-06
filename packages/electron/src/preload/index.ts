@@ -746,7 +746,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('mcp:readCollabDoc', handler);
     return () => ipcRenderer.removeListener('mcp:readCollabDoc', handler);
   },
-  sendMcpReadCollabDocResult: (resultChannel: string, result: { success: boolean; content?: string; decisionState?: unknown; error?: string; code?: string }) => {
+  sendMcpReadCollabDocResult: (resultChannel: string, result: { success: boolean; content?: string; title?: string; documentType?: string; decisionState?: unknown; error?: string; code?: string }) => {
     ipcRenderer.send(resultChannel, result);
   },
   onMcpReadCollabDocComments: (callback: (data: any) => void) => {
@@ -1018,7 +1018,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateTrackerItemContent: (payload: {
       itemId: string;
       content: any;
-    }) => ipcRenderer.invoke('document-service:tracker-item-update-content', payload) as Promise<{ success: boolean; error?: string }>,
+      expectedBodyVersion?: number;
+    }) => ipcRenderer.invoke('document-service:tracker-item-update-content', payload) as Promise<{ success: boolean; conflict?: boolean; bodyVersion?: number; error?: string }>,
     getTrackerItemContent: (payload: {
       itemId: string;
     }) => ipcRenderer.invoke('document-service:tracker-item-get-content', payload) as Promise<{ success: boolean; content?: any; error?: string }>,
@@ -1121,6 +1122,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }>,
     setArchived: (payload: { workspacePath: string; type: string; archived: boolean }) =>
       ipcRenderer.invoke('tracker-lifecycle:set-archived', payload) as Promise<{ success: boolean; error?: string }>,
+    defineType: (payload: { workspacePath: string; schema: Record<string, unknown> }) =>
+      ipcRenderer.invoke('tracker-lifecycle:define-type', payload) as Promise<{
+        success: boolean;
+        type?: string;
+        scope?: 'team' | 'personal';
+        status?: 'created' | 'syncing';
+        error?: string;
+      }>,
   },
 
   // Plaintext recovery copies for collaborative content

@@ -48,7 +48,8 @@ interface CollabDocsUIContextValue {
   controller: CollabDocsUIController;
 }
 
-const CollabDocsUIContext = createContext<CollabDocsUIContextValue | null>(null);
+/** Exported for this package's own hooks (`useCollabPagesState`); hosts use `useCollabDocsUI`. */
+export const CollabDocsUIContext = createContext<CollabDocsUIContextValue | null>(null);
 
 export interface CollabDocsUIProviderProps {
   session: CollabDocsSession;
@@ -78,7 +79,7 @@ export function CollabDocsUIProvider({
 export function useCollabDocsUI(): CollabDocsUIContextValue {
   const value = useContext(CollabDocsUIContext);
   if (!value) {
-    throw new Error('Shared Docs UI must be rendered inside CollabDocsUIProvider');
+    throw new Error('Pages UI must be rendered inside CollabDocsUIProvider');
   }
   return value;
 }
