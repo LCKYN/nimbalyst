@@ -9,10 +9,12 @@
  * stays as a fallback).
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 import { getShowInFileBrowserLabel } from '@nimbalyst/runtime';
 import {
   useFloating,
+  autoUpdate,
   FloatingPortal,
   useDismiss,
   useHover,
@@ -24,7 +26,7 @@ import {
   size,
   type VirtualElement,
 } from '@floating-ui/react';
-import { windowControlsClearance } from '@nimbalyst/runtime/ui/floating/windowControlsClearance';
+import { clearWindowControls, getWindowControlsZones, windowControlsClearance } from '@nimbalyst/runtime/ui/floating/windowControlsClearance';
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
 import { OrgSwitcher } from './OrgSwitcher';
 import {
@@ -40,10 +42,18 @@ import {
   globalSessionActivityAtom,
   projectActivitySummaryAtom,
 } from '../store/atoms/sessionActivity';
+import { projectAwaitingInputCountAtom } from '../store/atoms/sessions';
 import { generateWorkspaceAccentColor } from './WorkspaceSummaryHeader';
+import { requestConfirmation } from '../dialogs/requestConfirmation';
+import { errorNotificationService } from '../services/ErrorNotificationService';
 import './ProjectRail.css';
 
 const REVEAL_LABEL = getShowInFileBrowserLabel();
+
+const PROJECT_ICON_CHOICES = [
+  '😀', '🚀', '🔥', '⭐', '💡', '🧪', '🛠️', '📦',
+  '🎨', '📝', '🤖', '🧠', '💼', '🏠', '🌱', '🐛',
+];
 
 function projectInitials(name: string): string {
   const trimmed = name.trim();
@@ -58,8 +68,11 @@ function projectInitials(name: string): string {
 interface ProjectRailIconProps {
   project: OpenProject;
   isActive: boolean;
+  awaitingCount: number;
   processingCount: number;
   unreadCount: number;
+  /** Bumped after the user changes the icon so it is fetched again. */
+  iconVersion: number;
   onActivate: (path: string) => void;
   onClose: (project: OpenProject) => void;
   onContextMenu: (project: OpenProject, x: number, y: number) => void;
@@ -68,8 +81,10 @@ interface ProjectRailIconProps {
 function ProjectRailIcon({
   project,
   isActive,
+  awaitingCount,
   processingCount,
   unreadCount,
+  iconVersion,
   onActivate,
   onClose,
   onContextMenu,
@@ -120,8 +135,25 @@ function ProjectRailIcon({
   // Inactive projects show a badge when something needs attention. Active
   // projects already have the user's eyes on them so we suppress the
   // badge to keep the rail quiet.
-  const showBadge = !isActive && (processingCount > 0 || unreadCount > 0);
-  const badgeLabel = processingCount > 0 ? `${processingCount}` : unreadCount > 0 ? `${unreadCount}` : '';
+  // Priority: waiting for input > streaming > unread.
+  // Finished-but-unread shows a check instead of a count.
+  const showBadge = !isActive && (awaitingCount > 0 || processingCount > 0 || unreadCount > 0);
+  const badgeKind = awaitingCount > 0 ? 'is-awaiting' : processingCount > 0 ? 'is-processing' : 'is-finished';
+  const badgeAriaLabel = awaitingCount > 0
+    ? `${awaitingCount} waiting for your response`
+    : processingCount > 0 ? `${processingCount} streaming session(s)` : `${unreadCount} finished, unread`;
+
+  // A user-picked emoji, else a project logo (favicon etc.) as a data URL,
+  // else initials.
+  const [iconSrc, setIconSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!window.electronAPI?.invoke) return;
+    let cancelled = false;
+    window.electronAPI.invoke('workspace:get-icon', { workspacePath: project.path })
+      .then((src: string | null) => { if (!cancelled) setIconSrc(src); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [project.path, iconVersion]);
 
   // Wrapper is a non-interactive container so the activate button and the
   // close button can sit as siblings. Nesting a button inside a button is
@@ -143,13 +175,20 @@ function ProjectRailIcon({
         aria-label={`Switch to project ${project.name}`}
         aria-current={isActive ? 'true' : undefined}
       >
-        {projectInitials(project.name)}
+        {iconSrc?.startsWith('data:') ? (
+          <img className="project-rail-item-icon" src={iconSrc} alt="" onError={() => setIconSrc(null)} />
+        ) : iconSrc ? (
+          <span className="project-rail-item-emoji">{iconSrc}</span>
+        ) : (
+          projectInitials(project.name)
+        )}
         {showBadge && (
-          <span
-            className="project-rail-item-badge"
-            aria-label={processingCount > 0 ? `${processingCount} streaming session(s)` : `${unreadCount} unread`}
-          >
-            {badgeLabel}
+          <span className={`project-rail-item-badge ${badgeKind}`} aria-label={badgeAriaLabel}>
+            {badgeKind === 'is-finished' ? (
+              <MaterialSymbol icon="check" size={10} />
+            ) : (
+              awaitingCount || processingCount
+            )}
           </span>
         )}
       </button>
@@ -188,6 +227,7 @@ export function ProjectRail() {
   const closeProject = useSetAtom(closeOpenProjectAtom);
   const activity = useAtomValue(globalSessionActivityAtom);
   const activitySummary = useAtomValue(projectActivitySummaryAtom);
+  const awaitingCounts = useAtomValue(projectAwaitingInputCountAtom);
   const projectListRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useLayoutEffect(() => {
@@ -278,7 +318,10 @@ export function ProjectRail() {
 
   const handleOpenAddMenu = useCallback(() => {
     if (atCap) {
-      window.alert('The project limit is eight per window. Close a project or enable Allow unlimited projects in Settings > Advanced.');
+      errorNotificationService.showWarning(
+        'Project limit reached',
+        'The project limit is eight per window. Close a project or enable Allow unlimited projects in Settings > Advanced.',
+      );
       return;
     }
     refreshRecents();
@@ -294,9 +337,11 @@ export function ProjectRail() {
       // the prompt when closing an inactive rail project.
       const streaming = activity.get(project.path)?.streaming.size ?? 0;
       if (streaming > 0) {
-        const proceed = window.confirm(
-          `${project.name} has ${streaming} streaming session${streaming === 1 ? '' : 's'}. Close anyway? Sessions will be paused.`
-        );
+        const proceed = await requestConfirmation({
+          title: 'Close project',
+          message: `${project.name} has ${streaming} streaming session${streaming === 1 ? '' : 's'}. Close anyway? Sessions will be paused.`,
+          confirmLabel: 'Close project',
+        });
         if (!proceed) return;
       }
 
@@ -342,12 +387,11 @@ export function ProjectRail() {
   } = useFloating({
     open: addMenuOpen,
     onOpenChange: setAddMenuOpen,
-    // `right-start` grows the menu downward from the top of the `+` button.
-    // The old `right-end` grew it upward, so with two or more recents it was
-    // taller than the space above the button and `shift()` clamped it to the
-    // top of the window — beside the traffic lights and ~140px away from the
-    // button that opened it, which read as "the + did nothing" (GitHub #1096).
-    placement: 'right-start',
+    // The Add button stays at the bottom of the rail. Align the menu's
+    // bottom with it, and track size changes as recent folders load.
+    placement: 'right-end',
+    strategy: 'fixed',
+    whileElementsMounted: autoUpdate,
     middleware: [
       offset(8),
       flip({ padding: 8 }),
@@ -355,9 +399,12 @@ export function ProjectRail() {
       windowControlsClearance(),
       size({
         padding: 8,
-        apply({ availableHeight, elements, middlewareData }) {
-          const pushed = middlewareData.windowControlsClearance?.pushed ?? 0;
-          elements.floating.style.maxHeight = `${Math.max(0, availableHeight - pushed)}px`;
+        apply({ availableHeight, elements, x, rects }) {
+          // Reserve the controls band from the viewport's padded top, not
+          // from the menu's current y: bottom alignment makes y depend on
+          // height, so subtracting the last push can cause a resize loop.
+          const reserved = clearWindowControls(x, 8, rects.floating.width, getWindowControlsZones()) - 8;
+          elements.floating.style.maxHeight = `${Math.max(0, availableHeight - reserved)}px`;
           elements.floating.style.overflowY = 'auto';
         },
       }),
@@ -445,6 +492,19 @@ export function ProjectRail() {
     }
   }, [closeMenu]);
 
+  const [iconVersions, setIconVersions] = useState<Record<string, number>>({});
+  const [customIcon, setCustomIcon] = useState('');
+  const handleSetIcon = useCallback(async (project: OpenProject, icon: string | null) => {
+    closeMenu();
+    setCustomIcon('');
+    try {
+      await window.electronAPI?.invoke?.('workspace:set-icon', { workspacePath: project.path, icon });
+      setIconVersions((prev) => ({ ...prev, [project.path]: (prev[project.path] ?? 0) + 1 }));
+    } catch (err) {
+      console.error('[ProjectRail] set-icon failed:', err);
+    }
+  }, [closeMenu]);
+
   if (!isMultiProjectMode) return null;
 
   return (
@@ -459,8 +519,10 @@ export function ProjectRail() {
               key={project.path}
               project={project}
               isActive={project.path === activePath}
+              awaitingCount={awaitingCounts.get(project.path) ?? 0}
               processingCount={activity?.processing ?? 0}
               unreadCount={activity?.unread ?? 0}
+              iconVersion={iconVersions[project.path] ?? 0}
               onActivate={handleActivate}
               onClose={handleClose}
               onContextMenu={handleContextMenu}
@@ -560,6 +622,43 @@ export function ProjectRail() {
               onClick={() => handleRevealInFinder(menu.project)}
             >
               {REVEAL_LABEL}
+            </button>
+            <div className="project-rail-context-menu-divider" />
+            <div className="project-rail-context-menu-heading">Icon</div>
+            <div className="project-rail-icon-picker" data-testid="project-rail-icon-picker">
+              {PROJECT_ICON_CHOICES.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="project-rail-icon-choice"
+                  onClick={() => handleSetIcon(menu.project, emoji)}
+                  aria-label={`Use ${emoji} as project icon`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+            <form
+              className="project-rail-icon-custom"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (customIcon.trim()) handleSetIcon(menu.project, customIcon);
+              }}
+            >
+              <input
+                value={customIcon}
+                onChange={(event) => setCustomIcon(event.target.value)}
+                maxLength={16}
+                placeholder="Any emoji, then Enter"
+                aria-label="Custom project icon"
+              />
+            </form>
+            <button
+              type="button"
+              className="project-rail-context-menu-item"
+              onClick={() => handleSetIcon(menu.project, null)}
+            >
+              Reset icon
             </button>
             <div className="project-rail-context-menu-divider" />
             <button

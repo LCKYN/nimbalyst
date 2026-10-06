@@ -2,16 +2,21 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   $getRoot,
+  $setSelection,
   CONTROLLED_TEXT_INSERTION_COMMAND,
   FORMAT_TEXT_COMMAND,
   type LexicalEditor,
 } from 'lexical';
 
 import type { EditorConfig } from '@nimbalyst/runtime/editor/EditorConfig';
+import { $convertFromEnhancedMarkdownString, getEditorTransformers } from '@nimbalyst/runtime/editor/markdown';
 import '@nimbalyst/runtime/editor/extensions/registerBuiltinExtensions';
 import '@nimbalyst/runtime/editor/index.css';
 import { registerBrowserReferenceNodes } from './referenceNodes';
 import { registerBrowserTrackerReferenceInsertion } from './trackerReferenceInsertion';
+import { BrowserPlacedViewInsertionContext, registerBrowserPlacedViewInsertion, type BrowserPlacedViewInsertionValue } from './placedViewInsertion';
+import { acquireConsoleReferenceScope } from '@nimbalyst/runtime/plugins/TrackerLinkPlugin/trackerReferenceHref';
+import { TrackerReferenceSourceProvider } from '@nimbalyst/runtime/plugins/TrackerLinkPlugin/trackerReferenceSource';
 import { CollabLexicalProvider } from '@nimbalyst/runtime/sync/CollabLexicalProvider';
 import type { DocumentSyncProvider } from '@nimbalyst/runtime/sync/DocumentSync';
 
@@ -48,6 +53,7 @@ export function decisionMembersFromComments(members: ReturnType<NonNullable<Coll
 registerBrowserReferenceNodes();
 registerBrowserDocumentEmbeds();
 registerBrowserTrackerReferenceInsertion();
+registerBrowserPlacedViewInsertion();
 
 class BundleEditorErrorBoundary extends React.Component<{
   children: React.ReactNode;
@@ -102,6 +108,15 @@ export function mountCollabEditor(options: CollabEditorMountOptions): CollabEdit
         orgId: options.source.room.orgId,
         getTeamJwt: options.source.auth.getTeamJwt,
       })
+    : null;
+  // A reference inserted here is written as this project's console link and
+  // resolved in this project (Decision 23); in-memory documents have no project.
+  const releaseReferenceScope = options.source.kind === 'team-room'
+    ? acquireConsoleReferenceScope({ orgId: options.source.room.orgId, projectId: options.source.room.projectId })
+    : null;
+  // Placed views from the slash menu link under the same project; read once, like the source above.
+  const placedViewInsertion: BrowserPlacedViewInsertionValue | null = options.source.kind === 'team-room' && options.placedViewTypes
+    ? { scope: { orgId: options.source.room.orgId, projectId: options.source.room.projectId }, types: options.placedViewTypes }
     : null;
 
   // Declared before the session because DocumentSyncProvider can report a
@@ -172,6 +187,18 @@ export function mountCollabEditor(options: CollabEditorMountOptions): CollabEdit
   const handle: CollabEditorHandle = {
     getDocument: () => sharedDocument,
     getMarkdown: () => getMarkdown(),
+    replaceMarkdown(markdown) {
+      if (destroyed || !lexicalEditor) throw new Error('The document is not open');
+      if (session.getState().readOnly) throw new Error('This document is read-only');
+      lexicalEditor.update(() => {
+        // Clearing a selected node without moving selection first makes
+        // Lexical throw "selection has been lost".
+        $setSelection(null);
+        $getRoot().clear();
+        $convertFromEnhancedMarkdownString(markdown, getEditorTransformers());
+      }, { discrete: true });
+    },
+    getBasisSequence: () => session.networkProvider?.getLastSeq() ?? 0,
     getState: () => session.getState(),
     hasPendingWrites: () => session.networkProvider?.hasPendingWrites() ?? false,
     getPresence: () => presenceSurface.getPresence(),
@@ -200,6 +227,7 @@ export function mountCollabEditor(options: CollabEditorMountOptions): CollabEdit
       if (destroyed) return;
       destroyed = true;
       assetImages?.release();
+      releaseReferenceScope?.();
       session.destroy({
         beforeTransportTeardown: () => {
           root?.unmount();
@@ -288,10 +316,14 @@ export function mountCollabEditor(options: CollabEditorMountOptions): CollabEdit
         <BrowserDocumentEmbedContext.Provider value={options.renderDecisionArtifact}>
           <TrackerReferenceResolverProvider resolver={options.trackerReferences}>
             <TrackerReferenceInlineAppearanceContext.Provider value={options.trackerReferenceAppearance ?? 'chip'}>
-              <BrowserEditorSurface
-                config={config}
-                subscribeToPresence={subscribeToPresence}
-              />
+              <TrackerReferenceSourceProvider value={options.trackerReferenceSource ?? null}>
+                <BrowserPlacedViewInsertionContext.Provider value={placedViewInsertion}>
+                  <BrowserEditorSurface
+                    config={config}
+                    subscribeToPresence={subscribeToPresence}
+                  />
+                </BrowserPlacedViewInsertionContext.Provider>
+              </TrackerReferenceSourceProvider>
             </TrackerReferenceInlineAppearanceContext.Provider>
           </TrackerReferenceResolverProvider>
         </BrowserDocumentEmbedContext.Provider>

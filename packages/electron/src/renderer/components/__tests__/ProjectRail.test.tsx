@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ProjectRail } from '../ProjectRail';
@@ -55,4 +55,30 @@ it('reveals restored and newly selected projects, handles resize, and leaves man
   expect(list.scrollTop).toBe(0);
   view.unmount();
   expect(disconnect).toHaveBeenCalled();
+});
+
+it('replaces initials with a picked emoji and restores them on reset', async () => {
+  const store = createStore();
+  store.set(multiProjectModeAtom, true);
+  store.set(openProjectsAtom, [{ path: '/p/app', name: 'poc-app', openedAt: 0 }]);
+  let saved: string | null = null;
+  const invoke = vi.fn(async (channel: string, data?: { icon?: string | null }) => {
+    if (channel === 'workspace:set-icon') saved = data?.icon ?? null;
+    if (channel === 'workspace:get-icon') return saved;
+    return null;
+  });
+  vi.stubGlobal('electronAPI', { invoke });
+  const view = render(<Provider store={store}><ProjectRail /></Provider>);
+  const tile = view.getByRole('button', { name: 'Switch to project poc-app' });
+  await act(async () => {});
+  expect(tile.textContent).toBe('PA');
+
+  fireEvent.contextMenu(tile);
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Use 🚀 as project icon' })); });
+  expect(invoke).toHaveBeenCalledWith('workspace:set-icon', { workspacePath: '/p/app', icon: '🚀' });
+  expect(tile.textContent).toBe('🚀');
+
+  fireEvent.contextMenu(tile);
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Reset icon' })); });
+  expect(tile.textContent).toBe('PA');
 });

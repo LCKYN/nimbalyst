@@ -27,6 +27,7 @@ import { sessionLaunchCountsAtom } from './sessionLaunchCounts';
 import { sessionListMetadata } from './sessionListMetadata';
 import { workstreamStateAtom, setWorkstreamActiveChildAtom } from './workstreamState';
 import { aiInputHistoryAtom } from './aiInputUndo';
+import { sessionActivityIndexAtom } from './sessionActivity';
 
 // SessionMeta is imported from @nimbalyst/runtime (canonical type).
 // Re-export for consumers that import from the store.
@@ -2132,6 +2133,21 @@ export const anySessionProcessingAtom = atom((get) => {
 export const anyPendingInteractivePromptAtom = atom((get) => {
   const sessions = get(sessionListAtom);
   return sessions.some((s) => get(sessionHasPendingInteractivePromptAtom(s.id)));
+});
+
+/**
+ * Map<workspacePath, count> of sessions waiting on an interactive prompt,
+ * across every project in the rail. `sessionListAtom` only holds the active
+ * project, so this walks the cross-workspace activity index instead.
+ */
+export const projectAwaitingInputCountAtom = atom((get) => {
+  const out = new Map<string, number>();
+  for (const [sessionId, path] of get(sessionActivityIndexAtom)) {
+    if (get(sessionHasPendingInteractivePromptAtom(sessionId))) {
+      out.set(path, (out.get(path) ?? 0) + 1);
+    }
+  }
+  return out;
 });
 
 /**
