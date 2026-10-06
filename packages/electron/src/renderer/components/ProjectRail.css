@@ -53,8 +53,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--nim-bg-tertiary, #2a2a2a);
-  color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
+  background-color: var(--rail-item-bg, var(--nim-bg-tertiary, #2a2a2a));
+  color: var(--rail-item-fg, var(--rail-item-accent, var(--nim-primary, #3b82f6)));
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -67,14 +67,14 @@
 
 .project-rail-item-main:hover {
   border-radius: 14px;
-  background-color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
-  color: #ffffff;
+  background-color: var(--rail-item-bg, var(--rail-item-accent, var(--nim-primary, #3b82f6)));
+  color: var(--rail-item-fg, #ffffff);
 }
 
 .project-rail-item.is-active .project-rail-item-main {
   border-radius: 14px;
-  background-color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
-  color: #ffffff;
+  background-color: var(--rail-item-bg, var(--rail-item-accent, var(--nim-primary, #3b82f6)));
+  color: var(--rail-item-fg, #ffffff);
   border-color: transparent;
 }
 
@@ -162,6 +162,64 @@
   background-color: var(--nim-bg);
   border: 1px solid var(--nim-border);
   border-radius: 4px;
+}
+
+.project-rail-color-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 8px 6px;
+}
+
+.project-rail-color-label {
+  font-size: 12px;
+  color: var(--nim-text-muted);
+}
+
+.project-rail-color-swatches {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.project-rail-color-swatch {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--nim-border);
+  cursor: pointer;
+}
+
+.project-rail-color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.project-rail-color-custom {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.project-rail-color-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--nim-text-muted);
+  cursor: pointer;
+}
+
+.project-rail-color-reset:hover {
+  background-color: var(--nim-bg-hover);
 }
 
 .project-rail-item-icon {

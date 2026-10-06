@@ -344,6 +344,9 @@ interface AppStoreSchema {
   // User-picked emoji per project path, shown on the rail instead of the
   // detected logo or initials.
   projectRailIcons?: Record<string, string>;
+  // User-picked tile colors per project path: `fg` for the icon or initials,
+  // `bg` for the tile. Missing slots fall back to the project's accent color.
+  projectRailColors?: Record<string, { fg?: string; bg?: string }>;
 }
 
 /**
@@ -3118,6 +3121,24 @@ export function setProjectRailIcon(workspacePath: string, icon: string | null): 
   if (icon) icons[workspacePath] = icon;
   else delete icons[workspacePath];
   getAppStore().set('projectRailIcons', icons);
+}
+
+export type ProjectRailColorSlot = 'fg' | 'bg';
+export type ProjectRailColors = Partial<Record<ProjectRailColorSlot, string>>;
+
+export function getProjectRailColors(workspacePath: string): ProjectRailColors {
+  return getAppStore().get('projectRailColors', {})[workspacePath] ?? {};
+}
+
+/** Null clears that slot; a project with no colors left is dropped. */
+export function setProjectRailColor(workspacePath: string, slot: ProjectRailColorSlot, color: string | null): void {
+  const all = { ...getAppStore().get('projectRailColors', {}) };
+  const next: ProjectRailColors = { ...all[workspacePath] };
+  if (color) next[slot] = color;
+  else delete next[slot];
+  if (Object.keys(next).length > 0) all[workspacePath] = next;
+  else delete all[workspacePath];
+  getAppStore().set('projectRailColors', all);
 }
 
 export function runMigrations(currentVersion: string): void {

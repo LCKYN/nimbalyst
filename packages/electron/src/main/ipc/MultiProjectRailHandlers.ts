@@ -56,6 +56,8 @@ import {
   getWorkspaceRoots,
   getProjectRailIcon,
   setProjectRailIcon,
+  getProjectRailColors,
+  setProjectRailColor,
   MAX_ATTACHED_FOLDERS,
 } from '../utils/store';
 import { navigationHistoryService } from '../services/NavigationHistoryService';
@@ -328,6 +330,29 @@ export function registerMultiProjectRailHandlers(): void {
         setProjectRailIcon(workspacePath, trimmed || null);
         return { success: true };
     });
+
+    safeHandle('workspace:get-colors', async (_event, data: { workspacePath: string }) => {
+        const { workspacePath } = data ?? {};
+        if (!workspacePath || typeof workspacePath !== 'string') return {};
+        return getProjectRailColors(workspacePath);
+    });
+
+    safeHandle(
+        'workspace:set-color',
+        async (_event, data: { workspacePath: string; slot: 'fg' | 'bg'; color: string | null }) => {
+            const { workspacePath, slot, color } = data ?? {};
+            if (!workspacePath || typeof workspacePath !== 'string') {
+                return { success: false, error: 'workspacePath required' };
+            }
+            if (slot !== 'fg' && slot !== 'bg') return { success: false, error: 'slot must be fg or bg' };
+            // The value lands in an inline CSS variable, so only plain hex is accepted.
+            if (color !== null && !/^#[0-9a-f]{6}$/i.test(String(color))) {
+                return { success: false, error: 'color must be #rrggbb' };
+            }
+            setProjectRailColor(workspacePath, slot, color);
+            return { success: true };
+        },
+    );
 
     safeHandle('workspace:get-folders', async (_event, data: { workspacePath: string }) => {
         const { workspacePath } = data ?? {};
