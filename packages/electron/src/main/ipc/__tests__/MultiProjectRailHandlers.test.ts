@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => {
     addNimAssetRoot: vi.fn(),
     getMcpConfigService: vi.fn(() => ({ stopWatchingWorkspaceConfig: vi.fn() })),
     restoreNavigationState: vi.fn(),
+    setProjectRailColor: vi.fn(),
     fakeBrowserWindowId: 1,
   };
 });
@@ -56,6 +57,7 @@ vi.mock('../../protocols/nimAssetProtocol', () => ({
 vi.mock('../../utils/store', () => ({
   addToRecentItems: mocks.addToRecentItems,
   getWorkspaceNavigationHistory: mocks.getWorkspaceNavigationHistory,
+  setProjectRailColor: mocks.setProjectRailColor,
 }));
 
 vi.mock('../../services/NavigationHistoryService', () => ({
@@ -174,6 +176,22 @@ describe('MultiProjectRailHandlers', () => {
     mocks.setFileSystemService.mockReset();
     mocks.clearFileSystemService.mockReset();
     registerMultiProjectRailHandlers();
+  });
+
+  it('workspace:set-color stores hex colors and rejects anything else, since it lands in inline CSS', async () => {
+    expect(await invoke('workspace:set-color', { workspacePath: '/ws/a', slot: 'bg', color: '#22C55E' }, 1))
+      .toEqual({ success: true });
+    expect(await invoke('workspace:set-color', { workspacePath: '/ws/a', slot: 'fg', color: null }, 1))
+      .toEqual({ success: true });
+    for (const bad of [
+      { slot: 'bg', color: 'red; background-image: url(x)' },
+      { slot: 'bg', color: '#fff' },
+      { slot: 'border', color: '#ffffff' },
+    ]) {
+      expect(await invoke('workspace:set-color', { workspacePath: '/ws/a', ...bad }, 1))
+        .toMatchObject({ success: false });
+    }
+    expect(mocks.setProjectRailColor.mock.calls).toEqual([['/ws/a', 'bg', '#22C55E'], ['/ws/a', 'fg', null]]);
   });
 
   describe('workspace:register-additional', () => {

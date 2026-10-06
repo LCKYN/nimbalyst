@@ -62,6 +62,15 @@ const PROJECT_SYMBOL_CHOICES = [
   'description', 'folder', 'analytics', 'payments', 'group', 'chat', 'sports_esports', 'favorite',
 ];
 const SYMBOL_PREFIX = 'icon:';
+
+const PROJECT_COLOR_CHOICES = [
+  '#ffffff', '#111827', '#ef4444', '#f97316', '#eab308', '#22c55e',
+  '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899',
+];
+const COLOR_SLOTS = [
+  { slot: 'fg', label: 'Icon & text' },
+  { slot: 'bg', label: 'Background' },
+] as const;
 // A typed lowercase word is a Material Symbols name; anything else is an emoji.
 const toStoredIcon = (input: string) => {
   const trimmed = input.trim();
@@ -159,11 +168,16 @@ function ProjectRailIcon({
   // A user-picked emoji, else a project logo (favicon etc.) as a data URL,
   // else initials.
   const [iconSrc, setIconSrc] = useState<string | null>(null);
+  // User-picked icon/text (`fg`) and tile (`bg`) colors; unset falls back to the accent.
+  const [colors, setColors] = useState<{ fg?: string; bg?: string }>({});
   useEffect(() => {
     if (!window.electronAPI?.invoke) return;
     let cancelled = false;
     window.electronAPI.invoke('workspace:get-icon', { workspacePath: project.path })
       .then((src: string | null) => { if (!cancelled) setIconSrc(src); })
+      .catch(() => {});
+    window.electronAPI.invoke('workspace:get-colors', { workspacePath: project.path })
+      .then((next: { fg?: string; bg?: string } | null) => { if (!cancelled) setColors(next ?? {}); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [project.path, iconVersion]);
@@ -178,7 +192,11 @@ function ProjectRailIcon({
       onContextMenu={handleContextMenu}
       data-testid="project-rail-item"
       data-project-path={project.path}
-      style={{ ['--rail-item-accent' as any]: accentColor }}
+      style={{
+        ['--rail-item-accent' as any]: accentColor,
+        ...(colors.fg ? { ['--rail-item-fg' as any]: colors.fg } : {}),
+        ...(colors.bg ? { ['--rail-item-bg' as any]: colors.bg } : {}),
+      }}
       {...getTooltipRefProps()}
     >
       <button
@@ -520,6 +538,17 @@ export function ProjectRail() {
     }
   }, [closeMenu]);
 
+  const colorTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Colors keep the menu open so several can be tried in a row.
+  const handleSetColor = useCallback(async (project: OpenProject, slot: 'fg' | 'bg', color: string | null) => {
+    try {
+      await window.electronAPI?.invoke?.('workspace:set-color', { workspacePath: project.path, slot, color });
+      setIconVersions((prev) => ({ ...prev, [project.path]: (prev[project.path] ?? 0) + 1 }));
+    } catch (err) {
+      console.error('[ProjectRail] set-color failed:', err);
+    }
+  }, []);
+
   if (!isMultiProjectMode) return null;
 
   return (
@@ -687,6 +716,46 @@ export function ProjectRail() {
             >
               Reset icon
             </button>
+            <div className="project-rail-context-menu-divider" />
+            <div className="project-rail-context-menu-heading">Color</div>
+            {COLOR_SLOTS.map(({ slot, label }) => (
+              <div key={slot} className="project-rail-color-row" data-testid={`project-rail-color-${slot}`}>
+                <span className="project-rail-color-label">{label}</span>
+                <div className="project-rail-color-swatches">
+                  {PROJECT_COLOR_CHOICES.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className="project-rail-color-swatch"
+                      style={{ backgroundColor: color }}
+                      onClick={() => handleSetColor(menu.project, slot, color)}
+                      aria-label={`${label} ${color}`}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    className="project-rail-color-custom"
+                    defaultValue="#ffffff"
+                    onChange={(event) => {
+                      const color = event.target.value;
+                      if (colorTimer.current) clearTimeout(colorTimer.current);
+                      colorTimer.current = setTimeout(() => handleSetColor(menu.project, slot, color), 250);
+                    }}
+                    aria-label={`Custom ${label.toLowerCase()} color`}
+                    title="Custom color"
+                  />
+                  <button
+                    type="button"
+                    className="project-rail-color-reset"
+                    onClick={() => handleSetColor(menu.project, slot, null)}
+                    aria-label={`Reset ${label.toLowerCase()} color`}
+                    title="Reset"
+                  >
+                    <MaterialSymbol icon="format_color_reset" size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
             <div className="project-rail-context-menu-divider" />
             <button
               type="button"

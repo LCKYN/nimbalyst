@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
-- Project rail icons show which projects have sessions waiting for your answer, still running, or finished, and each project can use its logo, an emoji, or an icon you pick instead of initials.
+- Project rail icons show which projects have sessions waiting for your answer, still running, or finished, and each project can use its logo, an emoji, or an icon you pick instead of initials, in icon and background colors you choose.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
