@@ -11,6 +11,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
+import { copyToClipboard } from '@nimbalyst/runtime/utils/clipboard';
 import { getShowInFileBrowserLabel } from '@nimbalyst/runtime';
 import {
   useFloating,
@@ -666,6 +667,17 @@ export function ProjectRail() {
               onClick={() => handleRevealInFinder(menu.project)}
             >
               {REVEAL_LABEL}
+            </button>
+            <button
+              type="button"
+              className="project-rail-context-menu-item"
+              onClick={() => {
+                closeMenu();
+                copyToClipboard(menu.project.path).catch((err) =>
+                  console.error('[ProjectRail] copy path failed:', err));
+              }}
+            >
+              Copy path
             </button>
             <div className="project-rail-context-menu-divider" />
             <div className="project-rail-context-menu-heading">Icon</div>
