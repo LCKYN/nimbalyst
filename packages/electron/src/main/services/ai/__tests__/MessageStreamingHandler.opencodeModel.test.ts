@@ -56,7 +56,7 @@ vi.mock("@nimbalyst/runtime/ai/server/effortLevels", () => ({
 }));
 
 vi.mock("@nimbalyst/runtime/storage/repositories/AISessionsRepository", () => ({
-  AISessionsRepository: { get: vi.fn() },
+  AISessionsRepository: { get: vi.fn(), updateMetadata: vi.fn() },
 }));
 
 vi.mock("@nimbalyst/runtime/ai/modelConstants", () => ({

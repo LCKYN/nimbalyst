@@ -29,6 +29,20 @@ export const sessionErrorAtom = atomFamily((_sessionId: string) =>
   } | null>(null)
 );
 
+/**
+ * Last provider error for a session, kept until the next turn starts. Unlike
+ * sessionErrorAtom (cleared once SessionTranscript renders it), this drives the
+ * session-row (!) marker and the usage-limit continue bar. Persisted by main
+ * in `metadata.errorNotice` and rehydrated on session-list load.
+ */
+export const sessionErrorNoticeAtom = atomFamily((_sessionId: string) =>
+  atom<{
+    kind: 'usage_limit' | 'network' | 'error';
+    message: string;
+    resetsAt?: number;
+  } | null>(null)
+);
+
 // Note: ExitPlanMode uses inline widget rendering from tool call data via ExitPlanModeWidget
 // No atoms needed - see packages/runtime/src/ui/AgentTranscript/components/CustomToolWidgets/ExitPlanModeWidget.tsx
 

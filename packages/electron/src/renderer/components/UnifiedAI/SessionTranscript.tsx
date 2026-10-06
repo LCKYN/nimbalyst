@@ -44,6 +44,7 @@ import { recordClaudeActivity } from '../../store/listeners/claudeUsageListeners
 import { recordCodexActivity } from '../../store/listeners/codexUsageListeners';
 import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
 import { WakeupBanner } from '../AIChat/WakeupBanner';
+import { UsageLimitContinueBar } from '../AIChat/UsageLimitContinueBar';
 import { McpLockdownBanner } from '../AIChat/McpLockdownBanner';
 import type { AIMode } from './ModeTag';
 // Note: ExitPlanMode, AskUserQuestion, and ToolPermission use inline widgets via InteractiveWidgetHost (in runtime package)
@@ -2752,6 +2753,8 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
           pendingReviewFiles={pendingReviewFiles}
         />
       )}
+
+      <UsageLimitContinueBar sessionId={sessionId} workspacePath={workspacePath} />
 
       {/* Queue display */}
       <PromptQueueList

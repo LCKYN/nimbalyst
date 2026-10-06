@@ -13,9 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 <!-- Changes to existing functionality go here -->
+- A session stopped by a usage limit or lost connection now says so in its notification and phone push, marks its row with (!), and offers to continue when the limit resets.
 
 ### Fixed
 <!-- Bug fixes go here -->
+- An agent error no longer stays pinned at the bottom of the transcript after you send another message.
 
 ### Removed
 <!-- Removed features go here -->

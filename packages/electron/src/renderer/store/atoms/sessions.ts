@@ -27,6 +27,7 @@ import { sessionLaunchCountsAtom } from './sessionLaunchCounts';
 import { sessionListMetadata } from './sessionListMetadata';
 import { workstreamStateAtom, setWorkstreamActiveChildAtom } from './workstreamState';
 import { aiInputHistoryAtom } from './aiInputUndo';
+import { sessionErrorNoticeAtom } from './sessionTranscript';
 
 // SessionMeta is imported from @nimbalyst/runtime (canonical type).
 // Re-export for consumers that import from the store.
@@ -2307,6 +2308,9 @@ export const refreshSessionListAtom = atom(
           // gets corrected on the next session-list refresh. Persisted by
           // main-process setSessionPendingPrompt on every prompt open/resolve.
           set(sessionHasPendingInteractivePromptAtom(s.id), !!s.hasPendingInteractivePrompt);
+          // Set-only: a refresh racing the error's own write must not clear it.
+          // session:started clears the in-memory copy.
+          if (s.errorNotice) set(sessionErrorNoticeAtom(s.id), s.errorNotice);
         }
 
         set(sessionRegistryAtom, registry);

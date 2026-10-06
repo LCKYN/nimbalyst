@@ -437,6 +437,25 @@ describe('PGLiteSessionStore JSON-column read normalization', () => {
     expect(findById('missing-field').hasPendingInteractivePrompt).toBe(false);
   });
 
+  // The session-row (!) and usage-limit continue bar must survive a restart:
+  // a usage limit lasts hours, and the user quit 21s after one hit.
+  it('list() surfaces a persisted errorNotice and drops a cleared one', async () => {
+    const notice = { kind: 'usage_limit', message: 'session limit', resetsAt: 1791300000000 };
+    const row = (id: string, metadata: string) => ({
+      ...makeRow({ id, metadata }),
+      child_count: 0,
+      effective_updated_at: new Date(0),
+    });
+    const db = {
+      query: vi.fn(async () => ({
+        rows: [row('errored', JSON.stringify({ errorNotice: notice })), row('cleared', '{"errorNotice":null}')],
+      })),
+    };
+    const list = await createPGLiteSessionStore(db as any).list('/ws');
+    expect(list.find((s) => s.id === 'errored')?.errorNotice).toEqual(notice);
+    expect(list.find((s) => s.id === 'cleared')?.errorNotice).toBeUndefined();
+  });
+
   it('list() returns metadata-derived fields (tags, phase, hasUnread) from JSON-string metadata', async () => {
     const db = {
       query: vi.fn(async () => ({
