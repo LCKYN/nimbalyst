@@ -1,8 +1,8 @@
 // @vitest-environment node
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import {
   getHostEnvironment,
   setHostEnvironment,
@@ -89,28 +89,24 @@ describe('HostEnvironment', () => {
 
 describe('claudeCodeEnvironment against an injected host', () => {
   it('takes the packaged branch and derives the unpacked sibling from the injected app path', async () => {
-    // The app path must point somewhere genuinely empty. Pointing it at the
-    // real `/Applications/Nimbalyst.app` made the assertion depend on whether
-    // the developer happens to have Nimbalyst installed: the packaged branch
-    // returns `<app path dir>/claude-runtime/<platform>-<arch>/<binary>` when
-    // that file exists, so this passed on CI and failed on every machine with
-    // a shipped build in `/Applications`.
-    const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nimbalyst-host-env-'));
+    const fixture = mkdtempSync(path.join(tmpdir(), 'nimbalyst-host-environment-'));
     try {
       setHostEnvironment({
         isPackaged: () => true,
-        getAppPath: () => path.join(appRoot, 'Contents', 'Resources', 'app.asar'),
+        getAppPath: () => path.join(fixture, 'app.asar'),
       });
+      const binaryPath = path.join(
+        fixture, 'app.asar.unpacked', 'node_modules',
+        `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`,
+        process.platform === 'win32' ? 'claude.exe' : 'claude',
+      );
+      mkdirSync(path.dirname(binaryPath), { recursive: true });
+      writeFileSync(binaryPath, 'test binary');
 
       const { resolveNativeBinaryPath } = await import('../../electron/claudeCodeEnvironment');
-
-      // The packaged branch constructs a path under app.asar.unpacked and
-      // checks the filesystem. Nothing is there, so the honest answer is
-      // undefined -- the point is that it took the packaged branch at all,
-      // which it can only do by reading the injected host.
-      expect(resolveNativeBinaryPath()).toBeUndefined();
+      expect(resolveNativeBinaryPath()).toBe(binaryPath);
     } finally {
-      fs.rmSync(appRoot, { recursive: true, force: true });
+      rmSync(fixture, { recursive: true, force: true });
     }
   });
 

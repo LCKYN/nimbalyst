@@ -152,8 +152,8 @@ export function computeContextFillTokens(usage: AssembledUsage): number {
  * Merge one assembled turn's usage into the session's token usage:
  *   - cumulative `inputTokens`/`outputTokens`/`totalTokens` accumulate the new
  *     (uncached) input + generated output each turn, matching the SDK's cumulative
- *     display semantics. Cache reads are a per-round context detail surfaced via
- *     `currentContext`, not added to cumulative input.
+ *     display semantics. Cache reads/writes are not added to cumulative input;
+ *     they accumulate in `cacheReadInputTokens` / `cacheCreationInputTokens`.
  *   - `currentContext` is latest-wins (input + cache_read + cache_creation).
  *   - `cacheReadInputTokens`/`cacheCreationInputTokens` DO accumulate cumulatively
  *     (unlike `currentContext.tokens`) -- they feed the Sessions dashboard's

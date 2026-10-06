@@ -157,6 +157,9 @@ vi.mock("../mobilePushRequest", () => ({
   requestMobilePush: vi.fn(),
 }));
 
+vi.mock("../supersedeOpenQuestions", () => ({
+  supersedeOpenQuestions: vi.fn(async () => ({ superseded: [], skipped: [] })),
+}));
 vi.mock("../pendingPromptPersistence", () => ({
   setSessionPendingPrompt: vi.fn(),
 }));
@@ -348,6 +351,28 @@ describe("MessageStreamingHandler OpenCode turn config", () => {
 
     expect(provider.requestConfigs).toEqual([
       expect.objectContaining({ model: "anthropic/claude-sonnet-4", agentRole: "plan" }),
+    ]);
+  });
+});
+
+describe("MessageStreamingHandler provisional title", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.providerFactory.getProvider.mockReturnValue(null);
+  });
+
+  it("titles a fresh session from its first prompt but keeps a title its caller assigned", async () => {
+    const updateSessionTitle = vi.fn();
+    for (const [id, hasBeenNamed] of [["fresh-session", false], ["caller-named-session", true]] as const) {
+      await runTurn({
+        session: openCodeSession({ id, messages: [], hasBeenNamed }),
+        provider: new RecordingProvider(),
+        sessionManager: { updateSessionTitle },
+      });
+    }
+
+    expect(updateSessionTitle.mock.calls).toEqual([
+      ["fresh-session", "Prompt", { force: true, markAsNamed: false }],
     ]);
   });
 });
