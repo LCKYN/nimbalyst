@@ -27,6 +27,10 @@ export interface ToolCallObservation {
   isError?: boolean;
   /** Stable provider invocation ID; repeated lifecycle chunks share this ID. */
   invocationId?: string;
+  /** Estimated tokens the model wrote to make the call (its arguments). */
+  callTokens?: number;
+  /** Estimated tokens the result put into the conversation. */
+  resultTokens?: number;
 }
 
 /** An aggregated per-tool tally, ready to UPSERT into the counter table. */
@@ -36,6 +40,50 @@ export interface AggregatedToolUsage {
   mcpTool: string | null;
   count: number;
   errorCount: number;
+  callTokens: number;
+  resultTokens: number;
+}
+
+/**
+ * Rough characters-per-token for English text and code. Tool tokens are an
+ * estimate by construction: providers bill per request, never per tool, so the
+ * size of what a tool sent and received is the only per-tool signal there is.
+ */
+const CHARS_PER_TOKEN = 4;
+/**
+ * An image block is billed by its pixel size, not its base64 length -- counting
+ * the base64 would rank one screenshot above a thousand file reads. ~1,600 is
+ * what a typical ~1MP screenshot costs on Anthropic models.
+ */
+const IMAGE_TOKENS = 1600;
+
+function isImageBlock(value: Record<string, unknown>): boolean {
+  return value.type === 'image' || value.type === 'input_image' || value.type === 'localImage';
+}
+
+function countChars(value: unknown, depth: number): number {
+  if (value == null) return 0;
+  if (typeof value === 'string') return value.length;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value).length;
+  if (depth > 8) return 0;
+  if (Array.isArray(value)) return value.reduce((sum: number, item) => sum + countChars(item, depth + 1), 0);
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (isImageBlock(record)) return IMAGE_TOKENS * CHARS_PER_TOKEN;
+    let sum = 0;
+    for (const [key, item] of Object.entries(record)) {
+      // Block envelopes (`type`, ids) are protocol, not content the model reads.
+      if (key === 'type' || key === 'id' || key === 'tool_use_id') continue;
+      sum += countChars(item, depth + 1);
+    }
+    return sum;
+  }
+  return 0;
+}
+
+/** Estimated tokens for a tool call's arguments or its result. */
+export function estimateTokens(value: unknown): number {
+  return Math.ceil(countChars(value, 0) / CHARS_PER_TOKEN);
 }
 
 /** A rolled-up usage record keyed by {@link rollupKey}, consumed by tips. */
@@ -115,10 +163,14 @@ export function aggregateToolCalls(
     const name = call?.name;
     if (typeof name !== 'string' || name.length === 0) continue;
     const parsed = parseToolName(name);
+    const callTokens = Math.max(0, Math.round(call.callTokens ?? 0));
+    const resultTokens = Math.max(0, Math.round(call.resultTokens ?? 0));
     const existing = byTool.get(name);
     if (existing) {
       existing.count += 1;
       if (call.isError) existing.errorCount += 1;
+      existing.callTokens += callTokens;
+      existing.resultTokens += resultTokens;
     } else {
       byTool.set(name, {
         toolName: name,
@@ -126,6 +178,8 @@ export function aggregateToolCalls(
         mcpTool: parsed.mcpTool,
         count: 1,
         errorCount: call.isError ? 1 : 0,
+        callTokens,
+        resultTokens,
       });
     }
   }
@@ -160,6 +214,42 @@ export function extractClaudeTools(parsed: any): ExtractedTool[] {
     }
   }
   return out;
+}
+
+/**
+ * Token estimates out of a claude-code raw SDK message. Calls and results
+ * arrive in different messages -- the call in the assistant turn, its result
+ * in the next user turn -- joined by `tool_use_id`, so both come back keyed by
+ * that id for the caller to pair up.
+ */
+export function extractClaudeToolTokens(parsed: any): {
+  calls: Array<{ id: string; callTokens: number }>;
+  results: Array<{ toolUseId: string; resultTokens: number }>;
+} {
+  const content = parsed?.message?.content;
+  const calls: Array<{ id: string; callTokens: number }> = [];
+  const results: Array<{ toolUseId: string; resultTokens: number }> = [];
+  if (!Array.isArray(content)) return { calls, results };
+  for (const block of content) {
+    if (block?.type === 'tool_use' && typeof block.id === 'string') {
+      calls.push({ id: block.id, callTokens: estimateTokens(block.input) });
+    } else if (block?.type === 'tool_result' && typeof block.tool_use_id === 'string') {
+      results.push({ toolUseId: block.tool_use_id, resultTokens: estimateTokens(block.content) });
+    }
+  }
+  return { calls, results };
+}
+
+/**
+ * Token estimates for a codex completed item. Each item type keeps its input
+ * and output under different keys; the first present one is taken.
+ */
+export function codexItemTokens(parsed: any): { callTokens: number; resultTokens: number } {
+  const item = parsed?.method === 'item/completed' ? parsed?.params?.item : parsed?.item;
+  if (!item || typeof item !== 'object') return { callTokens: 0, resultTokens: 0 };
+  const input = item.arguments ?? item.command ?? item.changes ?? item.query ?? item.input;
+  const output = item.result ?? item.aggregatedOutput ?? item.aggregated_output ?? item.output ?? item.error;
+  return { callTokens: estimateTokens(input), resultTokens: estimateTokens(output) };
 }
 
 /**

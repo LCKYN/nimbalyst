@@ -5,10 +5,7 @@ import {
   sinceMsFor,
   type DateRange,
 } from './ReportControls';
-import { OverviewDashboard } from './OverviewDashboard';
-import { HistoricalGraph } from './HistoricalGraph';
-import { ModelComparison } from './ModelComparison';
-import { ProjectInsights } from './ProjectInsights';
+import { UsageOverview } from './UsageOverview';
 import { ActivityHeatmap } from './ActivityHeatmap';
 import { ToolUsage } from './ToolUsage';
 import { SessionsBreakdown } from './SessionsBreakdown';
@@ -103,28 +100,12 @@ export const AIUsageReport: React.FC<AIUsageReportProps> = ({ onClose }) => {
       </div>
       <div className="ai-usage-report-content flex-1 overflow-y-auto p-4 flex flex-col gap-4 scrollbar-nim">
         {activeTab === 'overview' ? (
+          // One story, top to bottom: how much, over time, where it went, and
+          // (last, as context) when you work.
           <>
-            <OverviewDashboard workspaceId={workspaceFilter} sinceMs={sinceMs} />
-
-            <div className="dashboard-row grid grid-cols-[repeat(auto-fit,minmax(500px,1fr))] gap-4">
-              <div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">
-                <ActivityHeatmap workspaceId={workspaceFilter} sinceMs={sinceMs} />
-              </div>
-            </div>
-
-            <div className="dashboard-row grid grid-cols-[repeat(auto-fit,minmax(500px,1fr))] gap-4">
-              <div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">
-                <HistoricalGraph workspaceId={workspaceFilter} sinceMs={sinceMs} />
-              </div>
-              <div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">
-                <ModelComparison workspaceId={workspaceFilter} sinceMs={sinceMs} />
-              </div>
-            </div>
-
-            <div className="dashboard-row grid grid-cols-[repeat(auto-fit,minmax(500px,1fr))] gap-4">
-              <div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">
-                <ProjectInsights sinceMs={sinceMs} />
-              </div>
+            <UsageOverview workspaceId={workspaceFilter} sinceMs={sinceMs} />
+            <div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">
+              <ActivityHeatmap workspaceId={workspaceFilter} sinceMs={sinceMs} />
             </div>
           </>
         ) : activeTab === 'sessions' ? (
@@ -134,11 +115,9 @@ export const AIUsageReport: React.FC<AIUsageReportProps> = ({ onClose }) => {
             </div>
           </div>
         ) : (
-          <div className="dashboard-row grid grid-cols-[repeat(auto-fit,minmax(500px,1fr))] gap-4">
-            <div className="dashboard-section bg-nim-secondary border border-nim rounded-md p-4">
-              <ToolUsage workspaceId={workspaceFilter} sinceMs={sinceMs} />
-            </div>
-          </div>
+          // Unboxed: like the Overview, the Tools tab is several sections, each
+          // boxed on its own.
+          <ToolUsage workspaceId={workspaceFilter} sinceMs={sinceMs} />
         )}
       </div>
     </div>

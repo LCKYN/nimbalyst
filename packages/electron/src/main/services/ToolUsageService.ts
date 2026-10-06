@@ -15,6 +15,8 @@
 import { database, type AppDatabase } from '../database/PGLiteDatabaseWorker';
 import {
   aggregateToolCalls,
+  codexItemTokens,
+  extractClaudeToolTokens,
   extractClaudeTools,
   extractCodexTools,
   parseToolName,
@@ -31,11 +33,26 @@ export interface ToolUsageReportRow {
   mcpServer: string | null;
   count: number;
   errorCount: number;
+  /** Estimated tokens the model wrote to call the tool. */
+  callTokens: number;
+  /** Estimated tokens the tool's results put into the conversation. */
+  resultTokens: number;
 }
 
 export interface ToolUsageReport {
   topTools: ToolUsageReportRow[];
+  /** Top tools by estimated tokens, which is a different list from top by calls. */
+  heaviestTools: ToolUsageReportRow[];
   byKind: { builtin: number; mcp: number };
+  /** Failed calls across every tool, not only the top 100 listed. */
+  errorCount: number;
+  /** Estimated call and result tokens across every tool. */
+  tokens: { call: number; result: number };
+  /**
+   * Older Claude Code / Codex sessions whose tool sizes have not been read
+   * yet. "Backfill history" fills them; until then token estimates undercount.
+   */
+  sizeBackfillPending: boolean;
   byProvider: Array<{ provider: string; count: number }>;
   overTime: Array<{ day: string; count: number }>;
   byProject: Array<{ projectPath: string; count: number }>;
@@ -47,6 +64,9 @@ const num = (v: unknown): number => {
 };
 
 type TransactionStatement = { sql: string; params?: unknown[] };
+
+/** Providers whose stored raw messages the backfills know how to read. */
+const BACKFILL_PROVIDERS = `'claude-code', 'claude-code-cli', 'openai-codex', 'openai-codex-acp'`;
 type BackfillResult = { sessionsProcessed: number; toolCallsCounted: number };
 
 export class ToolUsageService {
@@ -92,12 +112,15 @@ export class ToolUsageService {
     return aggregated.map((a) => ({
       sql: `
         INSERT INTO tool_usage_counters
-          (tool_name, mcp_server, mcp_tool, provider, project_path, day, count, error_count, first_used, last_used)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+          (tool_name, mcp_server, mcp_tool, provider, project_path, day, count, error_count,
+           call_tokens, result_tokens, first_used, last_used)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
         ON CONFLICT (tool_name, provider, project_path, day)
         DO UPDATE SET
           count = tool_usage_counters.count + EXCLUDED.count,
           error_count = tool_usage_counters.error_count + EXCLUDED.error_count,
+          call_tokens = tool_usage_counters.call_tokens + EXCLUDED.call_tokens,
+          result_tokens = tool_usage_counters.result_tokens + EXCLUDED.result_tokens,
           last_used = NOW()
       `,
       params: [
@@ -109,8 +132,36 @@ export class ToolUsageService {
         ctx.day,
         a.count,
         a.errorCount,
+        a.callTokens,
+        a.resultTokens,
       ],
     }));
+  }
+
+  /**
+   * Adds historical sizes without touching counts or timestamps: the calls
+   * were already counted (live or by the count backfill), and bumping
+   * `last_used` would tell tip targeting a months-old tool was used today.
+   */
+  private buildSizeUpsertStatements(
+    aggregated: AggregatedToolUsage[],
+    ctx: { provider: string; projectPath: string; day: string },
+  ): TransactionStatement[] {
+    return aggregated
+      .filter((a) => a.callTokens > 0 || a.resultTokens > 0)
+      .map((a) => ({
+        sql: `
+          INSERT INTO tool_usage_counters
+            (tool_name, mcp_server, mcp_tool, provider, project_path, day, count, error_count,
+             call_tokens, result_tokens)
+          VALUES ($1, $2, $3, $4, $5, $6, 0, 0, $7, $8)
+          ON CONFLICT (tool_name, provider, project_path, day)
+          DO UPDATE SET
+            call_tokens = tool_usage_counters.call_tokens + EXCLUDED.call_tokens,
+            result_tokens = tool_usage_counters.result_tokens + EXCLUDED.result_tokens
+        `,
+        params: [a.toolName, a.mcpServer, a.mcpTool, ctx.provider, ctx.projectPath, ctx.day, a.callTokens, a.resultTokens],
+      }));
   }
 
   /**
@@ -176,11 +227,13 @@ export class ToolUsageService {
     }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const [topRes, kindRes, providerRes, timeRes, projectRes] =
+    const toolColumns = `tool_name, mcp_server,
+                SUM(count) AS count, SUM(error_count) AS error_count,
+                SUM(call_tokens) AS call_tokens, SUM(result_tokens) AS result_tokens`;
+    const [topRes, heavyRes, kindRes, providerRes, timeRes, projectRes, pendingRes] =
       await Promise.all([
         this.db.query(
-          `SELECT tool_name, mcp_server,
-                SUM(count) AS count, SUM(error_count) AS error_count
+          `SELECT ${toolColumns}
          FROM tool_usage_counters ${where}
          GROUP BY tool_name, mcp_server
          ORDER BY SUM(count) DESC
@@ -188,9 +241,21 @@ export class ToolUsageService {
           params,
         ),
         this.db.query(
+          `SELECT ${toolColumns}
+         FROM tool_usage_counters ${where}
+         GROUP BY tool_name, mcp_server
+         HAVING SUM(call_tokens) + SUM(result_tokens) > 0
+         ORDER BY SUM(call_tokens) + SUM(result_tokens) DESC
+         LIMIT 100`,
+          params,
+        ),
+        this.db.query(
           `SELECT
            SUM(CASE WHEN mcp_server IS NULL THEN count ELSE 0 END) AS builtin,
-           SUM(CASE WHEN mcp_server IS NOT NULL THEN count ELSE 0 END) AS mcp
+           SUM(CASE WHEN mcp_server IS NOT NULL THEN count ELSE 0 END) AS mcp,
+           SUM(error_count) AS errors,
+           SUM(call_tokens) AS call_tokens,
+           SUM(result_tokens) AS result_tokens
          FROM tool_usage_counters ${where}`,
           params,
         ),
@@ -213,21 +278,35 @@ export class ToolUsageService {
          LIMIT 100`,
           params,
         ),
+        this.db.query(
+          `SELECT COUNT(*) AS pending
+         FROM ai_sessions s
+         LEFT JOIN tool_usage_size_backfill_sessions b ON b.session_id = s.id
+         WHERE b.session_id IS NULL
+           AND s.provider IN (${BACKFILL_PROVIDERS})
+           AND s.created_at < (SELECT size_cutoff_at FROM tool_usage_backfill_meta WHERE singleton = 1)`,
+        ),
       ]);
 
-    const topTools: ToolUsageReportRow[] = topRes.rows.map((r: any) => ({
+    const toRow = (r: any): ToolUsageReportRow => ({
       toolName: r.tool_name,
       mcpServer: r.mcp_server ?? null,
       count: num(r.count),
       errorCount: num(r.error_count),
-    }));
+      callTokens: num(r.call_tokens),
+      resultTokens: num(r.result_tokens),
+    });
 
     const kindRow = kindRes.rows[0] as any;
     const byKind = { builtin: num(kindRow?.builtin), mcp: num(kindRow?.mcp) };
 
     return {
-      topTools,
+      topTools: topRes.rows.map(toRow),
+      heaviestTools: heavyRes.rows.map(toRow),
       byKind,
+      errorCount: num(kindRow?.errors),
+      tokens: { call: num(kindRow?.call_tokens), result: num(kindRow?.result_tokens) },
+      sizeBackfillPending: num((pendingRes.rows[0] as any)?.pending) > 0,
       byProvider: providerRes.rows.map((r: any) => ({
         provider: r.provider || '(unknown)',
         count: num(r.count),
@@ -277,7 +356,7 @@ export class ToolUsageService {
        FROM ai_sessions s
        LEFT JOIN tool_usage_backfill_sessions b ON b.session_id = s.id
        WHERE b.session_id IS NULL
-         AND s.provider IN ('claude-code', 'claude-code-cli', 'openai-codex', 'openai-codex-acp')`,
+         AND s.provider IN (${BACKFILL_PROVIDERS})`,
     );
 
     let sessionsProcessed = 0;
@@ -346,9 +425,115 @@ export class ToolUsageService {
       sessionsProcessed += 1;
     }
 
+    const sessionsSized = await this.runSizeBackfill();
+
     logger.main.info(
-      `[ToolUsageService] backfill complete: ${sessionsProcessed} sessions, ${toolCallsCounted} tool calls`,
+      `[ToolUsageService] backfill complete: ${sessionsProcessed} sessions, ${toolCallsCounted} tool calls, sizes for ${sessionsSized} sessions`,
     );
     return { sessionsProcessed, toolCallsCounted };
+  }
+
+  /**
+   * Token estimates for tool calls recorded before sizes were tracked, read
+   * from the stored messages. Separate from the count backfill on purpose:
+   * its cutoff is later (calls between the two cutoffs were counted live but
+   * never sized), and it only adds tokens, never counts. Per-session markers
+   * make it resumable and idempotent, like the count backfill.
+   *
+   * Stored tool results over 64 KB are trimmed before storage, so a few very
+   * large historical results are undercounted. Sizes recorded live are not.
+   */
+  private async runSizeBackfill(): Promise<number> {
+    const cutoffResult = await this.db.query<{ size_cutoff_at: string | null }>(
+      `SELECT size_cutoff_at FROM tool_usage_backfill_meta WHERE singleton = 1`,
+    );
+    const cutoffAt = cutoffResult.rows[0]?.size_cutoff_at;
+    if (!cutoffAt) {
+      throw new Error('Tool usage size backfill cutoff is unavailable');
+    }
+
+    const { rows: sessions } = await this.db.query<{
+      id: string;
+      provider: string;
+      workspace_id: string | null;
+    }>(
+      `SELECT s.id, s.provider, s.workspace_id
+       FROM ai_sessions s
+       LEFT JOIN tool_usage_size_backfill_sessions b ON b.session_id = s.id
+       WHERE b.session_id IS NULL
+         AND s.provider IN (${BACKFILL_PROVIDERS})`,
+    );
+
+    let sessionsSized = 0;
+    for (const session of sessions) {
+      const isCodex = session.provider.startsWith('openai-codex');
+      const { rows: messages } = await this.db.query<{ content: string; created_at: string }>(
+        `SELECT content, created_at FROM ai_agent_messages
+         WHERE session_id = $1 AND direction = 'output' AND created_at < $2
+         ORDER BY id ASC`,
+        [session.id, cutoffAt],
+      );
+
+      // Claude: the call and its result land in different messages, joined by
+      // tool_use id. The call's day is the day the tokens are filed under.
+      const claudeCalls = new Map<string, { name: string; day: string; callTokens: number; resultTokens: number }>();
+      const perDay = new Map<string, ToolCallObservation[]>();
+
+      for (const msg of messages) {
+        let parsed: any;
+        try {
+          parsed = JSON.parse(msg.content);
+        } catch {
+          continue;
+        }
+        const day = toDayBucket(new Date(msg.created_at));
+        if (isCodex) {
+          const [tool] = extractCodexTools(parsed);
+          if (!tool) continue;
+          const list = perDay.get(day) ?? [];
+          list.push({ name: tool.name, ...codexItemTokens(parsed) });
+          perDay.set(day, list);
+          continue;
+        }
+        const names = new Map(extractClaudeTools(parsed).filter((t) => t.id).map((t) => [t.id!, t.name]));
+        const { calls, results } = extractClaudeToolTokens(parsed);
+        for (const call of calls) {
+          // SDK chunks can repeat the same tool_use block; first sighting wins.
+          const name = names.get(call.id);
+          if (!name || claudeCalls.has(call.id)) continue;
+          claudeCalls.set(call.id, { name, day, callTokens: call.callTokens, resultTokens: 0 });
+        }
+        for (const result of results) {
+          const call = claudeCalls.get(result.toolUseId);
+          if (call) call.resultTokens = Math.max(call.resultTokens, result.resultTokens);
+        }
+      }
+      for (const call of claudeCalls.values()) {
+        const list = perDay.get(call.day) ?? [];
+        list.push({ name: call.name, callTokens: call.callTokens, resultTokens: call.resultTokens });
+        perDay.set(call.day, list);
+      }
+
+      const projectPath = session.workspace_id ?? '';
+      const statements: TransactionStatement[] = [];
+      for (const [day, observations] of perDay) {
+        statements.push(
+          ...this.buildSizeUpsertStatements(aggregateToolCalls(observations), {
+            provider: session.provider,
+            projectPath,
+            day,
+          }),
+        );
+      }
+      statements.push({
+        sql: `INSERT INTO tool_usage_size_backfill_sessions (session_id, backfilled_at)
+              VALUES ($1, NOW())
+              ON CONFLICT (session_id) DO NOTHING`,
+        params: [session.id],
+      });
+      await this.db.runTransaction(statements);
+      sessionsSized += 1;
+    }
+    return sessionsSized;
   }
 }

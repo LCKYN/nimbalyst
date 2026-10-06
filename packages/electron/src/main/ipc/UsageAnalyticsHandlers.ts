@@ -59,6 +59,21 @@ export async function registerUsageAnalyticsHandlers() {
     }
   });
 
+  // Everything the Overview tab shows, computed together so its panels agree
+  safeHandle('usage-analytics:get-overview', async (
+    event,
+    workspaceId?: string,
+    sinceMs?: number,
+    timezoneOffsetMinutes?: number,
+  ) => {
+    try {
+      return await analyticsService!.getUsageOverview(workspaceId, sinceMs, timezoneOffsetMinutes || 0);
+    } catch (error) {
+      console.error('[UsageAnalyticsHandlers] Failed to get usage overview:', error);
+      throw error;
+    }
+  });
+
   // Get usage broken down by provider/model
   safeHandle('usage-analytics:get-usage-by-provider', async (event, workspaceId?: string, sinceMs?: number) => {
     try {

@@ -3388,6 +3388,26 @@ class PGLiteWorker {
       throw error;
     }
 
+    // Migration: estimated tokens per tool (schema version 52).
+    // Mirror of SQLite 0052_tool_usage_token_estimates.sql.
+    try {
+      await this.db.exec(`
+        ALTER TABLE tool_usage_counters ADD COLUMN IF NOT EXISTS call_tokens BIGINT NOT NULL DEFAULT 0;
+        ALTER TABLE tool_usage_counters ADD COLUMN IF NOT EXISTS result_tokens BIGINT NOT NULL DEFAULT 0;
+        ALTER TABLE tool_usage_backfill_meta ADD COLUMN IF NOT EXISTS size_cutoff_at TIMESTAMPTZ;
+        UPDATE tool_usage_backfill_meta SET size_cutoff_at = NOW() WHERE size_cutoff_at IS NULL;
+
+        CREATE TABLE IF NOT EXISTS tool_usage_size_backfill_sessions (
+          session_id TEXT PRIMARY KEY,
+          backfilled_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+      console.log('[PGLite Worker] tool usage token estimate columns created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create tool usage token estimate columns:', error);
+      throw error;
+    }
+
     // Migration: commit sha -> AI session ledger (schema version 31).
     // Mirror of SQLite 0031_session_commits.sql.
     try {

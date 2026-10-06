@@ -578,4 +578,122 @@ describe('UsageAnalyticsService on SQLite', () => {
     });
   });
 
+  // The Overview's panels used to disagree: tokens left out cache, a session's
+  // whole total landed on the day it started, and a range filtered on session
+  // start. Every assertion here is one of those, plus "the panels sum".
+  describe('getUsageOverview', () => {
+    const DAY = 24 * 3_600_000;
+    const day1 = Date.UTC(2026, 5, 1, 12);
+    const day3 = day1 + 2 * DAY;
+    const now = day3 + 3_600_000;
+
+    async function prompts(sessionId: string, times: number[]): Promise<void> {
+      for (const createdAtMs of times) {
+        await insertMessage(db, { sessionId, direction: 'input', content: 'p', createdAtMs });
+      }
+    }
+
+    it('spreads a session over the days its prompts were sent and counts cached input', async () => {
+      await insertSession(db, {
+        id: 'long',
+        provider: 'claude-code',
+        model: 'claude-code:opus',
+        createdAtMs: day1,
+        metadata: {
+          tokenUsage: {
+            inputTokens: 100, outputTokens: 300, cacheReadInputTokens: 3_000, cacheCreationInputTokens: 600,
+            costUSD: 4,
+          },
+        },
+      });
+      await prompts('long', [day1, day3, day3 + 60_000, day3 + 120_000]);
+
+      const all = await svc.getUsageOverview(undefined, undefined, 0, now);
+      expect(all.totals.costUSD).toBeCloseTo(4);
+      expect(all.totals.totalTokens).toBe(4_000);
+      expect(all.trend.map((b) => b.costUSD)).toEqual([1, 0, 3]);
+      expect(all.totals.activeDays).toBe(2);
+
+      // A range that opens after the session started still counts the part of
+      // it that ran inside the range.
+      const recent = await svc.getUsageOverview(undefined, day3 - 3_600_000, 0, now);
+      expect(recent.totals.costUSD).toBeCloseTo(3);
+      expect(recent.totals.sessionCount).toBe(1);
+      expect(recent.byModel[0]).toMatchObject({ model: 'opus' });
+      expect(recent.byModel[0].costUSD).toBeCloseTo(3);
+
+      // The Sessions tab lists the same sessions at the same in-range share, so
+      // its total is the Overview's -- and drops a session idle all range.
+      await insertSession(db, {
+        id: 'idle',
+        createdAtMs: day1,
+        metadata: { tokenUsage: { inputTokens: 1, outputTokens: 1, costUSD: 50 } },
+      });
+      await prompts('idle', [day1]);
+      const rows = await svc.getSessionUsageBreakdown(undefined, day3 - 3_600_000, now);
+      expect(rows.map((r) => r.id)).toEqual(['long']);
+      expect(rows[0].rangeShare).toBe(0.75);
+      expect(rows[0].costUSD).toBeCloseTo(recent.totals.costUSD);
+      expect(rows[0].totalTokens).toBeCloseTo(recent.totals.totalTokens);
+      expect(rows[0].modelLabel).toBe('opus');
+    });
+
+    it('prices what the provider did not, flags what it cannot, and the splits sum to the total', async () => {
+      await insertSession(db, {
+        id: 'priced',
+        provider: 'claude-code',
+        workspaceId: '/work/a',
+        createdAtMs: day1,
+        metadata: {
+          tokenUsage: {
+            inputTokens: 10, outputTokens: 10, costUSD: 2,
+            // Covers only half of the session's cost: tracked from a later turn
+            // on, so it splits the total rather than replacing it.
+            byModel: {
+              'claude-opus-4-8': { inputTokens: 5, outputTokens: 5, costUSD: 0.75 },
+              'claude-haiku-4-5': { inputTokens: 5, outputTokens: 5, costUSD: 0.25 },
+            },
+          },
+        },
+      });
+      await insertSession(db, {
+        id: 'estimated',
+        provider: 'openai',
+        model: 'openai:gpt-4o',
+        workspaceId: '/work/b',
+        createdAtMs: day1,
+        metadata: { tokenUsage: { inputTokens: 1_000_000, outputTokens: 0 } },
+      });
+      await insertSession(db, {
+        id: 'unpriced',
+        provider: 'lmstudio',
+        model: 'lmstudio:local-llama',
+        workspaceId: '/work/b',
+        createdAtMs: day1,
+        metadata: { tokenUsage: { inputTokens: 500, outputTokens: 500 } },
+      });
+
+      const overview = await svc.getUsageOverview(undefined, undefined, 0, now);
+      expect(overview.totals.costUSD).toBeCloseTo(2 + 2.5);
+      expect(overview.totals.costEstimated).toBe(true);
+      expect(overview.totals.unpricedSessionCount).toBe(1);
+
+      const cost = (model: string) => overview.byModel.find((m) => m.model === model)!.costUSD;
+      expect(cost('claude-opus-4-8')).toBeCloseTo(1.5);
+      expect(cost('claude-haiku-4-5')).toBeCloseTo(0.5);
+      expect(overview.byModel.find((m) => m.model === 'local-llama')!.totalTokens).toBe(1_000);
+
+      const sum = (xs: Array<{ costUSD: number }>) => xs.reduce((s, x) => s + x.costUSD, 0);
+      expect(sum(overview.byModel)).toBeCloseTo(overview.totals.costUSD);
+      expect(sum(overview.byProject)).toBeCloseTo(overview.totals.costUSD);
+      expect(sum(overview.trend)).toBeCloseTo(overview.totals.costUSD);
+
+      // The Sessions tab prices with the same rule, so the two tabs agree.
+      const rows = await svc.getSessionUsageBreakdown();
+      const estimated = rows.find((r) => r.id === 'estimated')!;
+      expect(estimated.costUSD).toBeCloseTo(2.5);
+      expect(estimated.costEstimated).toBe(true);
+    });
+  });
+
 });

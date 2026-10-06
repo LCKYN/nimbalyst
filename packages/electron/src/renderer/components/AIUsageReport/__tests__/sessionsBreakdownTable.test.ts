@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
 
-import { compareRows, totalsFor } from '../SessionsBreakdown';
+import { compareRows, topShare, totalsFor } from '../SessionsBreakdown';
 
 type Row = Parameters<typeof totalsFor>[0][number];
 
@@ -13,6 +13,10 @@ function row(overrides: Partial<Row> = {}): Row {
     title: 'A session',
     provider: 'claude-code',
     model: 'opus',
+    modelLabel: 'opus',
+    workstreamTitle: 'A session',
+    rangeShare: 1,
+    lastActiveAt: NOW,
     parentSessionId: null,
     createdBySessionId: null,
     workstreamRootId: 'session-1',
@@ -70,17 +74,29 @@ describe('compareRows', () => {
     const zulu = row({ title: 'Zulu' });
     expect(compareRows(alpha, zulu, { key: 'title', direction: 'asc' })).toBeLessThan(0);
 
-    const opus = row({ provider: 'claude-code', model: 'opus' });
-    const sonnet = row({ provider: 'claude-code', model: 'sonnet' });
+    const opus = row({ modelLabel: 'opus' });
+    const sonnet = row({ modelLabel: 'sonnet' });
     expect(compareRows(opus, sonnet, { key: 'model', direction: 'asc' })).toBeLessThan(0);
   });
 
   it('sorts by the column asked for, not the one the server happened to order by', () => {
     const rows = [
-      row({ id: 'a', inputTokens: 5, costUSD: 100 }),
-      row({ id: 'b', inputTokens: 50, costUSD: 1 }),
+      row({ id: 'a', totalTokens: 5, costUSD: 100 }),
+      row({ id: 'b', totalTokens: 50, costUSD: 1 }),
     ];
-    const byInput = [...rows].sort((x, y) => compareRows(x, y, { key: 'inputTokens', direction: 'desc' }));
-    expect(byInput.map((r) => r.id)).toEqual(['b', 'a']);
+    const byTokens = [...rows].sort((x, y) => compareRows(x, y, { key: 'totalTokens', direction: 'desc' }));
+    expect(byTokens.map((r) => r.id)).toEqual(['b', 'a']);
+  });
+});
+
+describe('topShare', () => {
+  it('measures how much of the spend the costliest sessions hold, whatever order they arrive in', () => {
+    const rows = [row({ costUSD: 1 }), row({ costUSD: 6 }), row({ costUSD: 3 })];
+    expect(topShare(rows, 1)).toBeCloseTo(0.6);
+    expect(topShare(rows, 5)).toBe(1);
+  });
+
+  it('is zero rather than NaN when nothing was spent', () => {
+    expect(topShare([row({ costUSD: 0 })], 3)).toBe(0);
   });
 });

@@ -861,8 +861,12 @@ interface ElectronAPI {
   toolUsage: {
     getRollup: () => Promise<Record<string, { count: number; firstUsed: string; lastUsed: string }>>;
     getReport: (workspaceId?: string, sinceMs?: number) => Promise<{
-      topTools: Array<{ toolName: string; mcpServer: string | null; count: number; errorCount: number }>;
+      topTools: Array<{ toolName: string; mcpServer: string | null; count: number; errorCount: number; callTokens: number; resultTokens: number }>;
+      heaviestTools: Array<{ toolName: string; mcpServer: string | null; count: number; errorCount: number; callTokens: number; resultTokens: number }>;
       byKind: { builtin: number; mcp: number };
+      errorCount: number;
+      tokens: { call: number; result: number };
+      sizeBackfillPending: boolean;
       byProvider: Array<{ provider: string; count: number }>;
       overTime: Array<{ day: string; count: number }>;
       byProject: Array<{ projectPath: string; count: number }>;

@@ -152,6 +152,7 @@ const COPY_TABLES: readonly string[] = [
   'tool_usage_counters',
   'tool_usage_backfill_meta',
   'tool_usage_backfill_sessions',
+  'tool_usage_size_backfill_sessions',
   'session_commits',
   'session_commit_backfill_meta',
   // Before `tracker_items` on purpose: the revision triggers installed by

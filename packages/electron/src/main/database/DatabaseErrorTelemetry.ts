@@ -178,6 +178,7 @@ const CORE_TABLE_NAMES = new Set([
   'tool_usage_backfill_meta',
   'tool_usage_backfill_sessions',
   'tool_usage_counters',
+  'tool_usage_size_backfill_sessions',
   'tracker_body_cache',
   'tracker_items',
   'tracker_personal_state',

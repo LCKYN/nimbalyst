@@ -233,20 +233,22 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ workspaceId, s
               })}
             </div>
           ))}
-        </div>
 
-        <div className="heatmap-legend flex items-center gap-1.5 mt-2 justify-center text-[10px] text-[var(--nim-text-muted)]">
-          <span>Less</span>
-          <div
-            className="legend-gradient w-[100px] h-2 rounded-sm"
-            style={{
-              // `--nim-accent-rgb` was never defined, which made the whole
-              // rgba() invalid and left this bar blank.
-              background:
-                'linear-gradient(to right, transparent, color-mix(in srgb, var(--nim-primary) 80%, transparent))',
-            }}
-          ></div>
-          <span>More</span>
+          {/* Inside the grid's box so it lines up under the cells; outside it
+              the legend centred on the card, well right of the grid. */}
+          <div className="heatmap-legend flex items-center gap-1.5 mt-2 justify-end text-[10px] text-[var(--nim-text-muted)]">
+            <span>Less</span>
+            <div
+              className="legend-gradient w-[100px] h-2 rounded-sm"
+              style={{
+                // `--nim-accent-rgb` was never defined, which made the whole
+                // rgba() invalid and left this bar blank.
+                background:
+                  'linear-gradient(to right, transparent, color-mix(in srgb, var(--nim-primary) 80%, transparent))',
+              }}
+            ></div>
+            <span>More</span>
+          </div>
         </div>
       </div>
 
