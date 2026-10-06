@@ -78,6 +78,13 @@ it('replaces initials with a picked emoji and restores them on reset', async () 
   expect(invoke).toHaveBeenCalledWith('workspace:set-icon', { workspacePath: '/p/app', icon: '🚀' });
   expect(tile.textContent).toBe('🚀');
 
+  // A typed lowercase word is stored as a Material Symbols icon, not text.
+  fireEvent.contextMenu(tile);
+  fireEvent.change(view.getByRole('textbox', { name: 'Custom project icon' }), { target: { value: 'database' } });
+  await act(async () => { fireEvent.submit(view.getByRole('textbox', { name: 'Custom project icon' })); });
+  expect(invoke).toHaveBeenCalledWith('workspace:set-icon', { workspacePath: '/p/app', icon: 'icon:database' });
+  expect(tile.querySelector('.material-symbols-outlined')?.textContent).toBe('database');
+
   fireEvent.contextMenu(tile);
   await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Reset icon' })); });
   expect(tile.textContent).toBe('PA');

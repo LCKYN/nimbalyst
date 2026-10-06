@@ -322,9 +322,9 @@ export function registerMultiProjectRailHandlers(): void {
         if (!workspacePath || typeof workspacePath !== 'string') {
             return { success: false, error: 'workspacePath required' };
         }
-        // An emoji is a few code points; anything longer is not one.
+        // An emoji or `icon:<material symbol name>`; anything longer is neither.
         const trimmed = typeof icon === 'string' ? icon.trim() : '';
-        if (trimmed.length > 16) return { success: false, error: 'Icon too long' };
+        if (trimmed.length > 64) return { success: false, error: 'Icon too long' };
         setProjectRailIcon(workspacePath, trimmed || null);
         return { success: true };
     });

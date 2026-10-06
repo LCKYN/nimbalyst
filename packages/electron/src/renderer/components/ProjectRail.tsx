@@ -55,6 +55,19 @@ const PROJECT_ICON_CHOICES = [
   '🎨', '📝', '🤖', '🧠', '💼', '🏠', '🌱', '🐛',
 ];
 
+// Material Symbols names (the full font is bundled), stored as `icon:<name>`.
+const PROJECT_SYMBOL_CHOICES = [
+  'code', 'terminal', 'database', 'cloud', 'api', 'web', 'smartphone', 'dns',
+  'rocket_launch', 'bolt', 'science', 'psychology', 'shield', 'work', 'school', 'storefront',
+  'description', 'folder', 'analytics', 'payments', 'group', 'chat', 'sports_esports', 'favorite',
+];
+const SYMBOL_PREFIX = 'icon:';
+// A typed lowercase word is a Material Symbols name; anything else is an emoji.
+const toStoredIcon = (input: string) => {
+  const trimmed = input.trim();
+  return /^[a-z0-9_]+$/.test(trimmed) ? `${SYMBOL_PREFIX}${trimmed}` : trimmed;
+};
+
 function projectInitials(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return '??';
@@ -177,6 +190,8 @@ function ProjectRailIcon({
       >
         {iconSrc?.startsWith('data:') ? (
           <img className="project-rail-item-icon" src={iconSrc} alt="" onError={() => setIconSrc(null)} />
+        ) : iconSrc?.startsWith(SYMBOL_PREFIX) ? (
+          <MaterialSymbol icon={iconSrc.slice(SYMBOL_PREFIX.length)} size={22} />
         ) : iconSrc ? (
           <span className="project-rail-item-emoji">{iconSrc}</span>
         ) : (
@@ -637,19 +652,31 @@ export function ProjectRail() {
                   {emoji}
                 </button>
               ))}
+              {PROJECT_SYMBOL_CHOICES.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  className="project-rail-icon-choice"
+                  onClick={() => handleSetIcon(menu.project, `${SYMBOL_PREFIX}${name}`)}
+                  aria-label={`Use ${name} icon as project icon`}
+                  title={name}
+                >
+                  <MaterialSymbol icon={name} size={18} />
+                </button>
+              ))}
             </div>
             <form
               className="project-rail-icon-custom"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (customIcon.trim()) handleSetIcon(menu.project, customIcon);
+                if (customIcon.trim()) handleSetIcon(menu.project, toStoredIcon(customIcon));
               }}
             >
               <input
                 value={customIcon}
                 onChange={(event) => setCustomIcon(event.target.value)}
-                maxLength={16}
-                placeholder="Any emoji, then Enter"
+                maxLength={48}
+                placeholder="Emoji or icon name, then Enter"
                 aria-label="Custom project icon"
               />
             </form>
