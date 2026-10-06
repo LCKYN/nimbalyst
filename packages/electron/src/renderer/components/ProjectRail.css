@@ -110,14 +110,16 @@
   pointer-events: none;
 }
 
+/* Status colors are bright in every built-in theme, so the glyph is always
+   dark. --nim-bg would be white on light themes (~2:1 contrast). */
 .project-rail-item-badge.is-awaiting {
   background-color: var(--nim-warning);
-  color: var(--nim-bg);
+  color: #111827;
 }
 
 .project-rail-item-badge.is-finished {
   background-color: var(--nim-success);
-  color: var(--nim-bg);
+  color: #111827;
 }
 
 .project-rail-item-emoji {
