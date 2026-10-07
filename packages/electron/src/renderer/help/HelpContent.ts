@@ -363,6 +363,10 @@ export const HelpContent: Record<string, HelpEntry> = {
     title: 'User Menu',
     body: 'Open user menu to access User Settings, Project Settings, Team Settings, and account info.',
   },
+  'ai-usage-report-button': {
+    title: 'AI Usage',
+    body: 'Switch to the AI Usage report for token and cost totals broken down by session, model, and tool.',
+  },
   'terminal-panel-button': {
     title: 'Terminal',
     body: 'Toggle the terminal panel for running commands.',
@@ -374,8 +378,8 @@ export const HelpContent: Record<string, HelpEntry> = {
     shortcut: KeyboardShortcuts.view.trackerMode,
   },
   'collab-mode-button': {
-    title: 'Shared Documents',
-    body: 'Browse and edit documents shared with your team in real-time. Collaborate on markdown, spreadsheets, and diagrams.',
+    title: 'Pages',
+    body: 'Browse and edit pages shared with your team in real-time. Collaborate on markdown, spreadsheets, diagrams, and placed tracker types.',
     shortcut: KeyboardShortcuts.view.collabMode,
   },
   'org-mode-button': {

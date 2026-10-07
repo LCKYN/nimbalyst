@@ -14,7 +14,9 @@
 }
 
 .project-rail-projects {
-  flex: 1;
+  /* Size to content so the add button sits right below the last project;
+     shrink and scroll only when the list outgrows the rail. */
+  flex: 0 1 auto;
   min-height: 0;
   align-self: stretch;
   display: flex;
@@ -118,6 +120,67 @@
   pointer-events: none;
 }
 
+/* Status colors are bright in every built-in theme, so the glyph is always
+   dark. --nim-bg would be white on light themes (~2:1 contrast). */
+.project-rail-item-badge.is-awaiting {
+  background-color: var(--nim-warning);
+  color: #111827;
+}
+
+.project-rail-item-badge.is-finished {
+  background-color: var(--nim-success);
+  color: #111827;
+}
+
+.project-rail-item-emoji {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.project-rail-icon-picker {
+  display: grid;
+  grid-template-columns: repeat(8, 26px);
+  gap: 2px;
+  padding: 2px 8px 4px;
+}
+
+.project-rail-icon-choice {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.project-rail-icon-choice:hover {
+  background-color: var(--nim-bg-hover);
+}
+
+.project-rail-icon-custom {
+  padding: 2px 8px 4px;
+}
+
+.project-rail-icon-custom input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--nim-text);
+  background-color: var(--nim-bg);
+  border: 1px solid var(--nim-border);
+  border-radius: 4px;
+}
+
+.project-rail-item-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 .project-rail-item-close {
   position: absolute;
   top: -4px;
@@ -186,12 +249,8 @@
 
 .project-rail-context-menu {
   position: fixed;
-  /* The add menu now grows downward from the `+` button (`right-start`) and
-     `windowControlsClearance()` keeps any rail popover out from under the OS
-     window controls, so it no longer lands in the title bar (#1096). Keep the
-     opt-out anyway — declared here as well as globally (see index.css) —
-     because a menu shifted into the drag region is the surface issue #1052
-     reported: on Windows the OS ate the click on "Open folder…". */
+  /* Keep menus clickable even near the native title bar (#1052).
+     windowControlsClearance() also keeps them clear of OS window controls. */
   -webkit-app-region: no-drag;
   min-width: 180px;
   background-color: var(--nim-bg-secondary, #1a1a1a);
@@ -237,6 +296,7 @@
 }
 
 .project-rail-add-menu {
+  box-sizing: border-box;
   min-width: 260px;
   max-width: 360px;
 }
@@ -301,4 +361,8 @@
   color: var(--nim-text-muted, #6b7280);
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.project-rail-add-menu > * {
+  flex-shrink: 0;
 }

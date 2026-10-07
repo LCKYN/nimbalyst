@@ -38,7 +38,8 @@ import type { CitationInspectorHost } from './CitationInspector';
 import { CollectionPickerPopover } from './CollectionPickerPopover';
 import { isCollectionRelationshipField } from '../models/trackerCollections';
 import { UserAvatar } from './UserAvatar';
-import { formatTrackerFieldLabel, isTrackerFieldEmpty, shouldLabelTrackerField } from './trackerFieldLayout';
+import { isTrackerFieldEmpty, shouldLabelTrackerField, trackerFieldDisplayLabel } from './trackerFieldLayout';
+import { labelRefDisplayNames } from './labelRefValue';
 import './TrackerFieldPills.css';
 
 /** Default prefix for the `data-testid`s this component emits. */
@@ -143,7 +144,11 @@ function fieldDisplayValue(
   teamMembers: TeamMemberOption[],
   relationshipCandidates?: RelationshipCandidate[],
 ): string {
-  if (isTrackerFieldEmpty(value)) return formatTrackerFieldLabel(field.name);
+  if (isTrackerFieldEmpty(value)) return trackerFieldDisplayLabel(field);
+  if (field.type === 'label-ref') {
+    const names = labelRefDisplayNames(value);
+    return names.length <= 2 ? names.join(', ') : `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+  }
   if (field.type === 'select') {
     return field.options?.find((option) => option.value === value)?.label ?? String(value);
   }
@@ -171,7 +176,7 @@ function fieldDisplayValue(
   if (field.type === 'boolean') return value ? 'Yes' : 'No';
   if (field.type === 'url' && typeof value === 'object') {
     const url = value as { label?: unknown; url?: unknown };
-    return String(url.label ?? url.url ?? formatTrackerFieldLabel(field.name));
+    return String(url.label ?? url.url ?? trackerFieldDisplayLabel(field));
   }
   return String(value);
 }
@@ -183,6 +188,7 @@ function fieldIcon(field: FieldDefinition, value: unknown): string {
   }
   if (field.type === 'user') return 'person';
   if (field.type === 'array') return 'label';
+  if (field.type === 'label-ref') return 'sell';
   if (field.type === 'relationship' || field.type === 'reference') return 'link';
   if (field.type === 'citation') return 'format_quote';
   if (field.type === 'date' || field.type === 'datetime') return 'calendar_today';
@@ -233,7 +239,7 @@ export const TrackerFieldPill: React.FC<TrackerFieldPillProps> = ({
   // and starting a new one are the whole job, and the generic relationship
   // typeahead does neither well.
   const isCollectionField = isCollectionRelationshipField(field);
-  const label = formatTrackerFieldLabel(field.name);
+  const label = trackerFieldDisplayLabel(field);
   const displayValue = fieldDisplayValue(field, localValue, members, relationshipCandidates);
   // An empty chip already reads as its label, so only a filled one needs one.
   const showLabel = shouldLabelTrackerField(field, localValue, labelFields);

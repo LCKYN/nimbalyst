@@ -619,7 +619,7 @@ interface ElectronAPI {
   }) => void) => () => void;
   sendMcpApplyDiffResult: (resultChannel: string, result: any) => void;
   sendMcpStreamContentResult: (resultChannel: string, result: any) => void;
-  sendMcpReadCollabDocResult: (resultChannel: string, result: { success: boolean; content?: string; decisionState?: unknown; error?: string; code?: string }) => void;
+  sendMcpReadCollabDocResult: (resultChannel: string, result: { success: boolean; content?: string; title?: string; documentType?: string; decisionState?: unknown; error?: string; code?: string }) => void;
   sendMcpCollabDocCommentResult: (
     resultChannel: string,
     result: { success: boolean; result?: unknown; code?: string; error?: string },
@@ -732,6 +732,13 @@ interface ElectronAPI {
     }>;
     setArchived: (payload: { workspacePath: string; type: string; archived: boolean }) =>
       Promise<{ success: boolean; error?: string }>;
+    defineType: (payload: { workspacePath: string; schema: Record<string, unknown> }) => Promise<{
+      success: boolean;
+      type?: string;
+      scope?: 'team' | 'personal';
+      status?: 'created' | 'syncing';
+      error?: string;
+    }>;
   };
 
   // Document Service
@@ -806,7 +813,9 @@ interface ElectronAPI {
     updateTrackerItemContent: (payload: {
       itemId: string;
       content: any;
-    }) => Promise<{ success: boolean; error?: string }>;
+      /** Write only if the stored body is still at this version; otherwise answer `conflict`. */
+      expectedBodyVersion?: number;
+    }) => Promise<{ success: boolean; conflict?: boolean; bodyVersion?: number; error?: string }>;
     getTrackerItemContent: (payload: {
       itemId: string;
     }) => Promise<{ success: boolean; content?: any; error?: string }>;
@@ -860,9 +869,13 @@ interface ElectronAPI {
   // Per-tool usage (tip targeting rollup + AI Usage Report Tools tab)
   toolUsage: {
     getRollup: () => Promise<Record<string, { count: number; firstUsed: string; lastUsed: string }>>;
-    getReport: (workspaceId?: string) => Promise<{
-      topTools: Array<{ toolName: string; mcpServer: string | null; count: number; errorCount: number }>;
+    getReport: (workspaceId?: string, sinceMs?: number) => Promise<{
+      topTools: Array<{ toolName: string; mcpServer: string | null; count: number; errorCount: number; callTokens: number; resultTokens: number }>;
+      heaviestTools: Array<{ toolName: string; mcpServer: string | null; count: number; errorCount: number; callTokens: number; resultTokens: number }>;
       byKind: { builtin: number; mcp: number };
+      errorCount: number;
+      tokens: { call: number; result: number };
+      sizeBackfillPending: boolean;
       byProvider: Array<{ provider: string; count: number }>;
       overTime: Array<{ day: string; count: number }>;
       byProject: Array<{ projectPath: string; count: number }>;

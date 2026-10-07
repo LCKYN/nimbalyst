@@ -75,6 +75,8 @@ import {
   decodeTrackerSavedViewEnvelopePlaintext,
 } from './trackerEnvelopeCodec.js';
 import { classifyTrackerClose, type TrackerAccessTermination } from './trackerAccessTermination.js';
+import { TrackerSchemaOutbox } from './trackerSchemaOutbox.js';
+import { generateClientMutationId, parseServerMessage } from './trackerWireHelpers.js';
 import {
   planTrackerIdentityRecovery,
   type StrandedIdentityFacts,
@@ -158,6 +160,21 @@ export interface TrackerSchemaLocalChange {
   /** JSON-serialized TrackerDataModel, or null for a tombstone. */
   model: string | null;
   deleted: boolean;
+  /**
+   * A new type that must not replace a definition another client created.
+   * `required`: never sent to a room that cannot refuse an existing type; it
+   * settles as refused (`createOnlyUnsupported`) instead. `whenSupported`: an
+   * older room gets the plain upsert it always got.
+   */
+  createOnly?: 'required' | 'whenSupported';
+}
+
+/** How the room answered one schema mutation this client sent. */
+export interface TrackerSchemaMutationOutcome {
+  type: string;
+  model: string | null;
+  accepted: boolean;
+  error?: { code: string; message: string };
 }
 
 export interface AppliedTrackerSchema {
@@ -182,6 +199,13 @@ export interface TrackerSchemaSyncHooks {
    * no notion of a retired row simply keeps the old behaviour.
    */
   markRejected?: (type: string, code: string) => Promise<unknown>;
+  /**
+   * The room's answer to one mutation this client sent, matched by its own
+   * mutation id. A broadcast of someone else's definition of the same type is
+   * not an answer, which is why a pending creation must settle here and not in
+   * `applyRemote`.
+   */
+  onSettled?: (outcome: TrackerSchemaMutationOutcome) => void;
 }
 
 export interface TrackerIdentityRecoveryHooks {
@@ -421,10 +445,26 @@ export class TrackerSyncEngine {
    */
   private readonly pendingLaneIds = new Map<string, string>();
 
+  private schemaApplyChain: Promise<unknown> = Promise.resolve();
+
+  private readonly schemaOutbox = new TrackerSchemaOutbox({
+    hooks: () => this.config.schemaSync,
+    isOpen: () => this.ws?.readyState === WebSocket.OPEN,
+    send: (message) => this.send(message),
+    newMutationId: generateClientMutationId,
+    pendingLaneIds: this.pendingLaneIds,
+    createOnlySupported: () => this.schemaCreateOnlySupported,
+  });
+  /** Whether this connection's room advertised `schemaCreateOnly`; re-learned every bootstrap. */
+  private schemaCreateOnlySupported = false;
+
   private readonly rollbackSnapshots = new Map<string, {
     itemId: string;
     snapshot: TrackerRowSnapshot;
   }>();
+
+  /** Set once `consolidatePendingUpdates` has run for this engine. */
+  private outboxConsolidated = false;
 
   private readonly pendingConfigChanges = new Map<string, {
     requestedPrefix: string;
@@ -590,6 +630,7 @@ export class TrackerSyncEngine {
     }
     this.connecting = false;
     this.synced = false;
+    this.schemaOutbox.reset();
     if (this.presence.size > 0) {
       this.presence.clear();
       this.notifyPresenceChange();
@@ -629,6 +670,11 @@ export class TrackerSyncEngine {
     await this.pushPendingNavigation();
   }
 
+  /** Push a schema saved mid-session; before bootstrap finishes, bootstrap pushes it (NIM-6654). */
+  async flushSchemas(): Promise<void> {
+    if (this.synced) await this.schemaOutbox.push();
+  }
+
   // --------------------------------------------------------------------------
   // Mutation API
   // --------------------------------------------------------------------------
@@ -658,6 +704,7 @@ export class TrackerSyncEngine {
     if (itemIds.size !== payloads.length) throw new Error('Tracker mutation batches require unique item ids');
     const applyBatch = this.persistence.applyAndEnqueueBatchAtomically;
     if (!applyBatch) throw new Error('Tracker persistence does not support atomic mutation batches');
+    for (const payload of payloads) encodeTrackerPayloadPlaintext(payload);
 
     const now = Date.now();
     const batchId = generateClientMutationId();
@@ -751,6 +798,12 @@ export class TrackerSyncEngine {
 
   private async runBootstrap(): Promise<void> {
     try {
+      // Before any remote item lands: the store reads the local rows as the
+      // newest local state, which a remote apply would overwrite.
+      if (!this.outboxConsolidated && this.persistence.consolidatePendingUpdates) {
+        await this.persistence.consolidatePendingUpdates().catch(err => this.config.onBootstrapError?.(err));
+        this.outboxConsolidated = true;
+      }
       await this.runSchemaBootstrap();
 
       let cursor: SyncId = await this.persistence.getMaxSyncId();
@@ -800,9 +853,10 @@ export class TrackerSyncEngine {
       this.setStatus('connected');
       this.announcePresence();
 
-      // After bootstrap, replay any persisted-but-unconfirmed mutations.
-      await this.replayPending();
-      await this.pushPendingSchemas();
+      // After bootstrap, replay any persisted-but-unconfirmed mutations. A
+      // replay failure must not cost the other lanes their push (NIM-7336).
+      await this.replayPending().catch(err => this.config.onBootstrapError?.(err));
+      await this.schemaOutbox.push();
       await this.pushPendingNavigation();
       await this.pushPendingSavedViews();
     } catch (err) {
@@ -904,6 +958,7 @@ export class TrackerSyncEngine {
     if (!hooks) return;
 
     let cursor: SyncId = 0 as SyncId;
+    this.schemaCreateOnlySupported = false;
     console.info('[TrackerSchemaSync] bootstrap start (full snapshot since sync_id=0)');
 
     try {
@@ -914,6 +969,7 @@ export class TrackerSyncEngine {
           `[TrackerSchemaSync] bootstrap batch: ${response.schemas.length} schema(s), cursor=${response.cursorSyncId}, hasMore=${response.hasMore}`,
         );
 
+        if (response.schemaCreateOnly === true) this.schemaCreateOnlySupported = true;
         await this.applySchemaBootstrapBatch(response);
         cursor = response.cursorSyncId;
         if (!response.hasMore) break;
@@ -1305,7 +1361,21 @@ export class TrackerSyncEngine {
         `${msg.schema ? ` type=${msg.schema.schemaType} sync_id=${msg.schema.syncId}` : ''}` +
         `${msg.error ? ` error=${msg.error.code}` : ''}`,
     );
+    const sent = this.schemaOutbox.settle(msg.clientMutationId);
+    if (sent) {
+      try {
+        this.config.schemaSync?.onSettled?.({
+          type: sent.type,
+          model: sent.model,
+          accepted: msg.accepted,
+          ...(msg.error ? { error: { code: msg.error.code, message: msg.error.message } } : {}),
+        });
+      } catch (err) {
+        this.config.onBootstrapError?.(err);
+      }
+    }
     if (msg.accepted && msg.schema) {
+      this.pendingLaneIds.delete(msg.clientMutationId);
       await this.applySchemaEnvelope(msg.schema);
       return;
     }
@@ -1519,7 +1589,18 @@ export class TrackerSyncEngine {
     return true;
   }
 
-  private async applySchemaEnvelope(envelope: TrackerSchemaEnvelope): Promise<boolean> {
+  /**
+   * Socket messages are dispatched without awaiting each other, and a host's
+   * `applyRemote` awaits file writes. Unserialized, an older delivery can finish
+   * after a newer one and leave the older content and syncId in place.
+   */
+  private applySchemaEnvelope(envelope: TrackerSchemaEnvelope): Promise<boolean> {
+    const run = this.schemaApplyChain.then(() => this.applySchemaEnvelopeNow(envelope));
+    this.schemaApplyChain = run.catch(() => undefined);
+    return run;
+  }
+
+  private async applySchemaEnvelopeNow(envelope: TrackerSchemaEnvelope): Promise<boolean> {
     const hooks = this.config.schemaSync;
     if (!hooks) return true;
 
@@ -1592,6 +1673,11 @@ export class TrackerSyncEngine {
     kind: 'create' | 'update' | 'delete',
     options: { persistedEnqueue?: boolean },
   ): Promise<{ clientMutationId: string }> {
+    // Encode before touching anything: an item the room can never accept must
+    // not get a local apply or an outbox row. It used to get both, and a row
+    // per reconnect piled up to 257 MB (NIM-7336). A host that saves its own
+    // copy first must run the same check before that save.
+    if (payload) encodeTrackerPayloadPlaintext(payload);
     const clientMutationId = generateClientMutationId();
     const now = Date.now();
 
@@ -1692,41 +1778,6 @@ export class TrackerSyncEngine {
         ...(row.payload?.issueKey !== undefined ? { issueKey: row.payload.issueKey } : {}),
       })),
     });
-  }
-
-  private async pushPendingSchemas(): Promise<void> {
-    const hooks = this.config.schemaSync;
-    if (!hooks) return;
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-    const pending = await hooks.listUnsynced();
-    if (pending.length > 0) {
-      console.info(`[TrackerSchemaSync] pushing ${pending.length} unsynced schema mutation(s)`);
-    }
-    for (const def of pending) {
-      const clientMutationId = generateClientMutationId();
-      this.pendingLaneIds.set(clientMutationId, def.type);
-      if (def.deleted || def.model === null) {
-        console.info(`[TrackerSchemaSync] -> mutation (delete) type=${def.type} cmid=${clientMutationId}`);
-        this.send({
-          type: 'trackerSchemaMutation',
-          clientMutationId,
-          schemaType: def.type,
-          encryptedPayload: null,
-        });
-        continue;
-      }
-
-      // The model JSON travels as plaintext; the server encrypts it at rest
-      // with the team DEK.
-      console.info(`[TrackerSchemaSync] -> mutation (upsert) type=${def.type} cmid=${clientMutationId}`);
-      this.send({
-        type: 'trackerSchemaMutation',
-        clientMutationId,
-        schemaType: def.type,
-        encryptedPayload: def.model,
-      });
-    }
   }
 
   private async pushPendingSavedViews(): Promise<void> {
@@ -1878,36 +1929,5 @@ export class TrackerSyncEngine {
       clearInterval(this.pingTimer);
       this.pingTimer = null;
     }
-  }
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-/**
- * Generate a stable client mutation ID. The format is informational; the
- * server treats it as an opaque string echoed back in
- * `trackerMutationAck`.
- */
-function generateClientMutationId(): string {
-  // crypto.randomUUID is available in both browsers and Node 19+, which
-  // covers every platform the engine runs on.
-  const uuid = crypto.randomUUID();
-  return `cm-${uuid}`;
-}
-
-function parseServerMessage(data: unknown): TrackerServerMessage | null {
-  const text =
-    typeof data === 'string'
-      ? data
-      : typeof data === 'object' && data && 'toString' in data
-        ? String(data)
-        : null;
-  if (text === null) return null;
-  try {
-    return JSON.parse(text) as TrackerServerMessage;
-  } catch {
-    return null;
   }
 }

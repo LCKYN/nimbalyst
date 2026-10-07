@@ -356,6 +356,41 @@ export function countRunningTasks(tasks: Iterable<SubagentTaskLike>): number {
 }
 
 /**
+ * A task the session is waiting on after the lead's turn ended. Published to the
+ * renderer (not persisted) so a session that is only draining background work
+ * can say so instead of showing a plain running spinner.
+ */
+export interface BackgroundTaskSummary {
+  taskId: string;
+  description: string;
+  taskType?: string;
+  startedAt: number;
+}
+
+/**
+ * The tasks a session is waiting on in the background: the running ones, but
+ * only while the lead's turn has completed and teardown is deferred to drain
+ * them. Mid-turn tasks are part of the turn, not background work.
+ */
+export function summarizeBackgroundWait(
+  draining: boolean,
+  tasks: Iterable<MutableSubagentTask & { startedAt?: number }>,
+): BackgroundTaskSummary[] {
+  if (!draining) return [];
+  const waiting: BackgroundTaskSummary[] = [];
+  for (const task of tasks) {
+    if (task.status !== 'running') continue;
+    waiting.push({
+      taskId: task.taskId ?? '',
+      description: task.description ?? '',
+      ...(task.taskType !== undefined && { taskType: task.taskType }),
+      startedAt: task.startedAt ?? Date.now(),
+    });
+  }
+  return waiting;
+}
+
+/**
  * After the lead's `result` chunk, decide whether to defer teardown (keep
  * draining the SDK iterator) because background sub-agents are still running,
  * rather than breaking out of the loop immediately.
@@ -436,7 +471,8 @@ export type DrainExitCause =
   | 'aborted' // abort() / supersede — the AbortController fired
   | 'interrupted' // interruptWithMessage() — teammate/user interrupt
   | 'iterator-done' // the SDK iterator ended on its own
-  | 'iterator-error'; // the SDK iterator threw
+  | 'iterator-error' // the SDK iterator threw
+  | 'handoff'; // a follow-up turn adopted the live query (drainHandoff.ts)
 
 export interface DrainOutcome {
   /** Mark still-running tasks as stopped (they will never report completion). */

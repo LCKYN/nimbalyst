@@ -56,6 +56,8 @@ import {
   detachFolderFromWorkspace,
   getWorkspaceNavigationHistory,
   getWorkspaceRoots,
+  getProjectRailIcon,
+  setProjectRailIcon,
   MAX_ATTACHED_FOLDERS,
 } from '../utils/store';
 import { navigationHistoryService } from '../services/NavigationHistoryService';
@@ -66,6 +68,7 @@ import {
   clearFileSystemServiceFor,
 } from '@nimbalyst/runtime';
 import { logger } from '../utils/logger';
+import { findProjectIcon } from '../utils/projectIcon';
 import { notifyWorkspaceUsageChanged, pruneUnusedGitWatchers, releaseWhenWorkspaceUnused } from '../file/GitWatcherLifecycle';
 
 // Re-uses the same Maps that WindowManager populates. WindowManager exports
@@ -328,6 +331,24 @@ export function registerMultiProjectRailHandlers(): void {
         if (!state) return { success: false, error: 'No window state' };
 
         state.railOrder = [...paths];
+        return { success: true };
+    });
+
+    safeHandle('workspace:get-icon', async (_event, data: { workspacePath: string }) => {
+        const { workspacePath } = data ?? {};
+        if (!workspacePath || typeof workspacePath !== 'string') return null;
+        return getProjectRailIcon(workspacePath) ?? findProjectIcon(workspacePath);
+    });
+
+    safeHandle('workspace:set-icon', async (_event, data: { workspacePath: string; icon: string | null }) => {
+        const { workspacePath, icon } = data ?? {};
+        if (!workspacePath || typeof workspacePath !== 'string') {
+            return { success: false, error: 'workspacePath required' };
+        }
+        // An emoji is a few code points; anything longer is not one.
+        const trimmed = typeof icon === 'string' ? icon.trim() : '';
+        if (trimmed.length > 16) return { success: false, error: 'Icon too long' };
+        setProjectRailIcon(workspacePath, trimmed || null);
         return { success: true };
     });
 

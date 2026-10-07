@@ -80,6 +80,8 @@ describe('buildClaudeCliTokenUsage', () => {
       inputTokens: 103, // 100 + 3 (cache reads NOT added to cumulative input)
       outputTokens: 92, // 50 + 42
       totalTokens: 195,
+      cacheReadInputTokens: 8000, // prev row predates the cache counters: read as 0
+      cacheCreationInputTokens: 400,
       costUSD: 1.25, // preserved (proxy can't compute cost)
       contextWindow: 200_000,
       currentContext: { tokens: 3 + 8000 + 400, contextWindow: 200_000 },
@@ -97,6 +99,41 @@ describe('buildClaudeCliTokenUsage', () => {
       totalTokens: 12,
       currentContext: { tokens: 5 + 8388, contextWindow: 1_000_000 },
     });
+  });
+
+  // #1496: unlike input/output/context, cost on this path can ONLY come from
+  // modelPricing.ts's estimate -- the proxy never sees an exact SDK figure.
+  it('estimates cost from modelPricing.ts when the CLI model resolves to a real Anthropic id', () => {
+    const usage = buildClaudeCliTokenUsage(
+      undefined,
+      { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+      1_000_000,
+      'claude-code-cli:sonnet',
+    );
+    // claude-sonnet-5: $3/$15 per million tokens.
+    expect(usage.costUSD).toBeCloseTo(18, 6);
+    expect(usage.costEstimated).toBe(true);
+  });
+
+  it('leaves costUSD untouched when no model is given', () => {
+    const usage = buildClaudeCliTokenUsage(
+      { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 1.25 },
+      { inputTokens: 3, outputTokens: 42, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+      200_000,
+    );
+    expect(usage.costUSD).toBe(1.25);
+    expect(usage.costEstimated).toBeUndefined();
+  });
+
+  it('accumulates cacheReadInputTokens/cacheCreationInputTokens cumulatively across turns', () => {
+    const prev = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadInputTokens: 100, cacheCreationInputTokens: 20 };
+    const usage = buildClaudeCliTokenUsage(
+      prev,
+      { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 50, cacheCreationInputTokens: 10 },
+      200_000,
+    );
+    expect(usage.cacheReadInputTokens).toBe(150);
+    expect(usage.cacheCreationInputTokens).toBe(30);
   });
 });
 

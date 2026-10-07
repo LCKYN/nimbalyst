@@ -16,7 +16,7 @@ public final class SyncManager: ObservableObject {
 
     private let crypto: CryptoManager
     private let database: DatabaseManager
-    private let indexClient: WebSocketClient = {
+    let indexClient: WebSocketClient = {
         let client = WebSocketClient()
         client.sendsDeviceAnnounce = true
         return client
@@ -79,8 +79,7 @@ public final class SyncManager: ObservableObject {
     private var pendingSessionDrafts: [String: String] = [:]
 
     /// The last sync failure worth showing the user, or nil once it clears.
-    /// Fed by the request registry and by the decrypt/storage paths that used to
-    /// log and return. Rendering lives outside the sync layer.
+    /// Fed by the request registry and the decrypt/storage paths.
     @Published public private(set) var syncError: SyncError?
 
     /// Collapses a burst of same-kind failures into one banner. See
@@ -561,8 +560,9 @@ public final class SyncManager: ObservableObject {
                 self?.connectedDevices = []
             }
             if connected {
-                // Re-publish the optimistic local writes whose send never
-                // landed, from the rows as they read now.
+                // A transport error is what this reconnect answers. Parked
+                // writes re-publish next; one that fails again reports again.
+                if self?.syncError?.kind == .transport { self?.clearSyncError() }
                 self?.requests.reconnect()
                 // Versioned replication probes first; the probe's
                 // unknown_message_type answer is what falls back to the
@@ -815,7 +815,7 @@ public final class SyncManager: ObservableObject {
     }
 
     func callLiveVoiceTool(toolName: String, argsJson: String, scope: VoiceRelayScope) async -> VoiceToolCallResult {
-        guard connectedDevices.contains(where: { $0.deviceId == scope.hostDeviceId && ($0.type == "desktop" || $0.type == "headless") }) else {
+        guard await awaitVoiceHost(scope.hostDeviceId) else {
             return .init(success: false, result: nil, error: "The selected computer is unavailable.")
         }
         guard let data = try? JSONEncoder().encode(VoiceRelayRequest(scope: scope, tool: toolName, arguments: argsJson)),

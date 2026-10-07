@@ -7,15 +7,50 @@
 import { parseArgs, flagBool } from './cli/parse.js';
 import { setColorEnabled } from './cli/colors.js';
 import { CliError, ExitCode } from './cli/exitCodes.js';
+import { safeText } from './cli/output.js';
 import { runTracker } from './commands/tracker.js';
 import { runStatus } from './commands/status.js';
 import { runWorkspace } from './commands/workspace.js';
 import { runSession, runDoc } from './commands/sessionDoc.js';
 import { runRelease } from './commands/release.js';
+import { runLogin, runLogout, runWhoami } from './commands/login.js';
+import { runPages, wikiRenamed } from './commands/pages.js';
 
 export const VERSION = '0.1.0';
 
-const HELP = `nim — Nimbalyst companion CLI (v${VERSION})
+const PAGES_HELP = `Team pages (Nimbalyst Teams sign-in; server = NIM_SERVER, default https://sync.nimbalyst.com):
+  nim login / nim logout / nim whoami
+  nim pages status                           (unbound, bound, or ambiguous, with your teams)
+  nim pages bind --org <id> --project <id>   (team admins: connect this repo's remote)
+  nim pages create-project --org <id> --name <n> [--bind]   (team admins)
+  nim pages pin --org <id> --project <id>    (writes .nimbalyst/wiki.json; one of the projects this repo resolves to)
+  nim pages list                             (the page tree, with links)
+  nim pages read <uri|link>
+  nim pages search <query> [--limit n]       (page titles and text)
+  nim pages edit <uri|link> --old TXT --new TXT [...]   (or --replacements-file F)
+  nim pages create "<title>" [--parent ID] [--parent-kind page|item] [--path A/B]
+                     [--body TXT | --body-file F] [--before NODE | --after NODE]
+  nim pages create-folder "<name>" [--parent ID] [--path A/B]
+  nim pages move <id> --kind page|item|type [--parent ID] [--path A/B]
+                     [--before NODE | --after NODE] [--under-type]
+  nim pages rename <pageId> "<name>"
+  nim pages delete <pageId> --kind doc|folder
+  nim pages set-type <pageId> <typeId>
+  nim pages members [query]
+  nim pages types [--search S]
+  nim pages define-type [-f <schema.yaml|.json>] [--predicates-file F] [--overwrite]
+                     [--remove-predicate ID ...] [--confirm-destructive]
+  nim pages items [--type T] [--status S] [--search TXT] [--where f=v ...] [--include-closed] [--limit N]
+  nim pages item <id|KEY>
+  nim pages create-item <type> "<title>" [--status S] [--field k=v ...] [--tag T ...] [--body TXT | --body-file F]
+  nim pages update-item <id|KEY> [--title T] [--status S] [--field k=v ...] [--unset f ...]
+                     [--body TXT | --body-file F] [--archive | --unarchive] [--expected-revision N]
+  nim pages comments --page <uri> [...] [--query TXT]   (citable comments)
+  Target flags: --repo <remote> (default: origin; ignores .nimbalyst/wiki.json),
+                --org <id> --project <id> (explicit project; ignores .nimbalyst/wiki.json)
+`;
+
+const help = () => `nim — Nimbalyst companion CLI (v${VERSION})
 
 Usage:
   nim <noun> <verb> [--flags]
@@ -61,6 +96,7 @@ Release (live mode for writes):
                      [--date <iso>]        (fills the existing item, flips it to released)
   nim release notes [<id|KEY>] [--json]    (markdown from the release's members)
 
+${PAGES_HELP}
 Cross-cutting flags:
   --workspace <path>   target workspace (default: resolve from cwd)
   --db <file>          direct mode against an explicit SQLite file
@@ -89,7 +125,7 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   if (!args.noun || flagBool(args, 'help')) {
-    process.stdout.write(HELP);
+    process.stdout.write(help());
     return ExitCode.OK;
   }
 
@@ -107,6 +143,16 @@ export async function main(argv: string[]): Promise<number> {
         return await runSession(args);
       case 'doc':
         return await runDoc(args);
+      case 'login':
+        return await runLogin(args);
+      case 'logout':
+        return await runLogout(args);
+      case 'whoami':
+        return await runWhoami(args);
+      case 'pages':
+        return await runPages(args);
+      case 'wiki':
+        return wikiRenamed();
       default:
         process.stderr.write(`nim: unknown command '${args.noun}'. Run 'nim --help'.\n`);
         return ExitCode.USAGE;
@@ -117,12 +163,13 @@ export async function main(argv: string[]): Promise<number> {
 }
 
 function reportError(err: unknown): number {
+  // Messages can carry server- or team-written text; strip terminal control sequences.
   if (err instanceof CliError) {
-    process.stderr.write(`nim: ${err.message}\n`);
+    process.stderr.write(`nim: ${safeText(err.message)}\n`);
     return err.code;
   }
   const message = err instanceof Error ? err.message : String(err);
-  process.stderr.write(`nim: ${message}\n`);
+  process.stderr.write(`nim: ${safeText(message)}\n`);
   if (process.env.NIM_DEBUG && err instanceof Error && err.stack) {
     process.stderr.write(err.stack + '\n');
   }

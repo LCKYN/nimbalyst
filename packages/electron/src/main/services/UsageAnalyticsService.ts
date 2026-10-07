@@ -4,6 +4,14 @@
  */
 
 import type { AppDatabase } from '../database/PGLiteDatabaseWorker';
+import {
+  buildUsageOverview,
+  displayModelName,
+  resolveSessionUsage,
+  sessionRangeActivity,
+  type SessionUsageSource,
+  type UsageOverview,
+} from './usageOverview';
 
 export interface TokenUsageStats {
   totalInputTokens: number;
@@ -43,12 +51,71 @@ export interface ActivityHeatmapData {
   activityCount: number;
 }
 
+export interface TokenHeatmapData {
+  hourOfDay: number; // 0-23
+  dayOfWeek: number; // 0-6 (Sunday-Saturday)
+  totalTokens: number;
+}
+
 export interface DocumentEditStats {
   workspaceId: string;
   filePath: string;
   editCount: number;
   lastEdited: number;
   sizeBytes: number;
+}
+
+/** A tokens/cost bucket surfaced in the Sessions breakdown (main/subagent/per-model). */
+export interface TokenUsageBucketRow {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  costUSD?: number;
+}
+
+/**
+ * One session's usage row for the AI Usage Report "Sessions" tab (#1496).
+ * `workstreamRootId` groups a hierarchical parent/child workstream under one
+ * id (the top-most ancestor) so the UI can roll up cost across a workstream
+ * without a second round-trip.
+ *
+ * Every amount is the part of the session inside the requested range
+ * (`rangeShare` of the whole), so the tab's total equals the Overview's spend.
+ */
+export interface SessionUsageBreakdownRow {
+  id: string;
+  title: string;
+  provider: string;
+  model: string | null;
+  /** Short model name for display (`claude-code:opus` -> `opus`). */
+  modelLabel: string;
+  /** Title of the workstream root, for grouping by workstream. */
+  workstreamTitle: string;
+  /** Fraction of the session's prompts that fall in the range; 1 for "all time". */
+  rangeShare: number;
+  /** Latest in-range prompt. */
+  lastActiveAt: number;
+  phase?: string;
+  tags?: string[];
+  parentSessionId: string | null;
+  createdBySessionId: string | null;
+  workstreamRootId: string;
+  /** The workspace path, so the report can open the session in the right window. */
+  workspaceId: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  /** Input + cache reads + cache writes + output, the same definition the Overview uses. */
+  totalTokens: number;
+  costUSD: number;
+  costEstimated: boolean;
+  mainUsage?: TokenUsageBucketRow;
+  subagentUsage?: TokenUsageBucketRow;
+  byModel?: Record<string, TokenUsageBucketRow>;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export class UsageAnalyticsService {
@@ -84,9 +151,34 @@ export class UsageAnalyticsService {
   /**
    * Get total count of all AI sessions (including those without token data)
    */
-  async getAllSessionCount(workspaceId?: string): Promise<number> {
-    const whereClause = workspaceId ? `WHERE workspace_id = $1` : '';
-    const params = workspaceId ? [workspaceId] : [];
+  /**
+   * Outer WHERE for the session-scoped aggregates, so every panel in the report
+   * can be scoped to the same workspace and the same period.
+   *
+   * The date bound goes on the outer query rather than inside
+   * SESSION_TOKEN_USAGE_CTE: that string is shared by four callers with
+   * different parameter counts, and threading a placeholder through it would
+   * make the numbering depend on which caller you were reading.
+   *
+   * `to_timestamp` is portable -- SQLiteDatabase registers it as a UDF, so this
+   * is one dialect, not two.
+   */
+  private sessionScope(workspaceId?: string, sinceMs?: number): { clause: string; params: any[] } {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (workspaceId) {
+      params.push(workspaceId);
+      conditions.push(`workspace_id = $${params.length}`);
+    }
+    if (sinceMs) {
+      params.push(sinceMs);
+      conditions.push(`created_at >= to_timestamp($${params.length} / 1000.0)`);
+    }
+    return { clause: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', params };
+  }
+
+  async getAllSessionCount(workspaceId?: string, sinceMs?: number): Promise<number> {
+    const { clause: whereClause, params } = this.sessionScope(workspaceId, sinceMs);
 
     const result = await this.db.query(
       `SELECT COUNT(DISTINCT id) as total_sessions
@@ -101,9 +193,8 @@ export class UsageAnalyticsService {
   /**
    * Get overall token usage statistics across all sessions
    */
-  async getOverallTokenUsage(workspaceId?: string): Promise<TokenUsageStats> {
-    const whereClause = workspaceId ? `WHERE workspace_id = $1` : '';
-    const params = workspaceId ? [workspaceId] : [];
+  async getOverallTokenUsage(workspaceId?: string, sinceMs?: number): Promise<TokenUsageStats> {
+    const { clause: whereClause, params } = this.sessionScope(workspaceId, sinceMs);
 
     const result = await this.db.query(
       `${this.SESSION_TOKEN_USAGE_CTE}
@@ -131,9 +222,8 @@ export class UsageAnalyticsService {
   /**
    * Get token usage broken down by provider and model
    */
-  async getUsageByProvider(workspaceId?: string): Promise<ProviderUsageStats[]> {
-    const whereClause = workspaceId ? `WHERE workspace_id = $1` : '';
-    const params = workspaceId ? [workspaceId] : [];
+  async getUsageByProvider(workspaceId?: string, sinceMs?: number): Promise<ProviderUsageStats[]> {
+    const { clause: whereClause, params } = this.sessionScope(workspaceId, sinceMs);
 
     const result = await this.db.query(
       `${this.SESSION_TOKEN_USAGE_CTE}
@@ -164,7 +254,9 @@ export class UsageAnalyticsService {
   /**
    * Get token usage broken down by project (workspace)
    */
-  async getUsageByProject(): Promise<ProjectUsageStats[]> {
+  async getUsageByProject(sinceMs?: number): Promise<ProjectUsageStats[]> {
+    // Deliberately no workspace scope: this panel exists to compare workspaces.
+    const { clause: whereClause, params } = this.sessionScope(undefined, sinceMs);
     const result = await this.db.query(
       `${this.SESSION_TOKEN_USAGE_CTE}
       SELECT
@@ -173,9 +265,10 @@ export class UsageAnalyticsService {
         COALESCE(SUM(total_tokens), 0) as total_tokens,
         MAX(updated_at) as last_activity_at
       FROM session_token_usage
+      ${whereClause}
       GROUP BY workspace_id
       ORDER BY total_tokens DESC`,
-      []
+      params
     );
 
     return result.rows.map((row: any) => ({
@@ -184,6 +277,187 @@ export class UsageAnalyticsService {
       totalTokens: parseInt(row.total_tokens) || 0,
       lastActivity: toEpochMs(row.last_activity_at) || Date.now(),
     }));
+  }
+
+  /**
+   * Prompt timestamps per session, all time. A session's in-range share is its
+   * in-range prompts over all of its prompts, so the whole history is needed
+   * even when the report is scoped to a week.
+   */
+  private async loadPromptTimes(workspaceId?: string): Promise<Map<string, number[]>> {
+    const promptRows = await this.db.query<{ session_id: string; created_at: unknown }>(
+      `SELECT session_id, created_at
+       FROM ai_agent_messages
+       WHERE direction = 'input'
+       ${workspaceId ? 'AND session_id IN (SELECT id FROM ai_sessions WHERE workspace_id = $1)' : ''}`,
+      workspaceId ? [workspaceId] : [],
+    );
+    const promptTimesBySession = new Map<string, number[]>();
+    for (const row of promptRows.rows) {
+      const ms = toEpochMs(row.created_at);
+      if (!Number.isFinite(ms)) continue;
+      const times = promptTimesBySession.get(row.session_id);
+      if (times) times.push(ms);
+      else promptTimesBySession.set(row.session_id, [ms]);
+    }
+    return promptTimesBySession;
+  }
+
+  /**
+   * Per-task/session usage breakdown for the AI Usage Report "Sessions" tab
+   * (#1496): tokens, cost (SDK-exact or pricing-table estimate), cache
+   * read/write, main-vs-subagent split, and per-model breakdown, plus enough
+   * of the hierarchy to roll a workstream's children up under one root.
+   *
+   * Lists the sessions ACTIVE in the range -- not the ones started in it -- and
+   * scales each to its in-range share, the same rule as `getUsageOverview`, so
+   * this tab's total is the Overview's spend.
+   *
+   * The parent/child walk happens here in JS, not a recursive SQL CTE --
+   * consistent with `getTimeSeriesDataPortable`'s existing bias towards JS-side
+   * aggregation once the query stops being a genuinely SQL-divergent operation
+   * (date truncation is; a parent-pointer walk isn't, so there's no reason to
+   * maintain two SQL dialects for it).
+   */
+  async getSessionUsageBreakdown(
+    workspaceId?: string,
+    sinceMs?: number,
+    nowMs: number = Date.now(),
+  ): Promise<SessionUsageBreakdownRow[]> {
+    const result = await this.db.query<{
+      id: string;
+      title: string;
+      provider: string;
+      model: string | null;
+      workspace_id: string | null;
+      parent_session_id: string | null;
+      created_by_session_id: string | null;
+      created_at: unknown;
+      updated_at: unknown;
+      metadata: unknown;
+    }>(
+      `SELECT id, title, provider, model, workspace_id, parent_session_id, created_by_session_id,
+              created_at, updated_at, metadata
+       FROM ai_sessions
+       ${workspaceId ? 'WHERE workspace_id = $1' : ''}`,
+      workspaceId ? [workspaceId] : [],
+    );
+    const promptTimesBySession = await this.loadPromptTimes(workspaceId);
+
+    // Parent lookup for the workstream-root walk. Only sessions in THIS result
+    // set (i.e. this workspace, when filtered) count as resolvable ancestors --
+    // a parent outside the filtered set is treated as the root itself.
+    const parentById = new Map<string, string | null>();
+    const titleById = new Map<string, string>();
+    for (const row of result.rows) {
+      parentById.set(row.id, row.parent_session_id ?? null);
+      titleById.set(row.id, row.title || 'Untitled Session');
+    }
+
+    const resolveWorkstreamRootId = (id: string): string => {
+      const seen = new Set<string>([id]);
+      let current = id;
+      for (;;) {
+        const parent = parentById.get(current);
+        if (!parent || !parentById.has(parent) || seen.has(parent)) return current;
+        seen.add(parent);
+        current = parent;
+      }
+    };
+
+    const rows: SessionUsageBreakdownRow[] = [];
+    for (const row of result.rows) {
+      const createdAt = toEpochMs(row.created_at) || 0;
+      const { share, inRangeTimes } = sessionRangeActivity(promptTimesBySession.get(row.id), createdAt, { sinceMs, nowMs });
+      if (share === 0) continue;
+
+      const metadata = parseJsonRecord(row.metadata) ?? {};
+      const tokenUsageRaw = metadata.tokenUsage;
+      const tokenUsage: Record<string, unknown> =
+        tokenUsageRaw && typeof tokenUsageRaw === 'object' ? tokenUsageRaw as Record<string, unknown> : {};
+
+      const inputTokens = Number(tokenUsage.inputTokens ?? 0) || 0;
+      const outputTokens = Number(tokenUsage.outputTokens ?? 0) || 0;
+      const cacheReadInputTokens = Number(tokenUsage.cacheReadInputTokens ?? 0) || 0;
+      const cacheCreationInputTokens = Number(tokenUsage.cacheCreationInputTokens ?? 0) || 0;
+      // Same cost rule as the Overview, so the two tabs agree: the provider's
+      // figure where there is one, the price table where there is not.
+      const resolved = resolveSessionUsage({ provider: row.provider, model: row.model ?? null, metadata });
+      const costUSD = resolved?.reduce((sum, entry) => sum + entry.amount.costUSD, 0) ?? 0;
+      const rootId = resolveWorkstreamRootId(row.id);
+
+      rows.push({
+        id: row.id,
+        title: row.title || 'Untitled Session',
+        provider: row.provider,
+        model: row.model ?? null,
+        modelLabel: displayModelName(row.model || row.provider),
+        workstreamTitle: titleById.get(rootId) ?? 'Untitled Session',
+        rangeShare: share,
+        lastActiveAt: Math.max(...inRangeTimes),
+        phase: typeof metadata.phase === 'string' ? metadata.phase : undefined,
+        tags: Array.isArray(metadata.tags) ? metadata.tags as string[] : undefined,
+        parentSessionId: row.parent_session_id ?? null,
+        createdBySessionId: row.created_by_session_id ?? null,
+        workstreamRootId: rootId,
+        workspaceId: row.workspace_id ?? null,
+        inputTokens: inputTokens * share,
+        outputTokens: outputTokens * share,
+        totalTokens: (inputTokens + cacheReadInputTokens + cacheCreationInputTokens + outputTokens) * share,
+        costUSD: costUSD * share,
+        costEstimated: resolved?.some((entry) => entry.costEstimated) ?? false,
+        mainUsage: scaleBucket(normalizeTokenUsageBucket(tokenUsage.mainUsage), share),
+        subagentUsage: scaleBucket(normalizeTokenUsageBucket(tokenUsage.subagentUsage), share),
+        byModel: scaleByModel(normalizeTokenUsageByModel(tokenUsage.byModel), share),
+        cacheReadInputTokens: cacheReadInputTokens * share,
+        cacheCreationInputTokens: cacheCreationInputTokens * share,
+        createdAt,
+        updatedAt: toEpochMs(row.updated_at) || 0,
+      });
+    }
+
+    rows.sort((a, b) => b.costUSD - a.costUSD);
+    return rows;
+  }
+
+  /**
+   * Everything the Overview tab shows, from one set of per-session amounts so
+   * the panels agree with each other. See `usageOverview.ts` for the rules.
+   *
+   * Sessions are not date-filtered here: a session started before the range
+   * can still have prompts inside it, and the prompt times decide what counts.
+   */
+  async getUsageOverview(
+    workspaceId?: string,
+    sinceMs?: number,
+    timezoneOffsetMinutes: number = 0,
+    nowMs: number = Date.now(),
+  ): Promise<UsageOverview> {
+    const sessionRows = await this.db.query<{
+      id: string;
+      provider: string;
+      model: string | null;
+      workspace_id: string | null;
+      created_at: unknown;
+      metadata: unknown;
+    }>(
+      `SELECT id, provider, model, workspace_id, created_at, metadata
+       FROM ai_sessions
+       ${workspaceId ? 'WHERE workspace_id = $1' : ''}`,
+      workspaceId ? [workspaceId] : [],
+    );
+    const promptTimesBySession = await this.loadPromptTimes(workspaceId);
+
+    const sessions: SessionUsageSource[] = sessionRows.rows.map((row) => ({
+      id: row.id,
+      provider: row.provider,
+      model: row.model ?? null,
+      workspaceId: row.workspace_id ?? null,
+      createdAtMs: toEpochMs(row.created_at),
+      metadata: parseJsonRecord(row.metadata),
+    }));
+
+    return buildUsageOverview(sessions, promptTimesBySession, { sinceMs, nowMs, timezoneOffsetMinutes });
   }
 
   /**
@@ -358,10 +632,68 @@ export class UsageAnalyticsService {
    * @param metric - Type of activity to track: sessions, messages, or edits
    * @param timezoneOffsetMinutes - User's timezone offset in minutes (e.g., -300 for EST)
    */
+  /**
+   * Tokens per weekday/hour bucket, for the activity heatmap's hover readout.
+   *
+   * There is no token column anywhere -- per-turn usage only exists inside the
+   * raw provider frame kept in `ai_agent_messages.content`. That frame's `usage`
+   * is the turn's OWN totals (MessageStreamingHandler adds it to the session's
+   * running total rather than replacing it), so bucketing by `created_at` and
+   * summing is correct; no cumulative differencing is needed here.
+   *
+   * The `LIKE` prefilter matters: it keeps `JSON.parse` off the overwhelming
+   * majority of rows, which on a multi-hundred-MB message log is the difference
+   * between a scan and a stall. Callers should treat this as best-effort and
+   * render without it if it fails -- see SessionsBreakdown's sibling loader.
+   */
+  async getTokenHeatmap(
+    workspaceId?: string,
+    timezoneOffsetMinutes: number = 0,
+    sinceMs?: number,
+  ): Promise<TokenHeatmapData[]> {
+    const offsetMs = -timezoneOffsetMinutes * 60_000;
+
+    const conditions = [`direction = 'output'`, `content LIKE '%"usage"%'`];
+    const params: any[] = [];
+    if (workspaceId) {
+      params.push(workspaceId);
+      conditions.push(`session_id IN (SELECT id FROM ai_sessions WHERE workspace_id = $${params.length})`);
+    }
+    if (sinceMs) {
+      params.push(sinceMs);
+      conditions.push(`created_at >= to_timestamp($${params.length} / 1000.0)`);
+    }
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+    const result = await this.db.query<{ created_at: unknown; content: unknown }>(
+      `SELECT created_at, content FROM ai_agent_messages ${whereClause}`,
+      params,
+    );
+
+    const buckets = new Map<string, number>();
+    for (const row of result.rows) {
+      const ms = toEpochMs(row.created_at);
+      if (!Number.isFinite(ms)) continue;
+      const usage = readTurnUsage(row.content);
+      if (!usage) continue;
+      const shifted = new Date(ms + offsetMs);
+      const key = `${shifted.getUTCDay()}:${shifted.getUTCHours()}`;
+      buckets.set(key, (buckets.get(key) ?? 0) + usage.inputTokens + usage.outputTokens);
+    }
+
+    const out: TokenHeatmapData[] = [];
+    for (const [key, totalTokens] of buckets) {
+      const [dowStr, hourStr] = key.split(':');
+      out.push({ dayOfWeek: Number(dowStr), hourOfDay: Number(hourStr), totalTokens });
+    }
+    return out;
+  }
+
   async getActivityHeatmap(
     workspaceId?: string,
     metric: 'sessions' | 'messages' | 'edits' = 'messages',
-    timezoneOffsetMinutes: number = 0
+    timezoneOffsetMinutes: number = 0,
+    sinceMs?: number
   ): Promise<ActivityHeatmapData[]> {
     // Fetch raw timestamps and bucket them in JS. SQL-level
     // EXTRACT(... FROM ts + INTERVAL 'N minutes') has no portable form
@@ -375,29 +707,47 @@ export class UsageAnalyticsService {
 
     let timestamps: number[];
 
+    const build = (conditions: string[], params: any[]) =>
+      conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
     if (metric === 'messages') {
-      const whereClause = workspaceId
-        ? `WHERE session_id IN (SELECT id FROM ai_sessions WHERE workspace_id = $1) AND direction = 'input'`
-        : `WHERE direction = 'input'`;
-      const params: any[] = workspaceId ? [workspaceId] : [];
+      const conditions = [`direction = 'input'`];
+      const params: any[] = [];
+      if (workspaceId) {
+        params.push(workspaceId);
+        conditions.push(`session_id IN (SELECT id FROM ai_sessions WHERE workspace_id = $${params.length})`);
+      }
+      if (sinceMs) {
+        params.push(sinceMs);
+        conditions.push(`created_at >= to_timestamp($${params.length} / 1000.0)`);
+      }
       const result = await this.db.query<{ created_at: unknown }>(
-        `SELECT created_at FROM ai_agent_messages ${whereClause}`,
+        `SELECT created_at FROM ai_agent_messages ${build(conditions, params)}`,
         params
       );
       timestamps = result.rows.map((row) => toEpochMs(row.created_at));
     } else if (metric === 'edits') {
-      const whereClause = workspaceId ? `WHERE workspace_id = $1` : '';
-      const params: any[] = workspaceId ? [workspaceId] : [];
+      // `document_history.timestamp` is epoch milliseconds in an integer
+      // column, not a timestamp -- it compares directly, with no to_timestamp.
+      const conditions: string[] = [];
+      const params: any[] = [];
+      if (workspaceId) {
+        params.push(workspaceId);
+        conditions.push(`workspace_id = $${params.length}`);
+      }
+      if (sinceMs) {
+        params.push(sinceMs);
+        conditions.push(`timestamp >= $${params.length}`);
+      }
       const result = await this.db.query<{ timestamp: number | string | bigint }>(
-        `SELECT timestamp FROM document_history ${whereClause}`,
+        `SELECT timestamp FROM document_history ${build(conditions, params)}`,
         params
       );
       timestamps = result.rows.map((row) => Number(row.timestamp));
     } else {
-      const whereClause = workspaceId ? `WHERE workspace_id = $1` : '';
-      const params: any[] = workspaceId ? [workspaceId] : [];
+      const { clause, params } = this.sessionScope(workspaceId, sinceMs);
       const result = await this.db.query<{ created_at: unknown }>(
-        `SELECT created_at FROM ai_sessions ${whereClause}`,
+        `SELECT created_at FROM ai_sessions ${clause}`,
         params
       );
       timestamps = result.rows.map((row) => toEpochMs(row.created_at));
@@ -734,6 +1084,48 @@ function parseJsonRecord(raw: unknown): Record<string, any> | null {
   return raw && typeof raw === 'object' ? raw as Record<string, any> : null;
 }
 
+/** Defensively parse one `TokenUsageBucket` from already-parsed metadata JSON (old-shape sessions lack it entirely). */
+function normalizeTokenUsageBucket(raw: unknown): TokenUsageBucketRow | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const bucket = raw as Record<string, unknown>;
+  return {
+    inputTokens: Number(bucket.inputTokens ?? 0) || 0,
+    outputTokens: Number(bucket.outputTokens ?? 0) || 0,
+    cacheReadInputTokens: Number(bucket.cacheReadInputTokens ?? 0) || 0,
+    cacheCreationInputTokens: Number(bucket.cacheCreationInputTokens ?? 0) || 0,
+    costUSD: Number(bucket.costUSD ?? 0) || 0,
+  };
+}
+
+function scaleBucket(bucket: TokenUsageBucketRow | undefined, share: number): TokenUsageBucketRow | undefined {
+  if (!bucket || share === 1) return bucket;
+  return {
+    inputTokens: bucket.inputTokens * share,
+    outputTokens: bucket.outputTokens * share,
+    cacheReadInputTokens: (bucket.cacheReadInputTokens ?? 0) * share,
+    cacheCreationInputTokens: (bucket.cacheCreationInputTokens ?? 0) * share,
+    costUSD: (bucket.costUSD ?? 0) * share,
+  };
+}
+
+function scaleByModel(
+  byModel: Record<string, TokenUsageBucketRow> | undefined,
+  share: number,
+): Record<string, TokenUsageBucketRow> | undefined {
+  if (!byModel || share === 1) return byModel;
+  return Object.fromEntries(Object.entries(byModel).map(([model, bucket]) => [model, scaleBucket(bucket, share)!]));
+}
+
+function normalizeTokenUsageByModel(raw: unknown): Record<string, TokenUsageBucketRow> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Record<string, TokenUsageBucketRow> = {};
+  for (const [modelName, value] of Object.entries(raw as Record<string, unknown>)) {
+    const bucket = normalizeTokenUsageBucket(value);
+    if (bucket) out[modelName] = bucket;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function readTokenUsage(rawMetadata: unknown): {
   inputTokens: number;
   outputTokens: number;
@@ -752,6 +1144,35 @@ function readTokenUsage(rawMetadata: unknown): {
     inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
     outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
     totalTokens: Number.isFinite(totalTokens) ? totalTokens : 0,
+  };
+}
+
+/**
+ * Per-turn token usage out of a stored raw provider frame, for either provider.
+ *
+ * claude-code keeps flat `input_tokens`/`output_tokens` on the `result` frame's
+ * `usage`; codex nests the same idea but counts cached input separately, which
+ * `readCodexUsage` already subtracts. A frame carrying neither returns null so
+ * the caller can skip it rather than bank a zero.
+ */
+export function readTurnUsage(rawContent: unknown): {
+  inputTokens: number;
+  outputTokens: number;
+} | null {
+  const content = parseJsonRecord(rawContent);
+  const usage = content?.usage;
+  if (!usage || typeof usage !== 'object') return null;
+  const fields = usage as Record<string, unknown>;
+
+  // Codex reports cached input separately; its reader nets that off.
+  if (fields.cached_input_tokens !== undefined) return readCodexUsage(rawContent);
+
+  const inputTokens = Number(fields.input_tokens ?? 0);
+  const outputTokens = Number(fields.output_tokens ?? 0);
+  if (!Number.isFinite(inputTokens) && !Number.isFinite(outputTokens)) return null;
+  return {
+    inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
+    outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
   };
 }
 

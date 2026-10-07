@@ -23,6 +23,11 @@ import {
   deriveCoachingSignals,
   type CoachingMessageRow,
 } from "./sessionCoachingSignals";
+import {
+  LIST_CITABLE_INPUTS_TOOL_NAME,
+  LIST_CITABLE_INPUTS_TOOL_SCHEMA,
+} from "../services/pageCitations/listCitableInputs";
+import { handleListCitableInputs } from "../services/pageCitations/listCitableInputsHandler";
 
 // ─── Utilities ──────────────────────────────────────────────────────
 
@@ -147,6 +152,8 @@ async function handleGetSessionSummary(
   // Keep actionable interactive prompts at the end of every summary. Raw
   // prompt rows are filtered in SQL so large sessions do not need to load their
   // complete transcript just to find an unmatched question.
+  // Synthetic terminal rows (e.g. a question superseded by a new user turn)
+  // carry only the tool_use_id, so they are matched by their row type.
   const { rows: promptRows } = await db.query<{ content: string }>(
     `SELECT content FROM ai_agent_messages
      WHERE session_id = $1
@@ -163,6 +170,7 @@ async function handleGetSessionSummary(
          OR content LIKE '%permission_response%'
          OR content LIKE '%git_commit_proposal%'
          OR content LIKE '%exit_plan_mode_%'
+         OR content LIKE '%nimbalyst_tool_result%'
        )
      ORDER BY id ASC`,
     [sessionId]
@@ -881,6 +889,7 @@ export const SESSION_CONTEXT_TOOL_SCHEMAS = [
       required: ["sessionId"],
     },
   },
+  LIST_CITABLE_INPUTS_TOOL_SCHEMA,
 ];
 
 /**
@@ -1015,6 +1024,11 @@ export async function dispatchSessionContextTool(
           content: [{ type: "text", text: result }],
           isError: result.startsWith("Error:"),
         };
+      }
+
+      case LIST_CITABLE_INPUTS_TOOL_NAME: {
+        const result = await handleListCitableInputs(args, aiSessionId, workspaceId);
+        return { content: [{ type: "text", text: result }], isError: false };
       }
 
       case "update_session_board": {

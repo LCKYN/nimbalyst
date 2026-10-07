@@ -53,15 +53,9 @@ import { getOrgScopedIdentity, getOrgScopedJwt, listMembers, resolveTeamForWorks
 import { getCollabSyncWsUrl } from '../utils/collabSyncUrl';
 import { getDatabase } from '../database/initialize';
 import { TrackerPGLiteStore } from './tracker/TrackerPGLiteStore';
-import {
-  listUnsyncedTrackerSchemaDefs,
-  markTrackerSchemaDefRejected,
-} from './tracker/trackerTypeDefStore';
-import {
-  applyRemoteWorkspaceTrackerSchemaDef,
-  encodeTrackerSchemaDefForPush,
-  refreshWorkspaceSchemaLayer,
-} from './TrackerSchemaService';
+import { createDesktopTrackerSchemaSyncHooks } from './tracker/desktopTrackerSchemaSyncHooks';
+import { registerTrackerSchemaFlushHandler } from './tracker/trackerSchemaFlush';
+import { refreshWorkspaceSchemaLayer } from './TrackerSchemaService';
 import {
   applyRemoteWorkspaceTrackerNavigationEntry,
   registerTrackerNavigationFlushHandler,
@@ -89,6 +83,7 @@ import { AnalyticsService } from './analytics/AnalyticsService';
 import { sendTeamAnalyticsEvent } from './analytics/TeamAnalytics';
 import { CollaborationHealthAttemptTracker } from '../../shared/analytics/collaborationHealth';
 import { bucketItemCount, categorizeTeamAnalyticsError, toStableAnalyticsCategory } from '../../shared/analytics/teamAnalytics';
+import { setBodyLinkHomeScope } from './tracker/trackerBodyLinks';
 
 // ============================================================================
 // Engine registry (per workspace)
@@ -143,6 +138,10 @@ registerTrackerNavigationFlushHandler((workspacePath) =>
 
 registerTrackerSavedViewFlushHandler((workspacePath) =>
   engines.get(workspacePath)?.engine.flushSavedViews(),
+);
+
+registerTrackerSchemaFlushHandler((workspacePath) =>
+  engines.get(workspacePath)?.engine.flushSchemas(),
 );
 
 /**
@@ -403,14 +402,7 @@ async function doInitializeTrackerSync(workspacePath: string): Promise<void> {
         });
       },
     },
-    schemaSync: {
-      // An override of a builtin goes out as a DELTA so each peer resolves it
-      // against its own builtin and keeps receiving shipped fields (#1178).
-      listUnsynced: async () =>
-        (await listUnsyncedTrackerSchemaDefs(workspacePath)).map(encodeTrackerSchemaDefForPush),
-      applyRemote: (def) => applyRemoteWorkspaceTrackerSchemaDef(workspacePath, def),
-      markRejected: (type) => markTrackerSchemaDefRejected(workspacePath, type),
-    },
+    schemaSync: createDesktopTrackerSchemaSyncHooks(workspacePath),
     navigationSync: {
       getMaxSyncId: () => getMaxTrackerNavigationSyncId(workspacePath),
       listUnsynced: () => listUnsyncedTrackerNavigationEntries(workspacePath),
@@ -544,6 +536,8 @@ async function doInitializeTrackerSync(workspacePath: string): Promise<void> {
   logger.main.info('[TrackerSyncManager] creating engine for', workspacePath, 'roomId:', `org:${team.orgId}:tracker:${team.teamProjectId}`);
 
   const engine = new TrackerSyncEngine(config);
+  // Body links to another team project are not this workspace's relations.
+  setBodyLinkHomeScope(workspacePath, { orgId: team.orgId, projectId: team.teamProjectId });
   engines.set(workspacePath, {
     workspacePath,
     orgId: team.orgId,
@@ -998,13 +992,7 @@ export function registerTrackerSyncHandlers(): void {
             avatarUrl: payload.avatarUrl ?? null,
           },
           persistence,
-          schemaSync: {
-                  listUnsynced: async () =>
-              (await listUnsyncedTrackerSchemaDefs(workspacePath)).map(
-                encodeTrackerSchemaDefForPush,
-              ),
-            applyRemote: (def) => applyRemoteWorkspaceTrackerSchemaDef(workspacePath, def),
-          },
+          schemaSync: createDesktopTrackerSchemaSyncHooks(workspacePath),
           navigationSync: {
             getMaxSyncId: () => getMaxTrackerNavigationSyncId(workspacePath),
             listUnsynced: () => listUnsyncedTrackerNavigationEntries(workspacePath),
@@ -1041,6 +1029,7 @@ export function registerTrackerSyncHandlers(): void {
         };
 
         const engine = new TrackerSyncEngine(config);
+        setBodyLinkHomeScope(workspacePath, { orgId: payload.orgId, projectId: payload.teamProjectId });
         engines.set(workspacePath, {
           workspacePath,
           orgId: payload.orgId,

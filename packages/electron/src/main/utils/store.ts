@@ -336,11 +336,14 @@ interface AppStoreSchema {
   // Path of the project currently visible in the rail. Restored on launch
   // so the user lands on the same project.
   activeProjectPath?: string | null;
-  // When true, the rail rehydrates with the projects that were warm at
-  // last app close. When false (default), the rail starts empty and is
-  // seeded only with the project the user picks from the launch screen
-  // — additional projects must be added explicitly.
+  // When true (default), the rail rehydrates with the projects that were warm
+  // at last app close. When false, the rail starts empty and is seeded only
+  // with the project the user picks from the launch screen — additional
+  // projects must be added explicitly.
   restorePreviousProjectsOnLaunch?: boolean;
+  // User-picked emoji per project path, shown on the rail instead of the
+  // detected logo or initials.
+  projectRailIcons?: Record<string, string>;
 }
 
 /**
@@ -536,6 +539,8 @@ export interface WorkspaceState {
   remoteSessionDrafts?: Record<string, { text: string; options?: import("@nimbalyst/runtime/sync/types").RemoteTurnOptions; attachments: import("@nimbalyst/runtime/ai/server/types").ChatAttachment[] }>;
   /** Explicit Cloudflare choices for this project; authentication stays in Wrangler. */
   cloudflareSandboxSelection?: { profileName: string; accountId: string | null };
+  /** When the Personal Home page was seeded; set once so a removed Home stays removed. */
+  personalPagesHomeSeededAt?: number;
   workspacePath: string;
   /**
    * Additional top-level folders attached to this workspace, as absolute paths.
@@ -591,6 +596,8 @@ export interface WorkspaceState {
     // Stable first-class folder id most recently used. Null means Team root.
     lastSharedFolderId?: string | null;
   };
+  /** Pages-mode sidebar sections the user collapsed or expanded; unset = default. */
+  pagesSidebarCollapsed?: { team?: boolean; personal?: boolean };
   collabPendingUpdates?: Record<string, {
     mergedUpdateBase64: string;
     updatedAt: number;
@@ -979,6 +986,7 @@ function createDefaultWorkspaceState(workspacePath: string): WorkspaceState {
       expandedFolders: [],
       customFolders: [],
     },
+    pagesSidebarCollapsed: undefined,
     collabPendingUpdates: {},
     trackerSharingMigration: undefined,
     trackerSharingMigrationSeenAt: undefined,
@@ -3093,11 +3101,23 @@ export function setActiveProjectPath(path: string | null): void {
 }
 
 export function getRestorePreviousProjectsOnLaunch(): boolean {
-  return getAppStore().get('restorePreviousProjectsOnLaunch', false);
+  return getAppStore().get('restorePreviousProjectsOnLaunch', true);
 }
 
 export function setRestorePreviousProjectsOnLaunch(enabled: boolean): void {
   getAppStore().set('restorePreviousProjectsOnLaunch', enabled);
+}
+
+export function getProjectRailIcon(workspacePath: string): string | null {
+  return getAppStore().get('projectRailIcons', {})[workspacePath] ?? null;
+}
+
+/** Empty or null clears the override. */
+export function setProjectRailIcon(workspacePath: string, icon: string | null): void {
+  const icons = { ...getAppStore().get('projectRailIcons', {}) };
+  if (icon) icons[workspacePath] = icon;
+  else delete icons[workspacePath];
+  getAppStore().set('projectRailIcons', icons);
 }
 
 export function runMigrations(currentVersion: string): void {

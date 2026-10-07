@@ -6,6 +6,7 @@ export const isFullSuiteInvocation = (argv) => argv.join(' ') === fullSuiteInvoc
 
 export const scriptTests = [
   "scripts/__tests__/prepush-test-gate.test.mjs",
+  "scripts/__tests__/build-wiki-plugin.test.mjs",
   "scripts/__tests__/install-git-hooks.test.mjs",
   "scripts/__tests__/ensure-sandbox-dependencies.test.mjs",
   "scripts/__tests__/check-analytics-allowlist.test.mjs",
@@ -13,6 +14,7 @@ export const scriptTests = [
   "scripts/__tests__/check-identity-scopes.test.mjs",
   "scripts/__tests__/check-json-accessor-indexes.test.mjs",
   "scripts/__tests__/check-main-bundle-graph.test.mjs",
+  "scripts/__tests__/check-native-dialogs.test.mjs",
   "scripts/__tests__/check-push-authors.test.mjs",
   "scripts/__tests__/check-renderer-sync-sockets.test.mjs",
   "scripts/__tests__/check-sync-floating-promises.test.mjs",
@@ -47,7 +49,7 @@ export const tasks = {
     ...preparedTypecheck,
   ],
   'typecheck-ready': preparedTypecheck,
-  scripts: [['node', '--test', '--test-reporter=dot', ...scriptTests], ['node', 'scripts/check-ui-invariants.mjs']],
+  scripts: [['node', '--test', '--test-reporter=dot', ...scriptTests], ['node', 'scripts/check-ui-invariants.mjs'], ['node', 'scripts/check-native-dialogs.mjs']],
   sandbox: [['npm', 'run', 'test:cloudflare-sandbox']],
   'unit-build': [...workspaceDeps, ...bundleBuild],
   unit: [['npm', 'run', 'test:prepush']],

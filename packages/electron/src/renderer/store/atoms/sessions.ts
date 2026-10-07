@@ -19,6 +19,7 @@ import { atom, type Getter } from 'jotai';
 import { atomFamily } from '../debug/atomFamilyRegistry';
 import { store } from '@nimbalyst/runtime/store';
 import { ModelIdentifier, type ChatAttachment, type SessionData } from '@nimbalyst/runtime/ai/server/types';
+import { stripMcpPrefix } from '@nimbalyst/runtime/ai/server/interactivePromptTools';
 import type { SessionMeta } from '@nimbalyst/runtime';
 import deepEqual from 'fast-deep-equal';
 import { captureTranscriptMessages, reconcileTranscriptMessages } from '../transcriptReconciliation';
@@ -26,6 +27,7 @@ import { sessionLaunchCountsAtom } from './sessionLaunchCounts';
 import { sessionListMetadata } from './sessionListMetadata';
 import { workstreamStateAtom, setWorkstreamActiveChildAtom } from './workstreamState';
 import { aiInputHistoryAtom } from './aiInputUndo';
+import { sessionActivityIndexAtom } from './sessionActivity';
 
 // SessionMeta is imported from @nimbalyst/runtime (canonical type).
 // Re-export for consumers that import from the store.
@@ -331,9 +333,7 @@ const INTERACTIVE_PROMPT_TOOLS = new Set([
 // MCP tools arrive as `mcp__<server>__<toolName>` (server name may contain dashes).
 // Match the bare name first; if not found, peel off the MCP prefix and recheck.
 export function isInteractivePromptTool(toolName: string): boolean {
-  if (INTERACTIVE_PROMPT_TOOLS.has(toolName)) return true;
-  const match = toolName.match(/^mcp__[^_]+(?:_[^_]+)*__(.+)$/);
-  return !!match && INTERACTIVE_PROMPT_TOOLS.has(match[1]);
+  return INTERACTIVE_PROMPT_TOOLS.has(toolName) || INTERACTIVE_PROMPT_TOOLS.has(stripMcpPrefix(toolName));
 }
 
 /**
@@ -696,6 +696,12 @@ interface SessionUpdateFields extends Partial<SessionData> {
 
 const EMPTY_SESSION_TODOS: unknown[] = [];
 
+/** Update fields mirrored into sessionRegistryAtom by updateSessionStoreAtom. */
+const REGISTRY_UPDATE_FIELDS = [
+  'title', 'updatedAt', 'isArchived', 'isPinned', 'parentSessionId', 'worktreeId',
+  'provider', 'model', 'sessionType', 'uncommittedCount',
+] as const satisfies ReadonlyArray<keyof SessionUpdateFields>;
+
 /**
  * Unified session update atom.
  * SINGLE update point for all session metadata changes.
@@ -719,7 +725,10 @@ export const updateSessionStoreAtom = atom(
       set(sessionStoreAtom(sessionId), { ...current, ...normalizedUpdates });
     }
 
-    // 2. Always update registry with metadata fields
+    // 2. Update registry with metadata fields. Skip updates that carry none
+    // (tokenUsage arrives every assistant step): a new registry Map re-renders
+    // the session list and every session reference in open transcripts.
+    if (!REGISTRY_UPDATE_FIELDS.some(field => updates[field] !== undefined)) return;
     const registry = new Map(get(sessionRegistryAtom));
     const meta = registry.get(sessionId);
     if (meta) {
@@ -2124,6 +2133,21 @@ export const anySessionProcessingAtom = atom((get) => {
 export const anyPendingInteractivePromptAtom = atom((get) => {
   const sessions = get(sessionListAtom);
   return sessions.some((s) => get(sessionHasPendingInteractivePromptAtom(s.id)));
+});
+
+/**
+ * Map<workspacePath, count> of sessions waiting on an interactive prompt,
+ * across every project in the rail. `sessionListAtom` only holds the active
+ * project, so this walks the cross-workspace activity index instead.
+ */
+export const projectAwaitingInputCountAtom = atom((get) => {
+  const out = new Map<string, number>();
+  for (const [sessionId, path] of get(sessionActivityIndexAtom)) {
+    if (get(sessionHasPendingInteractivePromptAtom(sessionId))) {
+      out.set(path, (out.get(path) ?? 0) + 1);
+    }
+  }
+  return out;
 });
 
 /**

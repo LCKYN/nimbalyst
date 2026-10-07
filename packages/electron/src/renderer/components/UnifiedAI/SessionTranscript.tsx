@@ -105,6 +105,7 @@ import {
   loadInitialQueuedPrompts,
 } from '../../store';
 import { streamCompletionSignalAtom } from '../../store/atoms/sessionTranscript';
+import { sessionBackgroundTasksAtom } from '../../store/atoms/sessionBackgroundTasks';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom, nextOptimisticId } from '../../store/atoms/sessions';
 import { clearAIInputHistoryAtom } from '../../store/atoms/aiInputUndo';
 import {
@@ -130,11 +131,13 @@ import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAto
 import { supportsEffortLevel, supportsThinkingToggle, parseEffortLevel, resolveThinkingMode, type EffortLevel, type ThinkingMode } from '../../utils/modelUtils';
 import { buildPlanImplementationPrompt, resolvePlanFilePath } from '../../utils/pathUtils';
 import { resolveTranscriptClickPath } from '../../utils/resolveTranscriptClickPath';
+import { openAgentEditedPage } from '../../utils/agentEditedPage';
 import { autoCommitEnabledAtom, setAutoCommitEnabledAtom } from '../../store/atoms/autoCommitAtoms';
 import { diffPeekSizeAtom, setDiffPeekSizeAtom } from '../../store/atoms/diffPeekSizeAtoms';
 import { registerSessionWorkspace, loadInitialSessionFileState } from '../../store/listeners/fileStateListeners';
 import { sessionFileEditsAtom } from '../../store/atoms/sessionFiles';
 import { SESSION_PHASE_COLUMNS, setSessionPhaseAtom, type SessionPhase } from '../../store/atoms/sessionKanban';
+import { mergeRestoredPromptIntoDraft } from '../../../shared/restoredDraft';
 
 /**
  * Detect a metadata value that's the artifact of `{...stringValue, ...}` -
@@ -204,6 +207,7 @@ function makeOptimisticUserMessage(
     subagentId: null,
     mode,
     attachments,
+    optimistic: true,
   };
 }
 
@@ -368,6 +372,8 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
 }, ref) => {
   const posthog = usePostHog();
   const inputRef = useRef<AIInputRef>(null);
+  // Guards the await between Enter and the composer clearing against a second send.
+  const submittingRef = useRef(false);
   const transcriptPanelRef = useRef<{ scrollToMessage: (index: number) => void; scrollToTop: () => void }>(null);
   const loadToolCallDiffs = useCallback(
     (toolCallItemId: string, toolCallTimestamp?: number): Promise<ToolCallDiffLoadResult> =>
@@ -407,6 +413,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
   const [isArchived, setIsArchived] = useAtom(sessionArchivedAtom(sessionId));
   const [isProcessing, setIsProcessing] = useAtom(sessionProcessingAtom(sessionId));
   const hasPendingInteractivePrompt = useAtomValue(sessionHasPendingInteractivePromptAtom(sessionId));
+  const backgroundTasks = useAtomValue(sessionBackgroundTasksAtom(sessionId));
   const worktreeId = useAtomValue(sessionWorktreeIdAtom(sessionId));
   const hasSessionData = useAtomValue(sessionLoadedAtom(sessionId));
   // NOTE: deliberately NOT subscribing to sessionUpdatedAtAtom. updatedAt churns
@@ -1273,6 +1280,30 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
     const sessionRegistry = store.get(sessionRegistryAtom);
     message = expandSessionMentions(message, sessionRegistry);
 
+    // Record the prompt durably before the composer and its persisted draft
+    // are cleared. Setup before the provider logs the prompt can stall, and a
+    // quit during that stall used to lose the text. If this write fails, the
+    // draft is left alone and nothing is sent.
+    if (submittingRef.current) {
+      blocked('duplicate_prompt');
+      return;
+    }
+    submittingRef.current = true;
+    let submissionId: string;
+    try {
+      ({ submissionId } = await window.electronAPI.invoke('ai:recordPendingSubmission', sessionId, message) as { submissionId: string });
+    } catch (error) {
+      console.error('[SessionTranscript] Failed to record submission:', error);
+      updateSessionStore({
+        sessionId,
+        updates: { messages: [...messages, makeOptimisticError('Could not save your message, so it was not sent. Your text is still in the composer.')] },
+      });
+      blocked('submission_record_failed');
+      return;
+    } finally {
+      submittingRef.current = false;
+    }
+
     setLastSubmitAt(Date.now());
     setDraftInput('');
     setDraftAttachments([]);
@@ -1303,6 +1334,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
         attachments: attachments.length > 0 ? attachments : undefined,
         mode: overrideMode,
         inputType: 'user' as const,
+        submissionId,
       };
 
       await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);
@@ -1325,6 +1357,12 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
           messages: [...messages, userMessage, errorMessage],
         },
       });
+      // Give the text back so a failed send can be retried, keeping anything
+      // typed since. The `prev` form reads the live draft, not the one above.
+      setDraftInput(prev => mergeRestoredPromptIntoDraft(prev, message));
+      if (attachments.length > 0) {
+        setDraftAttachments(prev => (prev && prev.length > 0 ? prev : attachments));
+      }
       setIsProcessing(false);
     }
   }, [sessionId, sessionData, isLoading, getEffectiveDocumentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, setLastSubmitAt, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages, sessionHasMessages, startedCliSessionId, mode, onClearSession, onClearAgentSession, clearAIInputHistory, provider, recordClaudeActivity]);
@@ -2164,6 +2202,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
           await window.electronAPI.invoke('workspace:open-file', { workspacePath, filePath });
         }
       },
+      openPage: (uri: string) => openAgentEditedPage(uri, workspacePath || ''),
       trackEvent: (eventName: string, properties?: Record<string, unknown>) => {
         posthog?.capture(eventName, properties);
       },
@@ -2205,6 +2244,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
       retryAttachmentStaging: (...args) => liveHostRef.current!.retryAttachmentStaging!(...args),
       openAttachmentSettings: (...args) => liveHostRef.current!.openAttachmentSettings!(...args),
       openFile: (...args) => liveHostRef.current!.openFile(...args),
+      openPage: (...args) => liveHostRef.current!.openPage!(...args),
       trackEvent: (...args) => liveHostRef.current!.trackEvent(...args),
     };
 
@@ -2568,6 +2608,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
             promptAdditions={showPromptAdditions ? promptAdditions : null}
             currentTeammates={transcriptTeammates}
             waitingForNoun={waitingForNoun}
+            backgroundTasks={isProcessing && backgroundTasks?.length ? backgroundTasks : undefined}
             appStartTime={appStartTime ?? undefined}
             renderEmbeddedFile={renderEmbeddedFile}
             canEmbedFile={canEmbedFile}
@@ -2718,6 +2759,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
         onCancel={handleCancelQueuedPrompt}
         onEdit={handleEditQueuedPrompt}
         onSendNow={isLoading && !isClaudeCliTerminalSession(provider) ? handleSendNowQueuedPrompt : undefined}
+        blockedOnPrompt={isLoading && hasPendingInteractivePrompt}
       />
 
       {/* Note: All interactive prompts (ToolPermission, ExitPlanMode, AskUserQuestion) use inline widgets in transcript */}
@@ -2738,7 +2780,11 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
         enableSlashCommands={enableSlashCommands}
         onNavigateHistory={enableHistoryNavigation ? handleNavigateHistory : undefined}
         placeholder={
-          mode === 'chat'
+          // A prompt sent while the turn is blocked on a question queues behind
+          // it and does not run until the user responds or interrupts.
+          isLoading && hasPendingInteractivePrompt
+            ? "Respond to the prompt above first. Messages sent now will wait in the queue."
+            : mode === 'chat'
             ? "Ask a question. @ for files, @@ for sessions, / for commands"
             : enableSlashCommands
               ? "Type your message... (Enter to send, Shift+Enter for new line, @ for files, @@ for sessions, / for commands)"

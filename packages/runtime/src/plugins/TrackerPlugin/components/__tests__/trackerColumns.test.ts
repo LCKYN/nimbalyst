@@ -14,7 +14,7 @@ import {
 } from '../trackerColumns';
 import { resolveTrackerOrderingValue } from '../../models/trackerOrdering';
 import { globalRegistry } from '../../models';
-import type { TrackerDataModel } from '@nimbalyst/tracker-schema';
+import { emptyLabelRegistry, type TrackerDataModel } from '@nimbalyst/tracker-schema';
 import type { TrackerRecord } from '../../../../core/TrackerRecord';
 
 describe('trackerColumns', () => {
@@ -267,6 +267,13 @@ describe('type column identity and display', () => {
     globalRegistry.register(declaresNoIcon);
   });
 
+  it('shows a Title column for a custom type that declares no roles', () => {
+    globalRegistry.register({ ...declaresIcon, type: 'gadget', idPrefix: 'GAD', roles: undefined });
+
+    expect(resolveColumnsForType('gadget').find(column => column.id === 'title')?.role).toBe('title');
+    expect(getDefaultColumnConfig('gadget').visibleColumns).toContain('title');
+  });
+
   it('resolves a custom type icon from its own schema', () => {
     expect(getTypeIcon('incidentReview')).toBe('siren');
   });
@@ -303,5 +310,27 @@ describe('type column identity and display', () => {
     const switched = applyTypeColumnDisplay(columns, 'label');
 
     expect(switched.filter(c => c.id !== 'type')).toEqual(columns.filter(c => c.id !== 'type'));
+  });
+});
+
+describe('legacy qualified label values', () => {
+  const record = (fields: Record<string, unknown>) => ({
+    id: 'ent-1', primaryType: 'entity', typeTags: ['entity'], source: 'native', archived: false,
+    syncStatus: 'local', system: { workspace: '/ws', createdAt: '', updatedAt: '' }, fields,
+  }) as unknown as TrackerRecord;
+
+  it('shows a qualified property by its value, never the stored object', () => {
+    globalRegistry.setLabels({
+      labels: [],
+      properties: [{ id: 'flag', label: 'Flag', type: 'string', qualifiers: { rollout: { type: 'number' } } }],
+      claimProperties: {},
+    });
+    try {
+      expect(getCellValue(record({ flag: { value: 'new-editor', qualifiers: { rollout: 25 } } }), 'flag')).toBe('new-editor');
+      // An object field that is not a qualified property is left alone.
+      expect(getCellValue(record({ other: { value: 1 } }), 'other')).toEqual({ value: 1 });
+    } finally {
+      globalRegistry.setLabels(emptyLabelRegistry());
+    }
   });
 });
