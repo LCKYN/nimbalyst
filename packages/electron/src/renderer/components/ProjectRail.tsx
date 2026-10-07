@@ -37,6 +37,7 @@ import {
   isOpenProjectsAtCapAtom,
   addOpenProjectAtom,
   closeOpenProjectAtom,
+  moveOpenProjectAtom,
   type OpenProject,
 } from '../store/atoms/openProjects';
 import {
@@ -99,6 +100,10 @@ interface ProjectRailIconProps {
   onActivate: (path: string) => void;
   onClose: (project: OpenProject) => void;
   onContextMenu: (project: OpenProject, x: number, y: number) => void;
+  /** Drag-to-reorder: the rail tile being dragged, or null. */
+  draggingPath: string | null;
+  onDragStart: (path: string | null) => void;
+  onDrop: (targetPath: string) => void;
 }
 
 function ProjectRailIcon({
@@ -111,7 +116,13 @@ function ProjectRailIcon({
   onActivate,
   onClose,
   onContextMenu,
+  draggingPath,
+  onDragStart,
+  onDrop,
 }: ProjectRailIconProps) {
+  const [dragOver, setDragOver] = useState(false);
+  // Only rail tiles are drop targets for each other; ignore file drags.
+  const canDrop = draggingPath !== null && draggingPath !== project.path;
   // Hover tooltip via floating-ui. Renders through FloatingPortal so the
   // tooltip escapes the rail container's `overflow: hidden` clip — the
   // earlier CSS-only `:hover > .project-rail-tooltip` approach was clipped
@@ -148,7 +159,7 @@ function ProjectRailIcon({
     [onContextMenu, project]
   );
 
-  const className = isActive ? 'project-rail-item is-active' : 'project-rail-item';
+  const className = `project-rail-item${isActive ? ' is-active' : ''}${dragOver ? ' is-drag-over' : ''}`;
 
   // Per-project accent color, derived deterministically from the workspace
   // path so the rail icon matches the colored bar shown in the workspace
@@ -191,6 +202,25 @@ function ProjectRailIcon({
       ref={tooltipRefs.setReference}
       className={className}
       onContextMenu={handleContextMenu}
+      draggable
+      onDragStart={(event) => {
+        setTooltipOpen(false);
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+        onDragStart(project.path);
+      }}
+      onDragEnd={() => onDragStart(null)}
+      onDragOver={(event) => {
+        if (!canDrop) return;
+        event.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(event) => {
+        setDragOver(false);
+        if (!canDrop) return;
+        event.preventDefault();
+        onDrop(project.path);
+      }}
       data-testid="project-rail-item"
       data-project-path={project.path}
       style={{
@@ -259,6 +289,14 @@ export function ProjectRail() {
   const atCap = useAtomValue(isOpenProjectsAtCapAtom);
   const addProject = useSetAtom(addOpenProjectAtom);
   const closeProject = useSetAtom(closeOpenProjectAtom);
+  const moveProject = useSetAtom(moveOpenProjectAtom);
+  const [draggingPath, setDraggingPath] = useState<string | null>(null);
+  const handleDrop = useCallback((targetPath: string) => {
+    if (draggingPath) {
+      moveProject({ path: draggingPath, toIndex: openProjects.findIndex((p) => p.path === targetPath) });
+    }
+    setDraggingPath(null);
+  }, [draggingPath, moveProject, openProjects]);
   const activity = useAtomValue(globalSessionActivityAtom);
   const activitySummary = useAtomValue(projectActivitySummaryAtom);
   const awaitingCounts = useAtomValue(projectAwaitingInputCountAtom);
@@ -571,6 +609,9 @@ export function ProjectRail() {
               onActivate={handleActivate}
               onClose={handleClose}
               onContextMenu={handleContextMenu}
+              draggingPath={draggingPath}
+              onDragStart={setDraggingPath}
+              onDrop={handleDrop}
             />
           );
         })}
@@ -679,6 +720,25 @@ export function ProjectRail() {
             >
               Copy path
             </button>
+            {/* Keyboard alternative to drag-to-reorder. */}
+            {([['Move up', -1], ['Move down', 1]] as const).map(([label, step]) => {
+              const index = openProjects.findIndex((p) => p.path === menu.project.path);
+              const target = index + step;
+              if (target < 0 || target >= openProjects.length) return null;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  className="project-rail-context-menu-item"
+                  onClick={() => {
+                    closeMenu();
+                    moveProject({ path: menu.project.path, toIndex: target });
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
             <div className="project-rail-context-menu-divider" />
             <div className="project-rail-context-menu-heading">Icon</div>
             <div className="project-rail-icon-picker" data-testid="project-rail-icon-picker">
