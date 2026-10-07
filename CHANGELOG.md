@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 <!-- Bug fixes go here -->
 - An agent error no longer stays pinned at the bottom of the transcript after you send another message.
+- Sessions inside a workstream group now show the scheduled-prompt clock and the (!) error marker on their own rows.
 
 ### Removed
 <!-- Removed features go here -->

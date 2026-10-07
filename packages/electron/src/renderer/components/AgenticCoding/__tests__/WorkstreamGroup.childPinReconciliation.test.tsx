@@ -48,8 +48,17 @@ vi.mock('../../../store', () => {
     removeSessionShareAtom: setter(),
     shareKeysAtom: value(new Map()),
     buildShareUrl: vi.fn(),
+    sessionWakeupsAtom: (id: string) => value(
+      id === 'wakeup-child' ? [{ status: 'pending', fireAt: 0, reason: null }] : [],
+    ),
   };
 });
+
+vi.mock('../../../store/atoms/sessionTranscript', () => ({
+  sessionErrorNoticeAtom: (id: string) => ({
+    __testValue: id === 'error-child' ? { kind: 'error', message: 'boom' } : null,
+  }),
+}));
 
 vi.mock('../../../services/ErrorNotificationService', () => ({
   errorNotificationService: { showError: vi.fn() },
@@ -307,5 +316,19 @@ describe('expanded workstream child pin reconciliation', () => {
     ]);
 
     expect(workstreamChildrenNeedRefresh(cachedChildren, 2, registryAfterPin)).toBe(false);
+  });
+});
+
+describe('workstream child status markers', () => {
+  it('shows the scheduled-wakeup clock and the error marker on child rows', () => {
+    renderExpandedWorkstream([
+      session({ id: 'wakeup-child', title: 'Target' }),
+      session({ id: 'error-child', title: 'Sibling' }),
+    ], vi.fn());
+
+    const [wakeupRow, errorRow] = childRows();
+    expect(wakeupRow.querySelector('.workstream-session-item-status.wakeup [data-icon="schedule"]')).not.toBeNull();
+    expect(errorRow.querySelector('.workstream-session-item-status.error')?.getAttribute('title'))
+      .toBe('Agent stopped with an error: boom');
   });
 });

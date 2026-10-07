@@ -17,7 +17,10 @@ import {
   removeSessionShareAtom,
   shareKeysAtom,
   buildShareUrl,
+  sessionWakeupsAtom,
 } from '../../store';
+import { sessionErrorNoticeAtom } from '../../store/atoms/sessionTranscript';
+import { wakeupTooltip, errorNoticeTooltip } from './sessionStatusTooltips';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { WorktreeIcon } from '../common/WorktreeIcon';
 import { dialogRef, DIALOG_IDS } from '../../dialogs';
@@ -1008,8 +1011,10 @@ const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCo
   const hasAgentWakePending = useAtomValue(sessionAgentWakePendingAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
   const backgroundTasks = useAtomValue(sessionBackgroundTasksAtom(sessionId));
+  const wakeups = useAtomValue(sessionWakeupsAtom(sessionId));
+  const errorNotice = useAtomValue(sessionErrorNoticeAtom(sessionId));
 
-  // Priority: interactive prompt > processing > pending prompt > unread > uncommitted count
+  // Priority: interactive prompt > processing > pending prompt > scheduled wakeup > error > unread > uncommitted count
   if (hasPendingInteractivePrompt) {
     return (
       <div className="workstream-session-item-status waiting-for-input flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
@@ -1046,6 +1051,23 @@ const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCo
     return (
       <div className="workstream-session-item-status pending-prompt flex items-center justify-center text-[var(--nim-warning)]" title="Waiting for your response">
         <MaterialSymbol icon="help" size={12} />
+      </div>
+    );
+  }
+
+  if (wakeups.length > 0) {
+    const colorClass = wakeups[0].status === 'overdue' ? 'text-[var(--nim-warning)]' : 'text-[var(--nim-primary)]';
+    return (
+      <div className={`workstream-session-item-status wakeup flex items-center justify-center ${colorClass} opacity-80`} title={wakeupTooltip(wakeups)}>
+        <MaterialSymbol icon="schedule" size={12} />
+      </div>
+    );
+  }
+
+  if (errorNotice) {
+    return (
+      <div className="workstream-session-item-status error flex items-center justify-center text-[var(--nim-error)]" title={errorNoticeTooltip(errorNotice)}>
+        <MaterialSymbol icon="error" size={12} />
       </div>
     );
   }
