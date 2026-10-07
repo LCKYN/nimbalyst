@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The AI Usage Report has a new Sessions tab breaking down cost and tokens per session, grouped by phase or tag, split between input, output, main and sub-agent usage, sortable by any column with per-group totals, and each row opens its session.
 - The AI Usage Report opens in the main window from the sidebar, and scopes every panel to one workspace and a shared date range; hovering the activity heatmap reports that hour's activity and token usage; the Tools tab estimates tokens per tool and flags tools that fail often or return oversized results.
 - Project rail icons show which projects have sessions waiting for your answer, still running, or finished, and each project can use its logo or an emoji you pick instead of initials.
+- Drag projects in the project rail to reorder them.
 
 ### Changed
 <!-- Changes to existing functionality go here -->

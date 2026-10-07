@@ -24,8 +24,26 @@ import {
   flip,
   shift,
   size,
+  useMergeRefs,
   type VirtualElement,
 } from '@floating-ui/react';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type Modifier,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { clearWindowControls, getWindowControlsZones, windowControlsClearance } from '@nimbalyst/runtime/ui/floating/windowControlsClearance';
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
 import { OrgSwitcher } from './OrgSwitcher';
@@ -36,6 +54,7 @@ import {
   isOpenProjectsAtCapAtom,
   addOpenProjectAtom,
   closeOpenProjectAtom,
+  reorderOpenProjectsAtom,
   type OpenProject,
 } from '../store/atoms/openProjects';
 import {
@@ -49,6 +68,9 @@ import { errorNotificationService } from '../services/ErrorNotificationService';
 import './ProjectRail.css';
 
 const REVEAL_LABEL = getShowInFileBrowserLabel();
+
+// The rail is a single column; keep a dragged icon on it.
+const restrictToVerticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 });
 
 const PROJECT_ICON_CHOICES = [
   '😀', '🚀', '🔥', '⭐', '💡', '🧪', '🛠️', '📦',
@@ -104,6 +126,16 @@ function ProjectRailIcon({
   const { getReferenceProps: getTooltipRefProps, getFloatingProps: getTooltipFloatingProps } =
     useInteractions([tooltipHover]);
 
+  // Drag to reorder. The wrapper is both the sortable node and the keyboard
+  // activator, so Enter/Space on the inner buttons still click them instead
+  // of starting a keyboard drag.
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id: project.path });
+  const wrapperRef = useMergeRefs([tooltipRefs.setReference, setNodeRef, setActivatorNodeRef]);
+  // Routed through getReferenceProps so the drag listeners and the tooltip's
+  // hover handlers (both use onPointerDown) are chained, not overwritten.
+  const wrapperHandlers = getTooltipRefProps(listeners);
+
   const handleClick = useCallback(() => {
     onActivate(project.path);
   }, [onActivate, project.path]);
@@ -125,7 +157,7 @@ function ProjectRailIcon({
     [onContextMenu, project]
   );
 
-  const className = isActive ? 'project-rail-item is-active' : 'project-rail-item';
+  const className = `project-rail-item${isActive ? ' is-active' : ''}${isDragging ? ' is-dragging' : ''}`;
 
   // Per-project accent color, derived deterministically from the workspace
   // path so the rail icon matches the colored bar shown in the workspace
@@ -160,13 +192,18 @@ function ProjectRailIcon({
   // invalid HTML and confuses screen readers / keyboard navigation.
   return (
     <div
-      ref={tooltipRefs.setReference}
+      ref={wrapperRef}
       className={className}
       onContextMenu={handleContextMenu}
       data-testid="project-rail-item"
       data-project-path={project.path}
-      style={{ ['--rail-item-accent' as any]: accentColor }}
-      {...getTooltipRefProps()}
+      style={{
+        ['--rail-item-accent' as any]: accentColor,
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      {...attributes}
+      {...wrapperHandlers}
     >
       <button
         type="button"
@@ -200,7 +237,7 @@ function ProjectRailIcon({
       >
         ×
       </button>
-      {tooltipOpen && (
+      {tooltipOpen && !isDragging && (
         <FloatingPortal>
           <div
             ref={tooltipRefs.setFloating}
@@ -225,6 +262,7 @@ export function ProjectRail() {
   const atCap = useAtomValue(isOpenProjectsAtCapAtom);
   const addProject = useSetAtom(addOpenProjectAtom);
   const closeProject = useSetAtom(closeOpenProjectAtom);
+  const reorderProjects = useSetAtom(reorderOpenProjectsAtom);
   const activity = useAtomValue(globalSessionActivityAtom);
   const activitySummary = useAtomValue(projectActivitySummaryAtom);
   const awaitingCounts = useAtomValue(projectAwaitingInputCountAtom);
@@ -253,8 +291,35 @@ export function ProjectRail() {
     return () => observer.disconnect();
   }, [activePath, openProjects, isMultiProjectMode]);
 
+  // The distance constraint lets a plain click through to switch projects or
+  // hit the close button; only a real drag reorders.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const projectPaths = useMemo(() => openProjects.map((p) => p.path), [openProjects]);
+
+  // Releasing a drag over the icon still fires a click on it. Swallow that
+  // one click so dropping a project does not also switch to it.
+  const suppressClickRef = React.useRef(false);
+  const suppressNextClick = useCallback(() => {
+    suppressClickRef.current = true;
+    setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+  }, []);
+  const handleDragEnd = useCallback(
+    ({ active, over }: DragEndEvent) => {
+      suppressNextClick();
+      if (!over || over.id === active.id) return;
+      reorderProjects({ fromPath: String(active.id), toPath: String(over.id) });
+    },
+    [reorderProjects, suppressNextClick]
+  );
+
   const handleActivate = useCallback(
     (path: string) => {
+      if (suppressClickRef.current) return;
       if (path === activePath) return;
       // The atom subscriber in initOpenProjects() forwards the change to
       // the main process via `workspace:set-active`, so there is no direct
@@ -512,23 +577,33 @@ export function ProjectRail() {
       {/* Epic H1: org switcher sits above the project switcher. */}
       <OrgSwitcher />
       <div ref={projectListRef} className="project-rail-projects" data-testid="project-rail-projects">
-        {openProjects.map((project) => {
-          const activity = activitySummary.get(project.path);
-          return (
-            <ProjectRailIcon
-              key={project.path}
-              project={project}
-              isActive={project.path === activePath}
-              awaitingCount={awaitingCounts.get(project.path) ?? 0}
-              processingCount={activity?.processing ?? 0}
-              unreadCount={activity?.unread ?? 0}
-              iconVersion={iconVersions[project.path] ?? 0}
-              onActivate={handleActivate}
-              onClose={handleClose}
-              onContextMenu={handleContextMenu}
-            />
-          );
-        })}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis]}
+          onDragEnd={handleDragEnd}
+          onDragCancel={suppressNextClick}
+        >
+          <SortableContext items={projectPaths} strategy={verticalListSortingStrategy}>
+            {openProjects.map((project) => {
+              const activity = activitySummary.get(project.path);
+              return (
+                <ProjectRailIcon
+                  key={project.path}
+                  project={project}
+                  isActive={project.path === activePath}
+                  awaitingCount={awaitingCounts.get(project.path) ?? 0}
+                  processingCount={activity?.processing ?? 0}
+                  unreadCount={activity?.unread ?? 0}
+                  iconVersion={iconVersions[project.path] ?? 0}
+                  onActivate={handleActivate}
+                  onClose={handleClose}
+                  onContextMenu={handleContextMenu}
+                />
+              );
+            })}
+          </SortableContext>
+        </DndContext>
       </div>
       {openProjects.length > 0 && <div className="project-rail-divider" aria-hidden="true" />}
       <button

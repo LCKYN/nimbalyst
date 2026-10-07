@@ -159,6 +159,28 @@ export const closeOpenProjectAtom = atom(
   }
 );
 
+/**
+ * Move a project to where another one sits in the rail (drag-and-drop).
+ * Same semantics as dnd-kit's `arrayMove`: dragging down lands after the
+ * target, dragging up lands before it. No-op when either path is not in the
+ * rail or both are the same. The active project is unchanged.
+ */
+export const reorderOpenProjectsAtom = atom(
+  null,
+  (get, set, { fromPath, toPath }: { fromPath: string; toPath: string }) => {
+    if (fromPath === toPath) return;
+    const current = get(openProjectsAtom);
+    const from = current.findIndex((p) => p.path === fromPath);
+    const to = current.findIndex((p) => p.path === toPath);
+    if (from === -1 || to === -1) return;
+
+    const next = [...current];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    set(openProjectsAtom, next);
+  }
+);
+
 // ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
@@ -413,6 +435,11 @@ function schedulePersistOpenProjects(): void {
     const paths = projects.map((p) => p.path);
     window.electronAPI?.invoke?.('app:set-open-projects', paths).catch((err: unknown) => {
       console.error('[openProjects] Failed to persist openProjects:', err);
+    });
+    // The window state rebuilds the rail from registration order on a
+    // renderer reload; hand it the current order so a drag survives that.
+    window.electronAPI?.invoke?.('workspace:set-rail-order', { paths }).catch((err: unknown) => {
+      console.error('[openProjects] Failed to sync rail order:', err);
     });
   }, 300);
 }

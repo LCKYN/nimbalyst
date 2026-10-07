@@ -8,6 +8,7 @@ import {
   activeOpenProjectAtom,
   addOpenProjectAtom,
   closeOpenProjectAtom,
+  reorderOpenProjectsAtom,
   isOpenProjectsAtCapAtom,
   attachWorkspaceSwitchCleanup,
   resolveInitialOpenProjectsState,
@@ -161,6 +162,41 @@ describe('openProjects atoms', () => {
 
       expect(jotaiStore.get(openProjectsAtom).map((p) => p.path)).toEqual(['/ws/a']);
       expect(jotaiStore.get(activeWorkspacePathAtom)).toBe('/ws/a');
+    });
+  });
+
+  describe('reorderOpenProjectsAtom', () => {
+    const paths = () => jotaiStore.get(openProjectsAtom).map((p) => p.path);
+
+    beforeEach(() => {
+      jotaiStore.set(openProjectsAtom, ['/ws/a', '/ws/b', '/ws/c', '/ws/d'].map((p) => project(p)));
+      jotaiStore.set(activeWorkspacePathAtom, '/ws/b');
+    });
+
+    it('moves a project down to land after the target', () => {
+      jotaiStore.set(reorderOpenProjectsAtom, { fromPath: '/ws/a', toPath: '/ws/c' });
+      expect(paths()).toEqual(['/ws/b', '/ws/c', '/ws/a', '/ws/d']);
+    });
+
+    it('moves a project up to land before the target', () => {
+      jotaiStore.set(reorderOpenProjectsAtom, { fromPath: '/ws/d', toPath: '/ws/b' });
+      expect(paths()).toEqual(['/ws/a', '/ws/d', '/ws/b', '/ws/c']);
+    });
+
+    it.each([
+      ['an unknown source', '/ws/missing', '/ws/a'],
+      ['an unknown target', '/ws/a', '/ws/missing'],
+      ['the same path', '/ws/a', '/ws/a'],
+    ])('is a no-op for %s', (_label, fromPath, toPath) => {
+      const before = jotaiStore.get(openProjectsAtom);
+      jotaiStore.set(reorderOpenProjectsAtom, { fromPath, toPath });
+      expect(jotaiStore.get(openProjectsAtom)).toBe(before);
+    });
+
+    it('leaves the active project unchanged', () => {
+      jotaiStore.set(reorderOpenProjectsAtom, { fromPath: '/ws/b', toPath: '/ws/d' });
+      expect(paths()).toEqual(['/ws/a', '/ws/c', '/ws/d', '/ws/b']);
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBe('/ws/b');
     });
   });
 
