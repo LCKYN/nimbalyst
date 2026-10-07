@@ -65,9 +65,11 @@ const PROJECT_SYMBOL_CHOICES = [
 ];
 const SYMBOL_PREFIX = 'icon:';
 
-const PROJECT_COLOR_CHOICES = [
-  '#ffffff', '#111827', '#ef4444', '#f97316', '#eab308', '#22c55e',
-  '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899',
+// Lighter, base, and darker shades of the same hues, one row each.
+const PROJECT_COLOR_ROWS = [
+  ['#e5e7eb', '#9ca3af', '#fca5a5', '#fdba74', '#fde047', '#86efac', '#5eead4', '#93c5fd', '#c4b5fd', '#f9a8d4'],
+  ['#ffffff', '#111827', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899'],
+  ['#6b7280', '#374151', '#b91c1c', '#c2410c', '#a16207', '#15803d', '#0f766e', '#1d4ed8', '#6d28d9', '#be185d'],
 ];
 const COLOR_SLOTS = [
   { slot: 'fg', label: 'Icon & text' },
@@ -793,39 +795,45 @@ export function ProjectRail() {
             {COLOR_SLOTS.map(({ slot, label }) => (
               <div key={slot} className="project-rail-color-row" data-testid={`project-rail-color-${slot}`}>
                 <span className="project-rail-color-label">{label}</span>
-                <div className="project-rail-color-swatches">
-                  {PROJECT_COLOR_CHOICES.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className="project-rail-color-swatch"
-                      style={{ backgroundColor: color }}
-                      onClick={() => handleSetColor(menu.project, slot, color)}
-                      aria-label={`${label} ${color}`}
-                    />
-                  ))}
-                  <input
-                    type="color"
-                    className="project-rail-color-custom"
-                    defaultValue="#ffffff"
-                    onChange={(event) => {
-                      const color = event.target.value;
-                      if (colorTimer.current) clearTimeout(colorTimer.current);
-                      colorTimer.current = setTimeout(() => handleSetColor(menu.project, slot, color), 250);
-                    }}
-                    aria-label={`Custom ${label.toLowerCase()} color`}
-                    title="Custom color"
-                  />
-                  <button
-                    type="button"
-                    className="project-rail-color-reset"
-                    onClick={() => handleSetColor(menu.project, slot, null)}
-                    aria-label={`Reset ${label.toLowerCase()} color`}
-                    title="Reset"
-                  >
-                    <MaterialSymbol icon="format_color_reset" size={14} />
-                  </button>
-                </div>
+                {PROJECT_COLOR_ROWS.map((row, rowIndex) => (
+                  <div key={rowIndex} className="project-rail-color-swatches">
+                    {row.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className="project-rail-color-swatch"
+                        style={{ backgroundColor: color }}
+                        onClick={() => handleSetColor(menu.project, slot, color)}
+                        aria-label={`${label} ${color}`}
+                      />
+                    ))}
+                    {rowIndex === 1 && (
+                      <>
+                        <input
+                          type="color"
+                          className="project-rail-color-custom"
+                          defaultValue="#ffffff"
+                          onChange={(event) => {
+                            const color = event.target.value;
+                            if (colorTimer.current) clearTimeout(colorTimer.current);
+                            colorTimer.current = setTimeout(() => handleSetColor(menu.project, slot, color), 250);
+                          }}
+                          aria-label={`Custom ${label.toLowerCase()} color`}
+                          title="Custom color"
+                        />
+                        <button
+                          type="button"
+                          className="project-rail-color-reset"
+                          onClick={() => handleSetColor(menu.project, slot, null)}
+                          aria-label={`Reset ${label.toLowerCase()} color`}
+                          title="Reset"
+                        >
+                          <MaterialSymbol icon="format_color_reset" size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
               </div>
             ))}
             <div className="project-rail-context-menu-divider" />
