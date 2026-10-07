@@ -358,6 +358,7 @@ describe('aiServiceUtils', () => {
       ['session resume mismatch detected', 'resume_mismatch'],
       ['Stream closed unexpectedly', 'stream_closed'],
       ['ECONNREFUSED while contacting upstream', 'network'],
+      ['getaddrinfo ENOTFOUND api.anthropic.com', 'network'],
       ['Network error', 'network'],
       ['fetch failed', 'network'],
       ['Invalid API key supplied', 'auth'],

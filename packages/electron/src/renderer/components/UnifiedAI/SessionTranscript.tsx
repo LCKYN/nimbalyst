@@ -44,6 +44,7 @@ import { recordClaudeActivity } from '../../store/listeners/claudeUsageListeners
 import { recordCodexActivity } from '../../store/listeners/codexUsageListeners';
 import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
 import { WakeupBanner } from '../AIChat/WakeupBanner';
+import { UsageLimitContinueBar } from '../AIChat/UsageLimitContinueBar';
 import { McpLockdownBanner } from '../AIChat/McpLockdownBanner';
 import type { AIMode } from './ModeTag';
 // Note: ExitPlanMode, AskUserQuestion, and ToolPermission use inline widgets via InteractiveWidgetHost (in runtime package)
@@ -2837,6 +2838,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
           used to ride along with the Files Edited sidebar, so a collapsed sidebar
           hid the only feedback that a prompt had been scheduled (#1497). */}
       <WakeupBanner sessionId={sessionId} onEdit={handleEditScheduledPrompt} />
+      <UsageLimitContinueBar sessionId={sessionId} workspacePath={workspacePath} />
 
       {/* Queue display */}
       <PromptQueueList

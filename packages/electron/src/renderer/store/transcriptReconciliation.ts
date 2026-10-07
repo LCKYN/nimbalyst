@@ -92,6 +92,17 @@ export function reconcileTranscriptMessages(
       ),
   );
   const pending = [...optimistic.values()].filter((message) => {
+    // A renderer-only error copy is superseded once the user sends again: the
+    // persisted copy stays in history, so drop the one pinned at the bottom.
+    if (
+      message.isError &&
+      message.type === 'system_message' &&
+      ordered.some(
+        (persisted) =>
+          persisted.type === 'user_message' && messageTime(persisted) >= messageTime(message),
+      )
+    )
+      return false;
     const match = acknowledgements.findIndex(
       (persisted) =>
         persisted.type === message.type &&

@@ -41,6 +41,8 @@ export interface SessionMeta {
    * session list refresh so a stale in-memory atom gets corrected.
    */
   hasPendingInteractivePrompt?: boolean;
+  /** Last provider error (`metadata.errorNotice`), cleared when the next turn starts. */
+  errorNotice?: { kind: 'usage_limit' | 'network' | 'error'; message: string; resetsAt?: number };
   // Kanban board phase and tags (from metadata JSONB)
   phase?: string;
   tags?: string[];

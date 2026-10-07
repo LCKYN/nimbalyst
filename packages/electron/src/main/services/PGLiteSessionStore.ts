@@ -918,6 +918,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           // Replaces the legacy `metadata.pendingAskUserQuestion` flag,
           // which nothing was writing.
           hasPendingInteractivePrompt: !!metadata.hasPendingPrompt,
+          errorNotice: metadata.errorNotice && typeof metadata.errorNotice === 'object' ? metadata.errorNotice : undefined,
           externalSource: metadata.externalSource === 'claude-code' || metadata.externalSource === 'openai-codex'
             ? metadata.externalSource : undefined,
           externalLastActivityAt: typeof metadata.externalLastActivityAt === 'number' && Number.isFinite(metadata.externalLastActivityAt)

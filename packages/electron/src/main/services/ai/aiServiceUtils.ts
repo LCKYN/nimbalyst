@@ -518,7 +518,7 @@ export function categorizeAIError(error: any): string {
   const message = raw.toLowerCase();
   if (message.includes('session resume mismatch')) return 'resume_mismatch';
   if (message.includes('stream closed')) return 'stream_closed';
-  if (message.includes('network') || message.includes('econnrefused') || message.includes('fetch')) return 'network';
+  if (message.includes('network') || message.includes('econnrefused') || message.includes('enotfound') || message.includes('fetch')) return 'network';
   if (message.includes('api key') || message.includes('unauthorized') || message.includes('authentication')) return 'auth';
   if (message.includes('timeout') || message.includes('timed out')) return 'timeout';
   if (message.includes('rate limit') || message.includes('too many requests')) return 'rate_limit';
