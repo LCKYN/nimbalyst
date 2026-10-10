@@ -22,6 +22,7 @@ import {
   handleCollabIndexTool,
 } from '../collabIndexToolHandlers';
 import { routePageRead } from '../pageProjectReads';
+import { pageTreeListing } from '../../../../../../collab-client/src/docs/pageTreeListing';
 
 const TEAM = {
   orgId: 'org-1',
@@ -52,6 +53,40 @@ describe('page tree MCP tools', () => {
     expect(requestFromRenderer).toHaveBeenCalledWith(fakeWindow, 'mcp:listPages', expect.objectContaining({ section: 'personal', workspacePath: '/ws' }), expect.anything());
     expect(result?.isError).toBe(false);
     expect(result?.content[0].text).toContain('"title":"Ideas"');
+  });
+
+  it('pages listPages past the first 100 nodes with the cursor it returned', async () => {
+    const props = getCollabIndexToolSchemas().find((tool) => tool.name === 'listPages')!.inputSchema.properties;
+    for (const arg of ['cursor', 'root', 'kinds', 'limit']) expect(props, arg).toHaveProperty(arg);
+
+    const nodes = Array.from({ length: 250 }, (_, i) => ({ nodeId: `document:${i}`, kind: 'page', id: `${i}`, title: `Page ${i}`, depth: 0 }));
+    requestFromRenderer.mockImplementation(async (_window: unknown, _channel: string, payload: Record<string, unknown>) => ({
+      status: 'responded',
+      response: { success: true, section: 'personal', ...(await pageTreeListing(nodes as never, 'personal', payload, null)) },
+    }));
+    const first = JSON.parse((await handleCollabIndexTool('listPages', { section: 'personal' }, '/ws'))!.content[0].text!);
+    expect(first).toMatchObject({ total: 250, truncated: true });
+    expect(first.nodes).toHaveLength(100);
+    const second = JSON.parse((await handleCollabIndexTool('listPages', { section: 'personal', cursor: first.nextCursor }, '/ws'))!.content[0].text!);
+    expect(second.nodes[0].title).toBe('Page 100');
+    expect(second.nodes).toHaveLength(100);
+  });
+
+  it('warns when a created Team page links a file on this computer, and not for a Personal page or a web link', async () => {
+    const body = 'See [diagram](/Users/me/repo/docs/architecture.excalidraw), ![chart](docs/chart.png) and [the spec](https://console.nimbalyst.com/app/page/abc).';
+    requestFromRenderer.mockResolvedValue({ status: 'responded', response: { success: true, documentId: 'd1', uri: 'collab://org:o:doc:d1' } });
+    const team = await handleCollabIndexTool('createSharedDoc', { title: 'Architecture', initialContent: body }, '/ws');
+    expect(team?.isError).toBe(false);
+    expect(team?.content[0].text).toMatch(/Teammates cannot open it/);
+    expect(team?.content[0].text).toContain('/Users/me/repo/docs/architecture.excalidraw, docs/chart.png)');
+
+    requestFromRenderer.mockResolvedValue({ status: 'responded', response: { success: true, documentId: 'd2', uri: 'personal://d2' } });
+    const personal = await handleCollabIndexTool('createSharedDoc', { title: 'Notes', section: 'personal', initialContent: body }, '/ws');
+    expect(personal?.content[0].text).not.toMatch(/Teammates/);
+
+    requestFromRenderer.mockResolvedValue({ status: 'responded', response: { success: true, documentId: 'd3', uri: 'collab://org:o:doc:d3' } });
+    const web = await handleCollabIndexTool('createSharedDoc', { title: 'Links', initialContent: '[a](https://x.test/a.png) [b](#top) [c](mailto:a@b.test)' }, '/ws');
+    expect(web?.content[0].text).not.toMatch(/Teammates/);
   });
 
   it('moves typed pages and types, and turns a renderer refusal into a tool error', async () => {

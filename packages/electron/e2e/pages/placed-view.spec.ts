@@ -72,6 +72,7 @@ async function competitorRealtime(title: string): Promise<unknown> {
 }
 
 test.beforeAll(async () => {
+  test.setTimeout(60_000);
   workspaceDir = await createTempWorkspace();
   const trackersDir = path.join(workspaceDir, '.nimbalyst', 'trackers');
   await fs.mkdir(trackersDir, { recursive: true });
@@ -97,6 +98,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  test.setTimeout(60_000);
   await electronApp?.close();
   if (workspaceDir) await fs.rm(workspaceDir, { recursive: true, force: true });
 });
@@ -122,6 +124,8 @@ test('editing a cell in the placed table edits the item', async () => {
   const table = page.locator('[data-testid="tracker-saved-view-embed"]').first();
   const cell = table.locator('revogr-data [role="gridcell"]', { hasText: '0.3' }).first();
   await cell.dblclick();
+  // RevoGrid mounts and focuses its editor asynchronously after double-click.
+  await expect(table.locator('.tracker-grid-editor-input')).toBeFocused();
   await page.keyboard.press('Meta+A');
   await page.keyboard.type('0.45');
   await page.keyboard.press('Enter');
@@ -138,11 +142,77 @@ test('the slash menu places a view of a type, and the page stores its console li
   await editor.click();
   await page.keyboard.press('Meta+ArrowDown');
   await page.keyboard.press('Enter');
-  await page.keyboard.type('/Table: Competitors');
-  await page.keyboard.press('Enter');
+  await page.keyboard.type('/Competitors');
+  await page.getByRole('option').filter({ has: page.getByText('Table: Competitors', { exact: true }) }).click();
 
   await expect(editor.locator('[data-testid="tracker-saved-view-embed"]')).toBeVisible({ timeout: 10000 });
   await expect.poll(async () => fs.readFile(path.join(workspaceDir, 'empty.md'), 'utf8'), { timeout: 8000 })
     // A workspace file is not a team page, so the link is scoped `local`.
     .toContain('[Competitors](https://console.nimbalyst.com/app/view/type/competitor)');
+});
+
+
+test('view settings persist in markdown and new items are created from the embed', async () => {
+  await openFileFromTree(page, 'landscape.md');
+  const table = page.getByTestId('tracker-saved-view-embed').first();
+  await table.locator('revogr-header').getByText('Realtime', { exact: true }).click();
+  await expect.poll(async () => fs.readFile(path.join(workspaceDir, 'landscape.md'), 'utf8'), { timeout: 8000 }).toContain('sort=realtime:asc');
+  const settings = page.locator('.placed-view-settings').first();
+  await settings.getByRole('button', { name: /View settings/ }).click();
+  await page.getByRole('dialog', { name: 'View settings' }).getByRole('button', { name: /Layout/ }).click();
+  await page.getByTestId('tracker-display-view-mode-list').click();
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => fs.readFile(path.join(workspaceDir, 'landscape.md'), 'utf8'), { timeout: 8000 }).toContain('mode=list');
+  await openFileFromTree(page, 'empty.md');
+  await openFileFromTree(page, 'landscape.md');
+  const view = page.getByTestId('tracker-saved-view-embed').first();
+  await expect(view).toHaveAttribute('data-view-mode', 'list');
+  await view.getByRole('button', { name: '+ New', exact: true }).click();
+  await view.getByLabel('New item title').fill('New competitor from view');
+  await view.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(view).toContainText('New competitor from view');
+  await expect(view).toContainText('3 items');
+  // The full view retains the current definition and explores without editing the source.
+  const source = await fs.readFile(path.join(workspaceDir, 'landscape.md'), 'utf8');
+  await page.getByRole('button', { name: 'Open full view', exact: true }).first().click();
+  const fullView = page.getByTestId('type-page-table');
+  await expect(fullView).toContainText('Unsaved view');
+  await expect(fullView.getByTestId('tracker-saved-view-embed')).toHaveAttribute('data-view-mode', 'list');
+  await fullView.getByRole('button', { name: /View settings/ }).click();
+  await page.getByRole('dialog', { name: 'View settings' }).getByRole('button', { name: /Layout/ }).click();
+  await page.getByTestId('tracker-display-view-mode-table').click();
+  await page.keyboard.press('Escape');
+  await expect(fullView.getByTestId('tracker-saved-view-embed')).toHaveAttribute('data-view-mode', 'table');
+  expect(await fs.readFile(path.join(workspaceDir, 'landscape.md'), 'utf8')).toBe(source);
+  await fullView.getByRole('tab', { name: 'All', exact: true }).click();
+  await expect(fullView).not.toContainText('Unsaved view');
+});
+
+test('named type views survive reload and carry their definition when placed elsewhere', async () => {
+  const type = page.getByTestId('type-page-table');
+  await type.getByRole('button', { name: 'Add view', exact: true }).click();
+  await type.getByLabel('View name').fill('Research list');
+  await type.getByRole('button', { name: 'Save view', exact: true }).click();
+  await expect(type.getByRole('tab', { name: 'Research list', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await type.getByRole('button', { name: /View settings/ }).click();
+  await page.getByRole('dialog', { name: 'View settings' }).getByRole('button', { name: /Layout/ }).click();
+  await page.getByTestId('tracker-display-view-mode-list').click();
+  await page.keyboard.press('Escape');
+  await expect(type.getByTestId('tracker-saved-view-embed')).toHaveAttribute('data-view-mode', 'list');
+  await type.getByRole('button', { name: 'Place in page', exact: true }).click();
+  await expect(type.getByLabel('View link to copy')).toHaveValue(/mode=list/);
+  await type.getByRole('button', { name: 'Rename view', exact: true }).click();
+  await type.getByLabel('View name').fill('Research');
+  await type.getByRole('button', { name: 'Rename', exact: true }).click();
+  await expect(type.getByRole('tab', { name: 'Research', exact: true })).toBeVisible();
+  // Leave through the tab's existing save/flush lifecycle, then reload the real app.
+  await type.getByRole('tab', { name: 'All', exact: true }).click();
+  await expect.poll(() => page.evaluate(async workspace => {
+    const result = await (window as any).electronAPI.invoke('personal-pages:get-body', workspace, 'type-page:competitor');
+    return result?.content;
+  }, workspaceDir)).toContain('"name":"Research"');
+  await page.reload();
+  await expect(page.getByTestId('type-page-table').getByRole('tab', { name: 'Research', exact: true })).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+  await page.getByTestId('type-page-table').getByRole('tab', { name: 'Research', exact: true }).click();
+  await expect(page.getByTestId('type-page-table').getByTestId('tracker-saved-view-embed')).toHaveAttribute('data-view-mode', 'list');
 });

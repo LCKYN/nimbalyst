@@ -241,6 +241,7 @@ export interface CollabEditorMountOptions {
   onWriteRejected?(rejection: CollabEditorWriteRejection): void;
   onTermination?(termination: CollabEditorTermination): void;
   onReady?(handle: CollabEditorHandle): void;
+  onLexicalEditor?(editor: LexicalEditor | null): void;
   onError?(error: Error): void;
   /**
    * The document reached the Y.Doc but the Lexical binding threw while
@@ -345,15 +346,19 @@ export type BrowserPlacedViewRenderer = (view: {
   label: string;
   target: PlacedViewTarget;
   attrs: Readonly<Record<string, string>>;
+  onAttrsChange?: (patch: Readonly<Record<string, string | null>>) => void;
 }) => ReactNode | null;
 /** What a placed-view link shows: a type's items, or the team's marks. */
 export type PlacedViewTarget =
   | { kind: 'type'; typeId: string; scope?: { orgId: string; projectId: string } | 'local' }
   | { kind: 'marks'; marks: 'all' | 'decided' | 'open'; scope?: { orgId: string; projectId: string } | 'local' };
 export interface PlacedViewEmbedProps {
+  onOpenFullView?: (typeId: string, view: { label: string; attrs: Readonly<Record<string, string>> }) => void;
+  variant?: 'card' | 'page';
   target: PlacedViewTarget;
   label: string;
   attrs: Readonly<Record<string, string>>;
+  onAttrsChange?: (patch: Readonly<Record<string, string | null>>) => void;
   /** The scopes the host's items serve; a link naming any other shows its link instead. */
   reach?: { team: { orgId: string; projectId: string } | null; local: boolean };
   onOpenItem?: (itemId: string) => void;
@@ -394,6 +399,21 @@ export type ConsoleLinkOpener = (href: string) => boolean;
  * Personal page): routed in its own tab. Returns the uninstall.
  */
 export declare function setConsoleLinkOpener(next: ConsoleLinkOpener): () => void;
+/** Opens a team page by id; `newTab` is true for a Cmd/Ctrl or middle click. */
+export type PageReferenceOpener = (documentId: string, options: { newTab: boolean }) => void;
+/**
+ * How this host opens an `@` reference chip to a team page
+ * (`nimbalyst://doc/<id>`). Returns the uninstall.
+ */
+export declare function setPageReferenceOpener(next: PageReferenceOpener): () => void;
+/** Opens a relative file link (`Personas/CMO.md`) as written; `currentDocumentPath` is null in the browser. */
+export type WorkspaceFileLinkOpener = (rawHref: string, currentDocumentPath: string | null) => void;
+/**
+ * How this host opens a relative file link met in a document. Without one the
+ * editor swallows the click. Pass null to remove it.
+ */
+export declare function setWorkspaceFileLinkOpener(opener: WorkspaceFileLinkOpener | null): void;
+export { createNamedPageViewsController, type NamedPageViewsController } from './internal/runtime/src/editor/plugins/EmbedPlugin/namedPageViewsController';
 
 /** Page history: where the diff is in its change groups. */
 export interface DiffNavigationState {

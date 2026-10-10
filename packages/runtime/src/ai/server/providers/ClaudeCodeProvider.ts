@@ -50,6 +50,7 @@ import {
   CLAUDE_CODE_SAFE_FALLBACK_MODEL,
   baseContextWindowForVariant,
 } from '../../modelConstants';
+import { withClaudeCustomModels } from '../../claudeCustomModels';
 import type { InterruptTurnResult } from '../AIProvider';
 import { isBedrockToolSearchError } from '../utils/errorDetection';
 import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
@@ -592,8 +593,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // is a no-op — GitHub #825), but it stays defensive for any legacy variant.
     return resolveClaudeCodeModelVariant(this.config.model, CLAUDE_CODE_SAFE_FALLBACK_MODEL);
   }
-
-
 
   /**
    * The provider surface both epilogue paths share (see turnEpilogue.ts).
@@ -3525,7 +3524,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    * Get Claude Code models.
    * Returns standard models plus Sonnet 1M variant (access controlled by Anthropic).
    */
-  static async getModels(): Promise<AIModel[]> {
+  static async getModels(workspacePath?: string): Promise<AIModel[]> {
     const models: AIModel[] = [];
 
     // Add models in desired order
@@ -3556,7 +3555,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
     }
 
-    return models;
+    // User-defined gateway models from Claude settings `modelPicker`.
+    return withClaudeCustomModels('claude-code', models, workspacePath);
   }
 
   /**

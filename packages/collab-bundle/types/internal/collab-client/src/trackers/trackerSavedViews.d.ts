@@ -33,6 +33,16 @@ export interface SavedViewDefinition {
     sortBy: SortColumn;
     /** Flat list/table sort direction. */
     sortDirection: SortDirection;
+    /** Ordered field sorts for placed views; empty uses the legacy single sort. */
+    sortColumns?: Array<{
+        field: string;
+        direction: SortDirection;
+    }>;
+    /** Explicit timeline dates; absent preserves automatic date discovery. */
+    timelineFields?: {
+        start?: string;
+        end?: string;
+    };
     /** Genuine-open lookback in days; null means any time. */
     recentlyViewedDays: 7 | 30 | 90 | null;
     /**

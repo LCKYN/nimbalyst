@@ -15,11 +15,21 @@ import { resolveRoleFieldName } from '@nimbalyst/runtime/plugins/TrackerPlugin/t
 import type { TrackerGridDerivedColumn } from '../grid/TrackerGridSurface';
 import { typeWithSubtypes } from '../../docs/collabPageTree';
 import { LazyTrackerViewEmbed as TrackerViewEmbed } from '../embed/LazyTrackerViewEmbed';
+import type { NamedPageViewsController } from '@nimbalyst/runtime/editor/plugins/EmbedPlugin/namedPageViewsController';
+import type { PlacedViewScope } from '@nimbalyst/runtime/core/placedViewUrl';
+import { TypePageViews } from './TypePageViews';
+import type { PlacedViewHandoff } from './placedViewHandoff';
 import { createTypePageView } from '../embed/typePageView';
 import { createItemWhereResolver, type WherePage, type WherePlacement } from '../embed/typePageWhere';
 
 export interface TypePageTableProps {
   typeId: string;
+  /** Built by the host from its editor: this entry must not load the editor graph. */
+  viewsController?: NamedPageViewsController | null;
+  viewScope?: PlacedViewScope;
+  onPrepareViewsDocument?: () => Promise<void>;
+  temporaryView?: PlacedViewHandoff | null;
+  onClearTemporaryView?: () => void;
   /** The type's name, shown in Where for an item with no placement. */
   typeLabel: string;
   /** Shown in Where for an item at the root of its section ("Team", "Personal"). */
@@ -41,7 +51,7 @@ export function typePageTypeIds(typeId: string): string[] {
   });
 }
 
-export function TypePageTable({ typeId, typeLabel, rootLabel, itemPlacements, pages, itemTitle, onOpenItem }: TypePageTableProps): React.JSX.Element {
+export function TypePageTable({ typeId, typeLabel, rootLabel, itemPlacements, pages, itemTitle, onOpenItem, temporaryView, onClearTemporaryView, viewsController, viewScope, onPrepareViewsDocument }: TypePageTableProps): React.JSX.Element {
   const model = globalRegistry.get(typeId);
   const view = useMemo(() => createTypePageView(typeId), [typeId]);
   const typeIds = useMemo(() => typePageTypeIds(typeId), [typeId, model]);
@@ -55,10 +65,9 @@ export function TypePageTable({ typeId, typeLabel, rootLabel, itemPlacements, pa
 
   return (
     <div className="type-page-tab-table flex flex-col" data-testid="type-page-table">
-      <div className="type-page-tab-views flex items-center gap-1 border-b border-nim text-xs">
-        <span className="-mb-px border-b-2 border-[var(--nim-primary)] px-2.5 py-[7px] text-nim">All</span>
-      </div>
-      <TrackerViewEmbed view={view} variant="page" onOpenItem={onOpenItem} derivedColumns={derivedColumns} typeIds={typeIds} />
+      <TypePageViews typeId={typeId} controller={viewsController} scope={viewScope} temporaryView={temporaryView} onClearTemporaryView={onClearTemporaryView} onPrepareDocument={onPrepareViewsDocument} onOpenItem={onOpenItem}>
+        <TrackerViewEmbed view={view} variant="page" onOpenItem={onOpenItem} derivedColumns={derivedColumns} typeIds={typeIds} />
+      </TypePageViews>
     </div>
   );
 }

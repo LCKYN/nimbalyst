@@ -23,6 +23,7 @@ const { performance } = require('node:perf_hooks');
 const { serializeWorkerError } = require('./workerErrorSerialization');
 const { planInitFailureResponse } = require('./pgliteInitRecovery');
 const { runTransactionStatements } = require('./transactionStatements');
+const { LEGACY_SESSION_TYPES_SQL } = require('./legacySessionTypes');
 
 /**
  * The install's database root, or null when the spawner did not supply one.
@@ -2364,19 +2365,7 @@ class PGLiteWorker {
     // The old values were redundant with provider + mode columns.
     // New values describe what the session IS in the hierarchy.
     try {
-      await this.db.exec(`
-        -- Step 1: Mark workstream parents (sessions that have children pointing to them)
-        -- but only if they aren't already 'blitz' or 'voice'
-        UPDATE ai_sessions
-        SET session_type = 'workstream'
-        WHERE session_type NOT IN ('blitz', 'voice')
-          AND id IN (SELECT DISTINCT parent_session_id FROM ai_sessions WHERE parent_session_id IS NOT NULL);
-
-        -- Step 2: Everything else that isn't blitz, workstream, or voice becomes 'session'
-        UPDATE ai_sessions
-        SET session_type = 'session'
-        WHERE session_type NOT IN ('blitz', 'workstream', 'voice');
-      `);
+      await this.db.exec(LEGACY_SESSION_TYPES_SQL);
       console.log('[PGLite Worker] Migrated session_type to structural types (session/workstream/blitz)');
     } catch (error) {
       console.error('[PGLite Worker] Failed to migrate session_type:', error);
@@ -2390,45 +2379,8 @@ class PGLiteWorker {
       // Non-fatal
     }
 
-    // Remove accidental worktree workstreams: a worktree IS the workstream — the
-    // `worktrees` row is the container, and every session inside it is a flat
-    // sibling keyed by worktree_id. Older /launch-new-session and convert-to-
-    // workstream paths incorrectly created `session_type='workstream'` rows
-    // either inside a worktree (worktree_id set on the workstream) or as a
-    // hidden parent of worktree-resident children. These containers carry no
-    // user content (no messages of their own) — they exist only as a side
-    // effect of the bug — so we delete them outright rather than try to
-    // preserve them as flat sessions. The FK on parent_session_id is
-    // ON DELETE SET NULL, so children get auto-unparented (their worktree_id
-    // is unchanged), and the renderer's worktreeGroupsData re-groups them
-    // flat under the worktree.
-    //
-    // Safety guard: skip any workstream that somehow has its own messages.
-    // The bug should never have created one with messages, but a per-row
-    // check costs almost nothing and prevents accidental content loss on
-    // a stranger's database.
-    try {
-      await this.db.exec(`
-        DELETE FROM ai_sessions
-        WHERE session_type = 'workstream'
-          AND NOT EXISTS (
-            SELECT 1 FROM ai_agent_messages m WHERE m.session_id = ai_sessions.id
-          )
-          AND (
-            worktree_id IS NOT NULL
-            OR id IN (
-              SELECT DISTINCT parent_session_id
-              FROM ai_sessions
-              WHERE parent_session_id IS NOT NULL
-                AND worktree_id IS NOT NULL
-            )
-          );
-      `);
-      console.log('[PGLite Worker] Deleted accidental worktree workstreams (children auto-unparented via FK SET NULL)');
-    } catch (error) {
-      console.error('[PGLite Worker] Failed to delete worktree workstreams:', error);
-      // Non-fatal - bug only affects left-pane grouping, not data integrity
-    }
+    // Tree migration preserves every row. A worktree session may now have
+    // children, so the old empty-workstream deletion heuristic is retired.
 
     // Migration: Add file_timestamp column to ai_tool_call_file_edits
     try {
@@ -3303,6 +3255,19 @@ class PGLiteWorker {
       throw error;
     }
 
+    // Migration: a plain page's own fields (schema version 55).
+    // Mirror of SQLite migration 0052_personal_pages_fields.sql -- keep in sync.
+    // One column, IF NOT EXISTS, so rerunning it every launch is safe.
+    try {
+      await this.db.exec(`
+        ALTER TABLE personal_page_documents ADD COLUMN IF NOT EXISTS fields TEXT;
+      `);
+      console.log('[PGLite Worker] personal pages fields migration applied');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to apply the personal pages fields migration:', error);
+      throw error;
+    }
+
     // Migration: team-shared tracker saved views (schema version 28).
     // Mirror of SQLite migration 0028_tracker_shared_saved_views.sql.
     // Payload is stored as TEXT (not JSONB) so the row round-trips byte-for-byte
@@ -3498,8 +3463,8 @@ class PGLiteWorker {
       throw error;
     }
 
-    // Migration: estimated tokens per tool (schema version 52).
-    // Mirror of SQLite 0052_tool_usage_token_estimates.sql.
+    // Migration: estimated tokens per tool (schema version 55).
+    // Mirror of SQLite 0055_tool_usage_token_estimates.sql.
     try {
       await this.db.exec(`
         ALTER TABLE tool_usage_counters ADD COLUMN IF NOT EXISTS call_tokens BIGINT NOT NULL DEFAULT 0;

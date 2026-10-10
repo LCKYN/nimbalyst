@@ -14,12 +14,31 @@ import {
   movePageTreeNodeTool,
   renamePageTool,
   searchPagesTool,
+  setPageFieldsTool,
   setPageTypeTool,
   type PageTreeSection,
   type PageTreeToolEnv,
 } from '@nimbalyst/collab-client/docs/pageTreeToolCore';
 import type { PageSearchHit } from '@nimbalyst/collab-protocol';
 import { registerPageTreeToolHandlers } from '../pageTreeToolHandlers';
+import { importFileToPagesTool } from '../importFileToPagesTool';
+
+vi.mock('../../shareToTeamFlow', () => ({
+  resolveShareDescriptor: (name: string) => (name.endsWith('.excalidraw')
+    ? { ok: true, descriptor: { documentType: 'excalidraw', fileExtensions: ['.excalidraw'], defaultExtension: '.excalidraw' } }
+    : name.endsWith('.ts')
+      ? { ok: true, descriptor: { documentType: 'code', fileExtensions: ['.ts'], defaultExtension: '.ts' } }
+    : name.endsWith('.md')
+      ? { ok: true, descriptor: { documentType: 'markdown', fileExtensions: ['.md'], defaultExtension: '.md' } }
+      : { ok: false, reason: 'No collaborative document type is registered for this file.' }),
+  shareFileToTeam: vi.fn(),
+}));
+vi.mock('../../../components/ShareToTeamDialog/ShareToTeamDialog', () => ({
+  splitShareFileName: (fileName: string) => {
+    const dot = fileName.indexOf('.');
+    return { baseName: fileName.slice(0, dot), suffix: fileName.slice(dot) };
+  },
+}));
 
 const page = (documentId: string, title: string, parent: string | null = null, extra: Partial<SharedDocument> = {}): SharedDocument => ({
   documentId, title, teamProjectId: 'p1', documentType: 'markdown', createdBy: 'u', createdAt: 1, updatedAt: 1,
@@ -55,6 +74,7 @@ class FakeSession {
   removePage = (...args: unknown[]) => { this.calls.push(['removePage', ...args]); return this.outcome(); };
   pageRemovalCount = () => 0;
   updateDocumentTitle = async (...args: unknown[]) => { this.calls.push(['updateDocumentTitle', ...args]); return this.outcome(); };
+  updateDocumentFields = async (...args: unknown[]) => { this.calls.push(['updateDocumentFields', ...args]); return this.outcome(); };
   createFolder = async (name: string, parentId: string | null) => {
     this.calls.push(['createFolder', name, parentId]);
     this.documents.push(page(`new-${name}`, name, parentId));
@@ -112,6 +132,37 @@ function envFor(sessions: Partial<Record<PageTreeSection, FakeSession>>, overrid
 }
 
 describe('page tree agent tools', () => {
+  it('bounds large tree responses and pages without duplicates', async () => {
+    const session = new FakeSession(Array.from({ length: 205 }, (_, i) => page(`p-${i}`, `Page ${i}`)));
+    const env = envFor({ team: session });
+    const first = await listPagesTool(env, {});
+    expect(first.success).toBe(true);
+    if (!first.success) return;
+    expect(first.nodes).toHaveLength(100);
+    expect(first.truncated).toBe(true);
+    const second = await listPagesTool(env, { cursor: first.nextCursor });
+    expect(second.success).toBe(true);
+    if (!second.success) return;
+    const a = first.nodes as Array<{ nodeId: string }>;
+    const b = second.nodes as Array<{ nodeId: string }>;
+    expect(b).toHaveLength(100);
+    expect(b.every((node) => !a.some((before) => before.nodeId === node.nodeId))).toBe(true);
+    session.documents.push(page('new', 'A new page'));
+    expect(await listPagesTool(env, { cursor: second.nextCursor })).toMatchObject({ success: false, error: expect.stringMatching(/changed.*restart/i) });
+  });
+
+  it('inspects a subtree by depth and kind, with compact results and child counts', async () => {
+    const env = envFor({ team: tree() });
+    const result = await listPagesTool(env, { root: 'arch', maxDepth: 1, kinds: ['page'], projection: 'compact' });
+    expect(result).toMatchObject({ success: true, truncated: false, nextCursor: null });
+    if (!result.success) return;
+    expect((result.nodes as Array<{ id: string }>).map((node) => node.id)).toEqual(['arch', 'overview']);
+    expect(result.nodes).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'overview', childCount: 1, updatedAt: 1 })]));
+    expect((result.nodes as Array<object>).every((node) => !('link' in node))).toBe(true);
+    expect(await listPagesTool(env, { root: 'not-present' })).toMatchObject({ success: false });
+    expect(await listPagesTool(env, { kinds: ['typo'] })).toMatchObject({ success: false });
+  });
+
   it('lists pages, types and typed pages with their parents, order and uri', async () => {
     const result = await listPagesTool(envFor({ team: tree() }), { section: 'team' });
     expect(result.success).toBe(true);
@@ -251,6 +302,22 @@ describe('page tree agent tools', () => {
     expect(await searchPagesTool(envFor({ team: session }), { query: 'sync' })).toMatchObject({ success: false, error: expect.stringMatching(/unavailable/) });
   });
 
+  it('sets a plain page\'s fields as a patch, reports what the page keeps, and lists them', async () => {
+    const personal = new FakeSession([page('ideas', 'Ideas', null, { fields: { status: 'draft', owner: 'ana@example.com' } })]);
+    const env = envFor({ personal });
+    const set = await setPageFieldsTool(env, { section: 'personal', itemId: 'ideas', fields: { owner: null, status: 'shipped', tags: ['sync'] } });
+    expect(personal.calls).toEqual([['updateDocumentFields', 'ideas', { owner: null, status: 'shipped', tags: ['sync'] }]]);
+    // The invalid status is ignored, so the page keeps 'draft'.
+    expect(set).toEqual({ success: true, fields: { status: 'draft', tags: ['sync'] } });
+
+    const listed = await listPagesTool(env, { section: 'personal', projection: 'compact' }) as unknown as { nodes: Array<{ fields?: unknown }> };
+    expect(listed.nodes[0].fields).toEqual({ status: 'draft', owner: 'ana@example.com' });
+    expect(await setPageFieldsTool(env, { section: 'personal', itemId: 'type-page:module', fields: {} })).toMatchObject({ success: false });
+    personal.refuse = 'Page fields are not available in this section yet.';
+    expect(await setPageFieldsTool(env, { section: 'personal', itemId: 'ideas', fields: { status: 'current' } }))
+      .toMatchObject({ success: false, error: expect.stringMatching(/not available/) });
+  });
+
   it('works in the Personal section with no team, through the registered handler', async () => {
     const personal = new FakeSession([page('ideas', 'Ideas')]);
     const env = envFor({ personal });
@@ -270,5 +337,27 @@ describe('page tree agent tools', () => {
     expect(send).toHaveBeenCalledWith('r2', expect.objectContaining({ success: false, error: expect.stringMatching(/collaboration scope/) }));
     unsubscribe.forEach((fn) => fn());
     expect(listeners.size).toBe(0);
+  });
+});
+
+describe('importFileToPages', () => {
+  it('copies a drawing under a page by title through the share flow, and refuses what Pages cannot hold', async () => {
+    const share = vi.fn(async () => ({ status: 'shared' as const, documentId: 'doc-arch', orgId: 'org1', title: 'architecture', warnings: [] }));
+    const env = envFor({ team: tree() });
+    const result = await importFileToPagesTool(env, { filePath: '/repo/docs/architecture.excalidraw', folderPath: 'Architecture' }, share);
+    expect(result).toMatchObject({ success: true, documentId: 'doc-arch', uri: 'collab://org:org1:doc:doc-arch' });
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({
+      filePath: '/repo/docs/architecture.excalidraw',
+      openAfterCreate: false,
+      showNotifications: false,
+      answers: expect.objectContaining({ section: 'team', folderId: 'arch', sharedName: 'architecture.excalidraw' }),
+    }));
+
+    expect(await importFileToPagesTool(env, { filePath: '/repo/src/index.ts', section: 'personal' }, share))
+      .toMatchObject({ success: false, error: expect.stringMatching(/cannot hold index\.ts/) });
+    expect(await importFileToPagesTool(env, { filePath: 'docs/notes.md' }, share))
+      .toMatchObject({ success: false, error: expect.stringMatching(/absolute path/) });
+    expect(await importFileToPagesTool(env, { filePath: '/repo/model.stl' }, share)).toMatchObject({ success: false });
+    expect(share).toHaveBeenCalledTimes(1);
   });
 });

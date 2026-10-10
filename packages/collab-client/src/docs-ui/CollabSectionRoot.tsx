@@ -6,9 +6,18 @@
  */
 import React, { useMemo } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
-import { FloatingPortal, useFloatingMenu, virtualElement } from './primitives/useFloatingMenu';
+import { FloatingPortal, useFloatingMenu, virtualElement } from '../ui-primitives/useFloatingMenu';
 
 const MENU_ENTRY_CLASS = 'w-full flex items-center gap-2.5 px-3 py-1.5 rounded border-none bg-transparent cursor-pointer transition-colors text-left text-nim hover:bg-nim-hover';
+
+/** A host's own entry in a section menu, after New page and Place type... */
+export interface CollabSectionMenuItem {
+  /** Stable kebab-case marker, used as the entry's class. */
+  id: string;
+  label: string;
+  icon: string;
+  onSelect: () => void;
+}
 
 export const CollabSectionMenu: React.FC<{
   x: number;
@@ -16,8 +25,9 @@ export const CollabSectionMenu: React.FC<{
   onNewPage: () => void;
   /** Absent without tracker data (no types to place). */
   onPlaceType?: () => void;
+  extraItems?: readonly CollabSectionMenuItem[];
   onClose: () => void;
-}> = ({ x, y, onNewPage, onPlaceType, onClose }) => {
+}> = ({ x, y, onNewPage, onPlaceType, extraItems, onClose }) => {
   const reference = useMemo(() => virtualElement(x, y), [x, y]);
   const floating = useFloatingMenu({
     placement: 'right-start',
@@ -45,6 +55,20 @@ export const CollabSectionMenu: React.FC<{
             <span>Place type...</span>
           </button>
         )}
+        {extraItems?.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`collab-section-${item.id} ${MENU_ENTRY_CLASS}`}
+            onClick={() => {
+              onClose();
+              item.onSelect();
+            }}
+          >
+            <MaterialSymbol icon={item.icon} size={18} />
+            <span>{item.label}</span>
+          </button>
+        ))}
       </div>
     </FloatingPortal>
   );

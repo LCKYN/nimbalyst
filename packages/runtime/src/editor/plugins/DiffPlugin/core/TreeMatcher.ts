@@ -381,7 +381,7 @@ export class WindowedTreeMatcher {
       // heading: "MD Editor" won't match "Feature Requests" (0% text similarity)
       // listitem: "Three" won't match "undefined" (for nested list cases)
       // mermaid: content changes like "40" -> "60" should be detected as different
-      isTextual: (n) => n.type === 'text' || n.type === 'paragraph' || n.type === 'heading' || n.type === 'list' || n.type === 'listitem' || n.type === 'mermaid' || n.type === 'decision',
+      isTextual: (n) => n.type === 'text' || n.type === 'paragraph' || n.type === 'heading' || n.type === 'list' || n.type === 'listitem' || n.type === 'mermaid' || n.type === 'decision' || n.type === 'quadrant',
     });
 
     const diffs: NodeDiff[] = [];
@@ -457,6 +457,13 @@ export class WindowedTreeMatcher {
         const targetIdx = op.bPath[0];
 
         if (sourceIdx >= sourceNodes.length || targetIdx >= targetNodes.length) continue;
+
+        // TOPT and the text guideposts may choose different valid alignments.
+        // Combining them must still preserve order: crossing a guidepost
+        // turns a requested move into an unchanged node at its old position.
+        if ([...targetToSource].some(([target, source]) =>
+          (target < targetIdx && source >= sourceIdx)
+          || (target > targetIdx && source <= sourceIdx))) continue;
 
         // Dedupe equal/replace ops by (sourceIdx, targetIdx) pair. Forced
         // guidepost ops are prepended to TOPT's own ops, and they often

@@ -5,7 +5,7 @@
 
 import { createElement } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { trackerRecordToItem, type TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
 import { globalRegistry, type TrackerDataModel } from '@nimbalyst/tracker-schema';
 import {
@@ -15,6 +15,7 @@ import {
   type TrackerDataSource,
 } from '@nimbalyst/collab-client/trackers';
 import { TrackersUIProvider } from '../../TrackersUIProvider';
+import { useTrackerViewRows } from '../../useTrackerViewRows';
 import { TrackerViewEmbed } from '../TrackerViewEmbed';
 import { createTypePageView } from '../typePageView';
 import { PlacedViewEmbed } from '../PlacedViewEmbed';
@@ -83,6 +84,124 @@ afterAll(() => {
 });
 
 describe('TrackerViewEmbed', () => {
+  it('opens the explored definition full size without changing the source page', async () => {
+    const open = vi.fn();
+    render(<TrackersUIProvider dataSource={fakeSource()} identity={null}><PlacedViewEmbed target={{ kind: 'type', typeId: 'ev-target' }} label="Targets" attrs={{ custom: 'preserved' }} onOpenFullView={open} /></TrackersUIProvider>);
+    fireEvent.click(screen.getByRole('button', { name: /View settings/ }));
+    if (!screen.queryByTestId('tracker-display-view-mode-list')) fireEvent.click(screen.getByRole('button', { name: /Layout/ }));
+    fireEvent.click(screen.getByTestId('tracker-display-view-mode-list'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close view settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open full view' }));
+    expect(open).toHaveBeenCalledWith('ev-target', { label: 'Targets', attrs: { custom: 'preserved', mode: 'list' } });
+  });
+  it('navigates settings while patching only the edited properties, sorts and filters', async () => {
+    const change = vi.fn();
+    render(<TrackersUIProvider dataSource={fakeSource()} identity={null}><PlacedViewEmbed target={{ kind: 'type', typeId: 'ev-target' }} label="Targets" attrs={{ cols: 'title,realtime', sort: 'title:asc,realtime:desc', filter: 'title:=Braze', custom: 'keep' }} onAttrsChange={change} /></TrackersUIProvider>);
+    await screen.findByTestId('tracker-saved-view-embed');
+    fireEvent.click(screen.getByRole('button', { name: 'View settings' }));
+    fireEvent.click(screen.getByRole('button', { name: /Property visibility/ }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder Realtime' }), { key: 'ArrowUp' });
+    expect(change).toHaveBeenLastCalledWith({ cols: 'realtime,title' });
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Realtime' }));
+    expect(change).toHaveBeenLastCalledWith({ cols: 'title' });
+    fireEvent.click(screen.getByRole('button', { name: 'Back to view settings' }));
+    fireEvent.click(screen.getByRole('button', { name: /Sort/ }));
+    fireEvent.change(screen.getByLabelText('Sort direction 1'), { target: { value: 'desc' } });
+    expect(change).toHaveBeenLastCalledWith({ sort: 'title:desc,realtime:desc' });
+    fireEvent.click(screen.getByRole('button', { name: 'Back to view settings' }));
+    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+    fireEvent.change(screen.getByLabelText('Filter field'), { target: { value: 'realtime' } });
+    fireEvent.change(screen.getByLabelText('Filter operator'), { target: { value: '>' } });
+    fireEvent.change(screen.getByLabelText('Filter value'), { target: { value: '1' } });
+    // Moving from a number to text must discard the incompatible operator and draft value.
+    fireEvent.change(screen.getByLabelText('Filter field'), { target: { value: 'title' } });
+    expect((screen.getByLabelText('Filter value') as HTMLInputElement).value).toBe('');
+    fireEvent.change(screen.getByLabelText('Filter value'), { target: { value: 'A,B|C' } });
+    fireEvent.click(screen.getByRole('button', { name: /Add filter/ }));
+    expect(change).toHaveBeenLastCalledWith({ filter: 'title:=Braze,title:=A%2CB%7CC' });
+  });
+
+  it('routes native header sorting and resize through the shared view write-back', async () => {
+    const change = vi.fn();
+    render(<TrackersUIProvider dataSource={fakeSource()} identity={null}><PlacedViewEmbed target={{ kind: 'type', typeId: 'ev-target' }} label="Targets" attrs={{ cols: 'title,realtime', sort: 'realtime:desc', w: 'title:320' }} onAttrsChange={change} /></TrackersUIProvider>);
+    await screen.findByText('1 item');
+    const grid = document.querySelector('revo-grid')!;
+    fireEvent(grid, new CustomEvent('beforesorting', { bubbles: false, cancelable: true, detail: { column: { prop: 'realtime' } } }));
+    expect(change).toHaveBeenLastCalledWith({ sort: 'realtime:asc' });
+    fireEvent(grid, new CustomEvent('aftercolumnresize', { bubbles: true, detail: { 0: { prop: 'realtime', size: 180 } } }));
+    expect(change).toHaveBeenLastCalledWith({ w: 'title:320,realtime:180' });
+  });
+
+  it('fits an unsized table body to its rows, and a saved height overrides the fit', async () => {
+    const view = (attrs: Record<string, string>) => <TrackersUIProvider dataSource={fakeSource()} identity={null}><PlacedViewEmbed target={{ kind: 'type', typeId: 'ev-target' }} label="Targets" attrs={attrs} /></TrackersUIProvider>;
+    const { rerender } = render(view({}));
+    await screen.findByText('1 item');
+    const body = () => document.querySelector<HTMLElement>('[data-placed-view-body]')!;
+    // One row fits well under the old fixed 420px, so the body shrinks to its floor.
+    expect(body().style.height).toBe('120px');
+    rerender(view({ height: '300' }));
+    expect(body().style.height).toBe('300px');
+  });
+
+  it('sorts by subsequent fields on a tie without reversing descending results twice', () => {
+    const rows = [record('b', 'ev-target', { title: 'B', realtime: 2 }), record('a', 'ev-target', { title: 'A', realtime: 2 }), record('c', 'ev-target', { title: 'C', realtime: 1 })];
+    const { result } = renderHook(() => useTrackerViewRows(rows, { ...comparison.definition, ordering: 'realtime', sortColumns: [{ field: 'realtime', direction: 'desc' }, { field: 'title', direction: 'asc' }] }, { identity: null }), { wrapper: ({ children }) => <TrackersUIProvider dataSource={fakeSource()} identity={null}>{children}</TrackersUIProvider> });
+    expect(result.current.rows.map(row => row.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('creates the first item in an empty board lane with filter and lane defaults', async () => {
+    globalRegistry.register(model('ev-board', [{ name: 'title', type: 'string' }, { name: 'score', type: 'number' }, { name: 'stage', type: 'select', options: [{ value: 'ready', label: 'Ready' }] }]));
+    const source = fakeSource();
+    try {
+      render(<TrackersUIProvider dataSource={source} identity={null}><PlacedViewEmbed target={{ kind: 'type', typeId: 'ev-board' }} label="Board" attrs={{ mode: 'board', group: 'stage', filter: 'score:3' }} /></TrackersUIProvider>);
+      const add = await screen.findByRole('button', { name: '+ New' });
+      fireEvent.click(add);
+      fireEvent.change(screen.getByLabelText('New item title'), { target: { value: 'First' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+      await waitFor(() => expect(source.command).toHaveBeenCalledWith(expect.objectContaining({ type: 'create-item', item: expect.objectContaining({ title: 'First', customFields: expect.objectContaining({ stage: 'ready', score: 3 }) }) })));
+    } finally { act(() => globalRegistry.unregister('ev-board')); }
+  });
+
+  it('creates from the view through its datasource and retains a refused title for retry', async () => {
+    const source = fakeSource();
+    vi.mocked(source.command).mockResolvedValueOnce({ ok: true, result: { success: false, error: 'Disconnected' } }).mockResolvedValue({ ok: true, result: { success: true } });
+    render(<TrackersUIProvider dataSource={source} identity={null}><TrackerViewEmbed view={comparison} /></TrackersUIProvider>);
+    await screen.findByTestId('tracker-saved-view-embed');
+    fireEvent.click(screen.getByRole('button', { name: '+ New' }));
+    fireEvent.change(screen.getByLabelText('New item title'), { target: { value: 'New target' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Disconnected');
+    expect((screen.getByLabelText('New item title') as HTMLInputElement).value).toBe('New target');
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect((screen.getByLabelText('New item title') as HTMLInputElement).value).toBe(''));
+    expect(source.command).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'create-item', item: expect.objectContaining({ type: 'ev-target', title: 'New target' }) }));
+    const create = vi.mocked(source.command).mock.calls[0][0];
+    if (create.type !== 'create-item') throw new Error('Expected creation');
+    expect(create.item.creationRequestId).toBe(create.item.id);
+    expect(vi.mocked(source.command).mock.calls[0][0]).toEqual(vi.mocked(source.command).mock.calls[1][0]);
+  });
+
+  it('writes only the changed setting, while read-only view exploration stays temporary', async () => {
+    const onAttrsChange = vi.fn();
+    const source = fakeSource();
+    const view = (writer?: typeof onAttrsChange) => <TrackersUIProvider dataSource={source} identity={null}>
+      <PlacedViewEmbed target={{ kind: 'type', typeId: 'ev-target' }} label="Targets" attrs={{ custom: 'keep' }} onAttrsChange={writer} />
+    </TrackersUIProvider>;
+    const { rerender } = render(view(onAttrsChange));
+    await screen.findByTestId('tracker-saved-view-embed');
+    if (!screen.queryByRole('dialog', { name: 'View settings' })) fireEvent.click(screen.getByRole('button', { name: /View settings/ }));
+    if (!screen.queryByTestId('tracker-display-view-mode-list')) fireEvent.click(screen.getByRole('button', { name: /Layout/ }));
+    fireEvent.click(screen.getByTestId('tracker-display-view-mode-list'));
+    expect(onAttrsChange).toHaveBeenCalledWith({ mode: 'list' });
+    rerender(view());
+    if (!screen.queryByRole('dialog', { name: 'View settings' })) fireEvent.click(screen.getByRole('button', { name: /View settings/ }));
+    if (!screen.queryByTestId('tracker-display-view-mode-list')) fireEvent.click(screen.getByRole('button', { name: /Layout/ }));
+    fireEvent.click(screen.getByTestId('tracker-display-view-mode-list'));
+    expect(screen.getByTestId('tracker-saved-view-embed').dataset.viewMode).toBe('list');
+    expect(onAttrsChange).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Not saved: view only/)).toBeTruthy();
+  });
+
   it('draws the view in its own mode and follows item changes', async () => {
     const source = fakeSource();
     const onOpenAsTable = vi.fn();
@@ -196,6 +315,18 @@ describe('TrackerViewEmbed editing', () => {
 });
 
 describe('PlacedViewEmbed', () => {
+  it.each(['realtime', 'missing:yes', 'realtime:nope'])('shows an invalid-view message and no data for filter %s', async (filter) => {
+    render(
+      <TrackersUIProvider dataSource={fakeSource()} identity={null}>
+        <PlacedViewEmbed target={{ kind: 'type', typeId: 'ev-target' }} label="Targets" attrs={{ filter }} />
+      </TrackersUIProvider>,
+    );
+    const note = await screen.findByRole('alert');
+    expect(note.textContent).toContain('Invalid filter');
+    expect(note.textContent).toContain(filter.split(':')[0]);
+    expect(screen.queryByTestId('tracker-saved-view-embed')).toBeNull();
+  });
+
   it('draws a 2x2 of the type by two fields, with pinned points highlighted', async () => {
     render(
       <TrackersUIProvider dataSource={fakeSource()} identity={null}>

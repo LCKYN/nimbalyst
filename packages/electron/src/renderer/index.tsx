@@ -13,6 +13,7 @@ const isCaptureMode = new URLSearchParams(window.location.search).get('mode') ==
 import './devtools/installRenderProfiler';
 import { installRendererJankMonitor } from './devtools/rendererJankMonitor';
 import { installBodyOverflowMonitor } from './devtools/bodyOverflowMonitor';
+import { installUserTimingTrimmer } from './devtools/userTimingTrimmer';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -76,6 +77,7 @@ import {
   registerSettingsChangeListener,
 } from './store/atoms/settingAtomFamily';
 import { registerGutterCustomizationListener } from './store/listeners/gutterCustomizationListeners';
+import { registerDeveloperModeListener } from './store/listeners/developerModeListeners';
 import { waitForMaterialSymbols } from './utils/materialSymbolsReady';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
@@ -125,9 +127,11 @@ if (isCaptureMode) {
 // Logs `[PERF] Renderer jank` to main.log: long frames, slow keystrokes, slow commits.
 installRendererJankMonitor();
 
-// Dev only: warns when something is left in <body> outside the viewport.
+// Dev only: warns when something is left in <body> outside the viewport, and
+// clears the per-render measures React's dev build leaves in the timeline.
 if (process.env.NODE_ENV?.toLowerCase() === 'development') {
   installBodyOverflowMonitor();
+  installUserTimingTrimmer();
 }
 
 // Material Symbols uses text ligatures. Wait for the bundled font before any
@@ -206,6 +210,7 @@ await Promise.allSettled([
   }),
   initDeveloperFeatureSettings().then((settings) => {
     store.set(developerFeatureSettingsAtom, settings);
+    registerDeveloperModeListener();
   }),
   initExternalEditorSettings().then((settings) => {
     store.set(externalEditorSettingsAtom, settings);

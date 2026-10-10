@@ -23,6 +23,7 @@ import {
   type CrumbFolder,
   type CrumbItemPlacement,
   type CrumbPlacement,
+  type PageTreeAncestor,
   type TrackerPageCrumb,
 } from '@nimbalyst/collab-client/trackers-ui/page';
 import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
@@ -41,6 +42,11 @@ import { TrackerSavedDescription } from './TrackerSavedDescription';
 import { createCollectionItem } from './createCollectionItem';
 import { archiveTrackerItem } from '../../services/archiveTrackerItem';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
+import { useTypedPageMenuItems } from '../CollabMode/usePageMenuItems';
+import { editorExportMenuItems } from '../TabEditor/editorExport';
+import { openPageAncestor } from '../CollabMode/pageHeaderNavigation';
+import { TrackerCollabAvatars, TrackerCollabSyncDot } from './trackerCollabChrome';
+import { HeaderTableOfContents } from '../TabEditor/HeaderTableOfContents';
 
 // Moved to collab-client with the shared layout; re-exported for existing imports.
 export { crumbItemLookup, legacyDescriptionToRecover, trackerPageCrumb, trackerPageCrumbFolders, type TrackerPageCrumb } from '@nimbalyst/collab-client/trackers-ui/page';
@@ -81,7 +87,7 @@ function useTrackerPageCrumb(
   sharing: string,
   workspacePath: string,
   collabScope: CollabScope | undefined,
-): TrackerPageCrumb & { section: string | null } {
+): TrackerPageCrumb & { section: string | null; teamScope: CollabScope | null } {
   const personal = sharing === 'personal';
   const teamScope = useTeamCrumbScope(workspacePath, collabScope, !personal);
   const session = useMemo(
@@ -102,7 +108,7 @@ function useTrackerPageCrumb(
     sameTrackerPageCrumb,
   ), [itemId, typeId, session]);
   const crumb = useAtomValue(crumbAtom);
-  return useMemo(() => ({ ...crumb, section: personal ? 'Personal' : null }), [crumb, personal]);
+  return useMemo(() => ({ ...crumb, section: personal ? 'Personal' : null, teamScope }), [crumb, personal, teamScope]);
 }
 
 export interface TrackerPageViewProps {
@@ -178,6 +184,27 @@ export const TrackerPageView: React.FC<TrackerPageViewProps> = ({
   }, [itemId]);
 
   const crumb = useTrackerPageCrumb(itemId, item?.primaryType ?? '', body.sharing, workspacePath, collabScope);
+  const { teamScope } = crumb;
+  const personal = body.sharing === 'personal';
+  const collaborative = body.contentMode === 'collaborative';
+  const menuSession = personal ? getPersonalCollabDocsSession(workspacePath) : teamScope ? getElectronCollabDocsSession(teamScope) : null;
+  const exportItems = useMemo(() => editorExportMenuItems(body.recoveryEditor, localTitle || 'Untitled'), [body.recoveryEditor, localTitle]);
+  const typedPageMenuItems = useTypedPageMenuItems(personal ? 'personal' : 'team', itemId, menuSession, exportItems);
+  const headerBar = useMemo(() => ({
+    onOpenAncestor: (ancestor: PageTreeAncestor) => {
+      if (personal) openPageAncestor(ancestor, { personal: true, workspacePath });
+      else if (teamScope) openPageAncestor(ancestor, { personal: false, scope: teamScope });
+    },
+    // The same sync dot and presence a plain page shows next to its crumb.
+    status: collaborative ? (
+      <span className="flex items-center gap-2 px-1">
+        <TrackerCollabSyncDot itemId={itemId} />
+        <TrackerCollabAvatars itemId={itemId} />
+      </span>
+    ) : undefined,
+    actions: body.recoveryEditor ? <HeaderTableOfContents editor={body.recoveryEditor} /> : undefined,
+    menuItems: typedPageMenuItems,
+  }), [personal, teamScope, workspacePath, collaborative, itemId, body.recoveryEditor, typedPageMenuItems]);
 
   const handleCreateCollection = useCallback(
     (title: string, type: string) => createCollectionItem({ workspacePath, title, type }),
@@ -254,6 +281,7 @@ export const TrackerPageView: React.FC<TrackerPageViewProps> = ({
       onOpenItem={onOpenItem}
       onShowHistory={handleShowHistory}
       onArchive={editable ? handleArchive : undefined}
+      headerBar={headerBar}
     />
   );
 };

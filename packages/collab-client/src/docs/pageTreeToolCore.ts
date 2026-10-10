@@ -2,7 +2,7 @@
  * Agent tools for the one page tree (Pages mode), for the Team and the
  * Personal section alike: list the tree, create a page under a page or a typed
  * page, move or reorder pages, typed pages and placed types, rename, delete,
- * and Set type.
+ * Set type, and a plain page's own fields.
  *
  * Every structural write goes through the same planner the sidebar's drag and
  * drop uses (`collabPageTree`), so an agent gets the same cycle refusals
@@ -17,16 +17,20 @@
  * session's Jotai-held type placements are read through the env.
  */
 import {
+  applyPageFieldsPatch,
   buildConsoleLink,
+  normalizePageFields,
   pageSearchMatches,
   pageSearchQueryTerms,
   type ConsoleLinkScope,
   type ListPagesResult,
+  type PageFields,
   type PageTreeNodeSummary,
   type SearchPagesResult,
   type SearchPagesResultEntry,
 } from '@nimbalyst/collab-protocol';
 import { mergePageSearchHits, nameTypedHits, pageSearchTitleHits } from './pageSearch';
+import { pageTreeListing } from './pageTreeListing';
 
 // For a worker session's `searchPages`; `pageSearch.ts` has no package entry of its own.
 export { searchSectionPages } from './pageSearch';
@@ -226,19 +230,29 @@ function consoleScopeOf(context: TreeContext): ConsoleLinkScope | null {
   return projectId ? { orgId: context.session.scope.orgId, projectId } : null;
 }
 
+function pageFieldsOf(document: SharedDocument): { fields?: PageFields } {
+  const fields = normalizePageFields(document.fields);
+  return Object.keys(fields).length > 0 ? { fields } : {};
+}
+
 function describeNode(context: TreeContext, env: PageTreeToolEnv, node: CollabTreeNode, depth: number): PageTreeNodeSummary | null {
   const parentNodeId = context.parents.get(node.id)?.id ?? null;
   const scope = consoleScopeOf(context);
+  const childCount = childrenOf(node).length;
   if (node.type === 'document') {
     return {
       nodeId: node.id,
       kind: 'page',
+      childCount,
+      updatedAt: node.document.updatedAt,
+      ...(node.document.hasContent !== undefined ? { hasContent: node.document.hasContent } : {}),
       id: node.document.documentId,
       title: pageDisplayName(node.document.title, node.document.documentType),
       parentNodeId,
       depth,
       sortOrder: node.document.sortOrder ?? null,
       uri: env.pageUri(context.section, node.document.documentId),
+      ...pageFieldsOf(node.document),
       ...(scope ? { link: buildConsoleLink({ kind: 'page', scope, pageId: node.document.documentId }) } : {}),
     };
   }
@@ -247,6 +261,7 @@ function describeNode(context: TreeContext, env: PageTreeToolEnv, node: CollabTr
     return {
       nodeId: node.id,
       kind: 'typedPage',
+      childCount,
       id: node.itemId,
       ...(item?.issueKey ? { issueKey: item.issueKey } : {}),
       typeId: node.typeId,
@@ -262,6 +277,7 @@ function describeNode(context: TreeContext, env: PageTreeToolEnv, node: CollabTr
     return {
       nodeId: node.id,
       kind: 'type',
+      childCount,
       id: node.typeId,
       title: node.name,
       parentNodeId,
@@ -276,8 +292,8 @@ function describeNode(context: TreeContext, env: PageTreeToolEnv, node: CollabTr
   return null;
 }
 
-export async function listPagesTool(env: PageTreeToolEnv, args: Record<string, unknown>): Promise<PageTreeToolResult> {
-  const context = await readTree(env, sectionOf(args.section));
+/** Internal complete tree, also used by search so public pagination cannot hide hits. */
+function describeTree(context: TreeContext, env: PageTreeToolEnv): PageTreeNodeSummary[] {
   const nodes: PageTreeNodeSummary[] = [];
   const walk = (list: CollabTreeNode[], depth: number) => {
     for (const node of list) {
@@ -287,12 +303,27 @@ export async function listPagesTool(env: PageTreeToolEnv, args: Record<string, u
     }
   };
   walk(context.tree, 0);
+  return nodes;
+}
+
+export async function listPagesTool(env: PageTreeToolEnv, args: Record<string, unknown>): Promise<PageTreeToolResult> {
+  const context = await readTree(env, sectionOf(args.section));
+  let root: string | null = null;
+  if (args.root !== undefined) {
+    if (typeof args.root !== 'string' || !(root = resolveNodeRef(env, context, args.root))) return fail('No such subtree in this Wiki section.');
+  }
+  let listing;
+  try {
+    listing = await pageTreeListing(describeTree(context, env), JSON.stringify([context.section, consoleScopeOf(context)]), args, root);
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : 'Could not list pages.');
+  }
   const scope = consoleScopeOf(context);
   const result: ListPagesResult = {
     section: context.section,
     consoleScope: scope,
     ...(scope ? { openMarksViewLink: buildConsoleLink({ kind: 'view', scope, view: { kind: 'marks', marks: 'open' } }) } : {}),
-    nodes,
+    ...listing,
   };
   return { success: true, ...result };
 }
@@ -448,6 +479,26 @@ export async function renamePageTool(env: PageTreeToolEnv, args: Record<string, 
   return settled(context.session.updateDocumentTitle(id, newName), 'rename');
 }
 
+/**
+ * `setPageFields`: a patch of a plain page's own fields. The answer is the
+ * fields the page has after the write, so an agent sees a value that did not
+ * validate (and was ignored) without listing the tree again.
+ */
+export async function setPageFieldsTool(env: PageTreeToolEnv, args: Record<string, unknown>): Promise<PageTreeToolResult> {
+  const id = typeof args.itemId === 'string' ? args.itemId : '';
+  const patch = args.fields && typeof args.fields === 'object' && !Array.isArray(args.fields)
+    ? args.fields as Record<string, unknown>
+    : null;
+  if (!id || !patch) return fail('setPageFields needs itemId and a fields object.');
+  const context = await readTree(env, sectionOf(args.section));
+  const page = findPage(context, id);
+  if (!page || isTypePageDocumentId(id)) return fail(`No plain page "${id}" in the ${context.section} section. Set a typed page's fields with tracker_update.`);
+  if (!context.session.updateDocumentFields) return fail(`The ${context.section} section cannot store page fields.`);
+  const result = await settled(context.session.updateDocumentFields(id, patch), 'field change');
+  // Every store applies the patch with the same function, so this is what it kept.
+  return result.success ? { success: true, fields: applyPageFieldsPatch(page.fields, patch) } : result;
+}
+
 export async function deletePageTool(env: PageTreeToolEnv, args: Record<string, unknown>): Promise<PageTreeToolResult> {
   const id = typeof args.itemId === 'string' ? args.itemId : '';
   if (!id) return fail('Delete needs itemId.');
@@ -497,11 +548,10 @@ export async function searchPagesTool(env: PageTreeToolEnv, args: Record<string,
   const section: PageTreeSection = args.section === 'personal' ? 'personal' : 'team';
   const limit = typeof args.limit === 'number' ? args.limit : undefined;
 
-  const listed = await listPagesTool(env, { section });
-  if (!listed.success) return listed;
-  const { nodes } = listed as unknown as ListPagesResult & { success: true };
-  const session = await env.session(section);
-  if (!session.searchPages) return { success: false, error: 'This Pages section cannot search page text.' };
+  const context = await readTree(env, section);
+  const nodes = describeTree(context, env);
+  const session = context.session;
+  if (!session.searchPages) return { success: false, error: 'This Wiki section cannot search page text.' };
   // Only the types the tree shows: a typed page it would drop must not use up the limit.
   const typeIds = [...new Set(nodes.flatMap((node) => (node.kind === 'typedPage' ? [node.typeId] : [])))];
   const found = await session.searchPages({ query, limit, typeIds });

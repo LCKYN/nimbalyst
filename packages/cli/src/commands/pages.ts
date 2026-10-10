@@ -1,5 +1,5 @@
 /**
- * `nim pages ...`: the team's Nimbalyst Pages from a shell, through the same
+ * `nim wiki ...` on the team wiki (routing in commands/wikiLocal.ts): the team's Nimbalyst Wiki from a shell, through the same
  * Pages tools a terminal agent calls on the sync server's `/mcp` (collab-protocol
  * `pageToolContract.ts`). One verb per tool; `status`, `bind`,
  * `create-project` and `pin` (target resolution and the repo binding) live in
@@ -37,6 +37,7 @@ export const PAGES_VERBS = {
   rename: 'renameSharedItem',
   delete: 'deleteSharedItem',
   'set-type': 'setPageType',
+  'set-fields': 'setPageFields',
   members: 'findOrgMembers',
   types: 'tracker_list_types',
   'define-type': 'tracker_define_type',
@@ -60,7 +61,7 @@ const TEAM = { section: 'team' } as const;
 
 function operandAt(args: ParsedArgs, index: number, what: string): string {
   const value = args.positionals[index];
-  if (!value) throw usageError(`'nim pages ${args.verb}' requires ${what}.`);
+  if (!value) throw usageError(`'nim wiki ${args.verb}' requires ${what}.`);
   return value;
 }
 
@@ -93,7 +94,7 @@ function replacements(args: ParsedArgs): Array<{ oldText: string; newText: strin
   }
   const olds = flagList(args, 'old');
   const news = flagList(args, 'new');
-  if (olds.length === 0) throw usageError(`'nim pages edit' requires --old TEXT --new TEXT (repeatable) or --replacements-file F.`);
+  if (olds.length === 0) throw usageError(`'nim wiki edit' requires --old TEXT --new TEXT (repeatable) or --replacements-file F.`);
   if (olds.length !== news.length) throw usageError('Pass one --old and one --new per replacement, in the same order.');
   return olds.map((oldText, i) => ({ oldText, newText: news[i]! }));
 }
@@ -150,7 +151,7 @@ const BUILDERS: Record<ToolVerb, (args: ParsedArgs) => Record<string, unknown>> 
   'create-folder': (args) => ({ ...TEAM, name: operandAt(args, 0, 'a name'), ...parentArgs(args, 'parentFolderId') }),
   move: (args) => {
     const kind = flagStr(args, 'kind');
-    if (!kind) throw usageError(`'nim pages move' requires --kind page|item|type.`);
+    if (!kind) throw usageError(`'nim wiki move' requires --kind page|item|type.`);
     return {
       ...TEAM,
       itemId: operandAt(args, 0, 'a page id, typed page key or type id'),
@@ -165,11 +166,25 @@ const BUILDERS: Record<ToolVerb, (args: ParsedArgs) => Record<string, unknown>> 
   delete: (args) => {
     const kind = flagStr(args, 'kind');
     if (kind !== 'doc' && kind !== 'folder') {
-      throw usageError(`'nim pages delete' requires --kind doc (a page with no children) or folder (the page and everything under it).`);
+      throw usageError(`'nim wiki delete' requires --kind doc (a page with no children) or folder (the page and everything under it).`);
     }
     return { ...TEAM, itemId: operandAt(args, 0, 'a page id'), kind };
   },
   'set-type': (args) => ({ ...TEAM, pageId: operandAt(args, 0, 'a page id'), typeId: operandAt(args, 1, 'a type id') }),
+  'set-fields': (args) => {
+    const fields: Record<string, unknown> = {};
+    for (const name of ['owner', 'status', 'summary'] as const) {
+      const value = flagStr(args, name);
+      if (value !== undefined) fields[name] = value;
+    }
+    const tags = flagList(args, 'tag');
+    if (tags.length) fields.tags = tags;
+    for (const name of flagList(args, 'clear')) fields[name] = null;
+    if (Object.keys(fields).length === 0) {
+      throw usageError(`'nim wiki set-fields' requires --owner, --status, --summary, --tag or --clear <field>.`);
+    }
+    return { ...TEAM, itemId: operandAt(args, 0, 'a page id'), fields };
+  },
   search: (args) => ({ ...TEAM, query: operandAt(args, 0, 'a query'), limit: flagInt(args, 'limit') }),
   members: (args) => ({ query: args.positionals[0] }),
   types: (args) => ({ search: flagStr(args, 'search') }),
@@ -178,7 +193,7 @@ const BUILDERS: Record<ToolVerb, (args: ParsedArgs) => Record<string, unknown>> 
     const predicatesFile = flagStr(args, 'predicates-file');
     const remove = flagList(args, 'remove-predicate');
     if (!file && !predicatesFile && remove.length === 0) {
-      throw usageError(`'nim pages define-type' requires -f <schema.yaml|.json>, --predicates-file <file>, or --remove-predicate <id>.`);
+      throw usageError(`'nim wiki define-type' requires -f <schema.yaml|.json>, --predicates-file <file>, or --remove-predicate <id>.`);
     }
     return {
       schema: file ? loadTypeSchema(file).schema : undefined,
@@ -217,15 +232,16 @@ const BUILDERS: Record<ToolVerb, (args: ParsedArgs) => Record<string, unknown>> 
   },
   comments: (args) => {
     const pages = flagList(args, 'page');
-    if (pages.length === 0) throw usageError(`'nim pages comments' requires --page <uri> (repeatable).`);
+    if (pages.length === 0) throw usageError(`'nim wiki comments' requires --page <uri> (repeatable).`);
     return { kinds: ['comment'], pages, query: flagStr(args, 'query'), limit: flagInt(args, 'limit') };
   },
 };
 
 export function pagesToolCall(args: ParsedArgs): PagesToolCall {
-  const verb = args.verb ?? '';
+  // `ls` is `list`, as on the local wiki.
+  const verb = args.verb === 'ls' ? 'list' : (args.verb ?? '');
   const build = (BUILDERS as Record<string, (a: ParsedArgs) => Record<string, unknown>>)[verb];
-  if (!build) throw usageError(`Unknown 'nim pages' subcommand '${verb}'. Run 'nim --help' for the list.`);
+  if (!build) throw usageError(`Unknown 'nim wiki' subcommand '${verb}'. Run 'nim --help' for the list.`);
   return { tool: PAGES_VERBS[verb as ToolVerb], args: defined(build(args)) };
 }
 
@@ -316,10 +332,5 @@ export async function runPages(args: ParsedArgs): Promise<number> {
   const call = pagesToolCall(args);
   const result = await tool(ctx, call.tool, call.args);
   return print(ctx, result, () => renderResult(ctx, call.tool, result));
-}
-
-/** `nim wiki` was renamed; say where it went instead of failing as an unknown noun. */
-export function wikiRenamed(): never {
-  throw usageError(`'nim wiki' is now 'nim pages'. Run 'nim --help' for the commands.`);
 }
 

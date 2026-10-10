@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { Worker } from 'node:worker_threads';
+import BetterSqlite from 'better-sqlite3';
 import { getMigrations, runMigrations, type Migration } from '../MigrationRunner';
 import { SQLiteDatabase } from '../SQLiteDatabase';
 
@@ -50,6 +51,17 @@ class FakeDb {
   }
 
   prepare(sql: string) {
+    if (/SELECT version, name FROM _migrations/i.test(sql)) {
+      return { all: () => this.migrations.map((m) => ({ ...m })) };
+    }
+    if (/UPDATE _migrations SET version/i.test(sql)) {
+      return {
+        run: (to: number, from: number) => {
+          const row = this.migrations.find((m) => m.version === from);
+          if (row) row.version = to;
+        },
+      };
+    }
     if (/SELECT version FROM _migrations/i.test(sql)) {
       return {
         all: () => this.migrations.map((m) => ({ version: m.version })),
@@ -198,6 +210,32 @@ describe('runMigrations', () => {
 
     const outcomes = await Promise.all([runWorker(), runWorker()]);
     expect(outcomes.filter((outcome) => !outcome.ok)).toEqual([]);
+  });
+
+  it('moves a renumbered migration record so the number it vacated still runs', () => {
+    stageMigrationFiles(tmp);
+    const raw = new BetterSqlite(path.join(tmp, 'renumbered.sqlite'));
+    try {
+      // Installs from the fork applied tool_usage_token_estimates as 52 before
+      // upstream took that number; it now ships as 55.
+      raw.exec(`CREATE TABLE _migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT '')`);
+      const record = raw.prepare('INSERT INTO _migrations (version, name) VALUES (?, ?)');
+      const notYetRecorded = new Set(['personal_pages_fields', 'tool_usage_token_estimates']);
+      for (const m of getMigrations(tmp)) {
+        if (!notYetRecorded.has(m.name)) record.run(m.version, m.name);
+      }
+      record.run(52, 'tool_usage_token_estimates');
+
+      const result = runMigrations(raw, tmp);
+
+      expect(result.applied).toEqual([52]);
+      expect(raw.prepare('SELECT version, name FROM _migrations WHERE version IN (52, 55) ORDER BY version').all()).toEqual([
+        { version: 52, name: 'personal_pages_fields' },
+        { version: 55, name: 'tool_usage_token_estimates' },
+      ]);
+    } finally {
+      raw.close();
+    }
   });
 });
 

@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * `nim pages <verb>` parses into exactly the Pages tool call a terminal agent
+ * `nim wiki <verb>` parses into exactly the Pages tool call a terminal agent
  * would make. Pure: no server, no checkout.
  */
 import * as fs from 'node:fs';
@@ -11,9 +11,9 @@ import { PAGE_TOOL_NAMES } from '@nimbalyst/collab-protocol';
 import { parseArgs } from '../../cli/parse.js';
 import { PAGES_VERBS, pagesToolCall } from '../pages.js';
 
-const call = (...argv: string[]) => pagesToolCall(parseArgs(['pages', ...argv]));
+const call = (...argv: string[]) => pagesToolCall(parseArgs(['wiki', ...argv]));
 
-describe('nim pages', () => {
+describe('nim wiki', () => {
   it('has a verb for every Pages tool', () => {
     expect([...new Set(Object.values(PAGES_VERBS))].sort()).toEqual([...PAGE_TOOL_NAMES].sort());
   });
@@ -47,6 +47,9 @@ describe('nim pages', () => {
       expect(call('rename', 'd1', 'New name')).toEqual({ tool: 'renameSharedItem', args: { section: 'team', itemId: 'd1', newName: 'New name' } });
       expect(call('delete', 'd1', '--kind', 'folder')).toEqual({ tool: 'deleteSharedItem', args: { section: 'team', itemId: 'd1', kind: 'folder' } });
       expect(call('set-type', 'd1', 'technology')).toEqual({ tool: 'setPageType', args: { section: 'team', pageId: 'd1', typeId: 'technology' } });
+      expect(call('set-fields', 'd1', '--status', 'current', '--tag', 'a', '--tag', 'b', '--clear', 'owner')).toEqual({
+        tool: 'setPageFields', args: { section: 'team', itemId: 'd1', fields: { status: 'current', tags: ['a', 'b'], owner: null } },
+      });
       expect(call('members', 'dana')).toEqual({ tool: 'findOrgMembers', args: { query: 'dana' } });
       expect(call('search', 'durable object', '--limit', '5')).toEqual({ tool: 'searchPages', args: { section: 'team', query: 'durable object', limit: 5 } });
       expect(call('types', '--search', 'tech')).toEqual({ tool: 'tracker_list_types', args: { search: 'tech' } });
@@ -82,6 +85,6 @@ describe('nim pages', () => {
     expect(() => call('delete', 'd1')).toThrow(/--kind/);
     expect(() => call('update-item', 'CFS-2')).toThrow(/Nothing to update/);
     expect(() => call('comments')).toThrow(/--page/);
-    expect(() => call('nope')).toThrow(/Unknown 'nim pages' subcommand/);
+    expect(() => call('nope')).toThrow(/Unknown 'nim wiki' subcommand/);
   });
 });
