@@ -19,7 +19,14 @@
  * Pure: the service does the queries, this does the arithmetic.
  */
 
-import { estimateCostUSD } from '@nimbalyst/runtime/ai/pricing/modelPricing';
+import {
+  estimateCostSplitUSD,
+  estimateCostUSD,
+  scaleCostSplit,
+  sumCostSplit,
+  type CostSplitUSD,
+  type EstimateCostUsage,
+} from '@nimbalyst/runtime/ai/pricing/modelPricing';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Past this many days the trend switches to weekly bars; daily ones become unreadable slivers. */
@@ -188,6 +195,55 @@ export function resolveSessionUsage(session: Pick<SessionUsageSource, 'provider'
     model: entry.model,
     amount: scaled(pricedTotal.amount, weightOf(entry)),
   }));
+}
+
+/**
+ * What a session's cost is made of, by token kind, from its priced per-model
+ * entries. Each entry's estimated split supplies the proportions and is scaled
+ * to that entry's cost, so the split adds up to the cost column. `undefined`
+ * when no entry could be priced.
+ */
+export function sessionCostSplit(provider: string, entries: PricedModelAmount[] | null): CostSplitUSD | undefined {
+  let total: CostSplitUSD | undefined;
+  for (const entry of entries ?? []) {
+    if (entry.unpriced || entry.amount.costUSD <= 0) continue;
+    const usage = {
+      inputTokens: entry.amount.inputTokens,
+      outputTokens: entry.amount.outputTokens,
+      cacheReadInputTokens: entry.amount.cacheReadTokens,
+      cacheCreationInputTokens: entry.amount.cacheWriteTokens,
+    };
+    const split = splitProportions(provider, entry.model, usage);
+    // A cost with no token counts has no proportions to show.
+    if (!split || sumCostSplit(split) === 0) continue;
+    const scaledSplit = scaleCostSplit(split, entry.amount.costUSD);
+    total = total ? addCostSplit(total, scaledSplit) : scaledSplit;
+  }
+  return total;
+}
+
+/**
+ * An estimated split to take proportions from, before scaling it to a known
+ * cost. Claude Code stores aliases (`claude-code:opus`) and new model ids the
+ * price table does not know yet; every Claude row has the same rate ratios, so
+ * any of them gives the right proportions.
+ */
+export function splitProportions(
+  provider: string,
+  model: string | undefined,
+  usage: EstimateCostUsage,
+): CostSplitUSD | undefined {
+  return estimateCostSplitUSD(model, usage)
+    ?? (provider.startsWith('claude') ? estimateCostSplitUSD('claude-opus-5', usage) : undefined);
+}
+
+export function addCostSplit(a: CostSplitUSD, b: CostSplitUSD, factor = 1): CostSplitUSD {
+  return {
+    input: a.input + b.input * factor,
+    output: a.output + b.output * factor,
+    cacheRead: a.cacheRead + b.cacheRead * factor,
+    cacheWrite: a.cacheWrite + b.cacheWrite * factor,
+  };
 }
 
 /** Local-calendar day number. `timezoneOffsetMinutes` is `Date#getTimezoneOffset()`. */

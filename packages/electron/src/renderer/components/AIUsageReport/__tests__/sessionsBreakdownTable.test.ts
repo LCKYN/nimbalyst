@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
 
-import { compareRows, topShare, totalsFor } from '../SessionsBreakdown';
+import { cacheHitRate, compareRows, filterByTitle, topShare, totalsFor } from '../SessionsBreakdown';
 
 type Row = Parameters<typeof totalsFor>[0][number];
 
@@ -55,6 +55,13 @@ describe('totalsFor', () => {
     expect(totalsFor([row({ costEstimated: false })]).costEstimated).toBe(false);
   });
 
+  it('sums the cost splits of the rows that have one', () => {
+    const split = { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 };
+    expect(totalsFor([row({ costSplit: split }), row(), row({ costSplit: split })]).costSplit)
+      .toEqual({ input: 2, output: 4, cacheRead: 6, cacheWrite: 8 });
+    expect(totalsFor([row()]).costSplit).toBeUndefined();
+  });
+
   it('totals an empty set to zero rather than NaN', () => {
     expect(totalsFor([])).toMatchObject({ inputTokens: 0, totalTokens: 0, costUSD: 0, costEstimated: false });
   });
@@ -89,6 +96,24 @@ describe('compareRows', () => {
   });
 });
 
+describe('cacheHitRate', () => {
+  it('is cache reads over all prompt input, including cache writes', () => {
+    expect(cacheHitRate(row({ inputTokens: 10, cacheReadInputTokens: 80, cacheCreationInputTokens: 10 }))).toBeCloseTo(0.8);
+  });
+
+  it('is null, not 0%, when there was no prompt input', () => {
+    expect(cacheHitRate(row({ inputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }))).toBeNull();
+  });
+
+  it('sorts sessions with no input below a real 0% hit rate', () => {
+    const none = row({ id: 'none', inputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 });
+    const zero = row({ id: 'zero', inputTokens: 50, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 });
+    const high = row({ id: 'high', inputTokens: 1, cacheReadInputTokens: 99, cacheCreationInputTokens: 0 });
+    const sorted = [none, zero, high].sort((x, y) => compareRows(x, y, { key: 'cacheHit', direction: 'desc' }));
+    expect(sorted.map((r) => r.id)).toEqual(['high', 'zero', 'none']);
+  });
+});
+
 describe('topShare', () => {
   it('measures how much of the spend the costliest sessions hold, whatever order they arrive in', () => {
     const rows = [row({ costUSD: 1 }), row({ costUSD: 6 }), row({ costUSD: 3 })];
@@ -98,5 +123,17 @@ describe('topShare', () => {
 
   it('is zero rather than NaN when nothing was spent', () => {
     expect(topShare([row({ costUSD: 0 })], 3)).toBe(0);
+  });
+});
+
+describe('filterByTitle', () => {
+  const rows = [row({ id: 'a', title: 'Dark mode implementation' }), row({ id: 'b', title: 'Fix sync bug' })];
+
+  it('matches a title substring regardless of case and surrounding spaces', () => {
+    expect(filterByTitle(rows, '  DARK ').map((r) => r.id)).toEqual(['a']);
+  });
+
+  it('keeps every row for a blank query', () => {
+    expect(filterByTitle(rows, '   ')).toHaveLength(2);
   });
 });

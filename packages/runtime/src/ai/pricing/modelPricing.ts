@@ -89,6 +89,52 @@ function findRate(model: string): ModelPriceRatePerMillion | undefined {
   return bestKey ? MODEL_PRICING_PER_MILLION_TOKENS[bestKey] : undefined;
 }
 
+/** What a cost is made of, by token kind, in USD. */
+export interface CostSplitUSD {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+/**
+ * Estimate cost in USD per token kind from published per-million-token rates.
+ * Returns `undefined` when the model isn't in the table (and has no matching
+ * prefix).
+ */
+export function estimateCostSplitUSD(model: string | undefined, usage: EstimateCostUsage): CostSplitUSD | undefined {
+  if (!model) return undefined;
+  const rate = findRate(model);
+  if (!rate) return undefined;
+
+  return {
+    input: ((usage.inputTokens ?? 0) * rate.input) / 1_000_000,
+    output: ((usage.outputTokens ?? 0) * rate.output) / 1_000_000,
+    cacheRead: ((usage.cacheReadInputTokens ?? 0) * (rate.cacheRead ?? rate.input)) / 1_000_000,
+    cacheWrite: ((usage.cacheCreationInputTokens ?? 0) * (rate.cacheWrite ?? rate.input)) / 1_000_000,
+  };
+}
+
+export function sumCostSplit(split: CostSplitUSD): number {
+  return split.input + split.output + split.cacheRead + split.cacheWrite;
+}
+
+/**
+ * Scale a split so it adds up to `costUSD` -- an SDK-exact cost keeps the
+ * authority and the estimated split only supplies the proportions. A split that
+ * sums to zero stays zero.
+ */
+export function scaleCostSplit(split: CostSplitUSD, costUSD: number): CostSplitUSD {
+  const sum = sumCostSplit(split);
+  const factor = sum > 0 ? costUSD / sum : 0;
+  return {
+    input: split.input * factor,
+    output: split.output * factor,
+    cacheRead: split.cacheRead * factor,
+    cacheWrite: split.cacheWrite * factor,
+  };
+}
+
 /**
  * Estimate cost in USD from published per-million-token rates. Returns
  * `undefined` when the model isn't in the table (and has no matching prefix)
@@ -96,17 +142,6 @@ function findRate(model: string): ModelPriceRatePerMillion | undefined {
  * fabricated `$0.00`.
  */
 export function estimateCostUSD(model: string | undefined, usage: EstimateCostUsage): number | undefined {
-  if (!model) return undefined;
-  const rate = findRate(model);
-  if (!rate) return undefined;
-
-  const cacheReadRate = rate.cacheRead ?? rate.input;
-  const cacheWriteRate = rate.cacheWrite ?? rate.input;
-
-  return (
-    (usage.inputTokens ?? 0) * rate.input
-    + (usage.outputTokens ?? 0) * rate.output
-    + (usage.cacheReadInputTokens ?? 0) * cacheReadRate
-    + (usage.cacheCreationInputTokens ?? 0) * cacheWriteRate
-  ) / 1_000_000;
+  const split = estimateCostSplitUSD(model, usage);
+  return split ? sumCostSplit(split) : undefined;
 }

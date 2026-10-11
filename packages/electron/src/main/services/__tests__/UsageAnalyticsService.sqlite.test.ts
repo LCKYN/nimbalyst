@@ -315,6 +315,25 @@ describe('UsageAnalyticsService on SQLite', () => {
     });
   });
 
+  describe('getSessionTurns', () => {
+    it('reads prompts and priced frames only, numbers turns session-wide and keeps the in-range ones', async () => {
+      const t0 = Date.UTC(2026, 9, 11, 12);
+      await insertSession(db, { id: 'cc', provider: 'claude-code', model: 'claude-code:opus' });
+      const result = (cost: number) => ({ type: 'result', modelUsage: { 'claude-opus-5': { costUSD: cost, outputTokens: 10 } } });
+      await insertMessage(db, { sessionId: 'cc', direction: 'input', content: { prompt: 'first' }, createdAtMs: t0 });
+      // Mentions a result frame inside text, escaped, so it must not be read as one.
+      await insertMessage(db, { sessionId: 'cc', direction: 'output', content: { type: 'assistant', text: '"type":"result"' }, createdAtMs: t0 + 1 });
+      await insertMessage(db, { sessionId: 'cc', direction: 'output', content: result(1), createdAtMs: t0 + 2 });
+      await insertMessage(db, { sessionId: 'cc', direction: 'input', content: { prompt: 'second' }, createdAtMs: t0 + 10_000 });
+      await insertMessage(db, { sessionId: 'cc', direction: 'output', content: result(3), createdAtMs: t0 + 10_001 });
+
+      const turns = await svc.getSessionTurns('cc');
+      expect(turns.map((t) => [t.index, t.promptPreview, t.costUSD])).toEqual([[1, 'first', 1], [2, 'second', 2]]);
+      expect((await svc.getSessionTurns('cc', t0 + 5_000)).map((t) => t.index)).toEqual([2]);
+      expect(await svc.getSessionTurns('missing')).toEqual([]);
+    });
+  });
+
   describe('getAllSessionCount', () => {
     it('counts all sessions including ones without tokenUsage', async () => {
       await insertSession(db, { id: 's1', metadata: { tokenUsage: { inputTokens: 1, outputTokens: 1 } } });
@@ -636,6 +655,10 @@ describe('UsageAnalyticsService on SQLite', () => {
       expect(rows[0].costUSD).toBeCloseTo(recent.totals.costUSD);
       expect(rows[0].totalTokens).toBeCloseTo(recent.totals.totalTokens);
       expect(rows[0].modelLabel).toBe('opus');
+      // An alias the price table does not know still gets a split, scaled to the
+      // in-range cost.
+      const split = rows[0].costSplit!;
+      expect(split.input + split.output + split.cacheRead + split.cacheWrite).toBeCloseTo(rows[0].costUSD);
     });
 
     it('prices what the provider did not, flags what it cannot, and the splits sum to the total', async () => {
@@ -693,6 +716,15 @@ describe('UsageAnalyticsService on SQLite', () => {
       const estimated = rows.find((r) => r.id === 'estimated')!;
       expect(estimated.costUSD).toBeCloseTo(2.5);
       expect(estimated.costEstimated).toBe(true);
+
+      // The cost split adds up to the cost column, across both models; a session
+      // no model could price gets none.
+      const priced = rows.find((r) => r.id === 'priced')!;
+      const { input, output, cacheRead, cacheWrite } = priced.costSplit!;
+      expect(input + output + cacheRead + cacheWrite).toBeCloseTo(priced.costUSD);
+      expect(output).toBeCloseTo(input * 5);
+      expect(estimated.costSplit!.input).toBeCloseTo(2.5);
+      expect(rows.find((r) => r.id === 'unpriced')!.costSplit).toBeUndefined();
     });
   });
 

@@ -69,6 +69,47 @@ export function fillDailyCounts(
   };
 }
 
+/** A year of columns, like GitHub's contribution graph; older days stay in the bar chart. */
+const CALENDAR_MAX_WEEKS = 53;
+
+export interface CalendarDay {
+  /** Local-midnight start, as bucketed by the service. */
+  startMs: number;
+  costUSD: number;
+  totalTokens: number;
+}
+
+/**
+ * Per-day usage laid out as Sunday-start week columns ending today. `null` pads
+ * the first week before the range starts; a day with no usage is a zero cell.
+ * Days are numbered with the same fixed offset the service bucketed with, so a
+ * cell and its bucket cannot disagree across a DST change.
+ */
+export function calendarWeeks(
+  daily: ReadonlyArray<CalendarDay>,
+  range: { sinceMs?: number; nowMs: number; timezoneOffsetMinutes: number },
+): Array<Array<CalendarDay | null>> {
+  const offsetMs = range.timezoneOffsetMinutes * 60_000;
+  const dayOf = (ms: number) => Math.floor((ms - offsetMs) / DAY_MS);
+  const byDay = new Map(daily.map((d) => [dayOf(d.startMs), d]));
+  if (byDay.size === 0 && !range.sinceMs) return [];
+
+  const last = dayOf(range.nowMs);
+  const first = Math.max(
+    range.sinceMs ? dayOf(range.sinceMs) : Math.min(...byDay.keys()),
+    last - CALENDAR_MAX_WEEKS * 7 + 1,
+  );
+  // Day 0 (1970-01-01) was a Thursday, so `(day + 4) % 7` is 0 on a Sunday.
+  const weeks: Array<Array<CalendarDay | null>> = [];
+  for (let day = first - ((first + 4) % 7); day <= last; day++) {
+    if ((day + 4) % 7 === 0) weeks.push([]);
+    weeks[weeks.length - 1].push(
+      day < first ? null : byDay.get(day) ?? { startMs: day * DAY_MS + offsetMs, costUSD: 0, totalTokens: 0 },
+    );
+  }
+  return weeks;
+}
+
 /** Axis ticks: `$1.2K`, `$40`. */
 export function formatCompactUSD(value: number): string {
   if (!Number.isFinite(value) || value === 0) return '$0';
