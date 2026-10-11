@@ -57,6 +57,31 @@ it('reveals restored and newly selected projects, handles resize, and leaves man
   expect(disconnect).toHaveBeenCalled();
 });
 
+it('reorders projects by dragging a tile onto another, or from the menu, and ignores file drags', () => {
+  const store = createStore();
+  store.set(multiProjectModeAtom, true);
+  store.set(openProjectsAtom, ['a', 'b', 'c'].map((n) => ({ path: `/p/${n}`, name: n, openedAt: 0 })));
+  const view = render(<Provider store={store}><ProjectRail /></Provider>);
+  const order = () => store.get(openProjectsAtom).map((p) => p.name).join('');
+  const tile = (name: string) => view.getByRole('button', { name: `Switch to project ${name}` }).parentElement!;
+
+  // A file dragged in from outside is not a rail tile and must not reorder.
+  fireEvent.drop(tile('a'));
+  expect(order()).toBe('abc');
+
+  fireEvent.dragStart(tile('c'));
+  fireEvent.dragOver(tile('a'));
+  expect(tile('a').classList.contains('is-drag-over')).toBe(true);
+  fireEvent.drop(tile('a'));
+  fireEvent.dragEnd(tile('c'));
+  expect(order()).toBe('cab');
+
+  fireEvent.contextMenu(tile('c'));
+  expect(view.queryByRole('button', { name: 'Move up' })).toBeNull();
+  fireEvent.click(view.getByRole('button', { name: 'Move down' }));
+  expect(order()).toBe('acb');
+});
+
 it('replaces initials with a picked emoji and restores them on reset', async () => {
   const store = createStore();
   store.set(multiProjectModeAtom, true);

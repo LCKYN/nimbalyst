@@ -128,6 +128,23 @@ export const addOpenProjectAtom = atom(
 );
 
 /**
+ * Move a rail project to `toIndex` (clamped). The new order is persisted by
+ * the `openProjectsAtom` subscriber like any other change.
+ */
+export const moveOpenProjectAtom = atom(
+  null,
+  (get, set, { path, toIndex }: { path: string; toIndex: number }) => {
+    const current = get(openProjectsAtom);
+    const from = current.findIndex((p) => p.path === path);
+    const to = Math.max(0, Math.min(toIndex, current.length - 1));
+    if (from === -1 || from === to) return;
+    const next = [...current];
+    next.splice(to, 0, ...next.splice(from, 1));
+    set(openProjectsAtom, next);
+  }
+);
+
+/**
  * Remove a project from the rail. If the closed project was active, the
  * adjacent project (next, then previous, then null) becomes active.
  *

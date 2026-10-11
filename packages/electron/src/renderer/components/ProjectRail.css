@@ -88,6 +88,10 @@
   border-color: transparent;
 }
 
+.project-rail-item.is-drag-over .project-rail-item-main {
+  border-color: var(--nim-primary, #3b82f6);
+}
+
 .project-rail-item.is-active::before {
   content: '';
   position: absolute;
