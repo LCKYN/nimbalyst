@@ -370,7 +370,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('share:delete', options) as Promise<{ success: boolean; error?: string }>,
   getShareKeys: () =>
     ipcRenderer.invoke('share:getKeys') as Promise<Record<string, string>>,
-  shareFileAsLink: (options: { filePath: string; expirationDays?: number; personalOrgId?: string }) =>
+  shareFileAsLink: (options: { filePath: string; expirationDays?: number; personalOrgId?: string; mermaidSvgs?: Record<string, string> }) =>
     ipcRenderer.invoke('share:fileAsLink', options) as Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; owningPersonalOrgId?: string; error?: string }>,
   getShareExpirationPreference: () =>
     ipcRenderer.invoke('share:getExpirationPreference') as Promise<number>,
@@ -1708,6 +1708,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Open external links
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  openInBrowser: (url: string) => ipcRenderer.invoke('open-in-browser', url),
   openThirdPartyNotices: () => ipcRenderer.invoke('legal:open-third-party-notices'),
 
   // Image operations
@@ -1735,7 +1736,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Per-tool usage (tip targeting rollup + AI Usage Report Tools tab)
   toolUsage: {
     getRollup: () => ipcRenderer.invoke('tool-usage:get-rollup'),
-    getReport: (workspaceId?: string) => ipcRenderer.invoke('tool-usage:get-report', workspaceId),
+    getReport: (workspaceId?: string, sinceMs?: number) =>
+      ipcRenderer.invoke('tool-usage:get-report', workspaceId, sinceMs),
     backfill: () => ipcRenderer.invoke('tool-usage:backfill'),
   },
 

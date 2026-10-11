@@ -6,10 +6,16 @@
  * Loaded lazily (`LazyTrackerViewEmbed`): it pulls in the list, grid and board
  * surfaces, and a surface that shows no view must not pay for them.
  */
-import { type JSX } from 'react';
+import { type JSX, type ReactNode } from 'react';
 import type { CollabOpenOptions } from '../../core/index';
 import { type SavedView } from '../../trackers/index';
 import { type TrackerGridDerivedColumn } from '../grid/TrackerGridSurface';
+import './ViewEmbedHeader.css';
+/**
+ * A table's body fitted to its rows (compact grid: 32px rows under a header),
+ * between `min` and `max`. Past `max` the grid scrolls inside.
+ */
+export declare function fitTableBodyHeight(rowCount: number, min: number, max: number): number;
 export interface TrackerViewEmbedProps {
     /** A view the host already holds, saved or synthetic (e.g. a type page's built-in "All"). */
     view: SavedView;
@@ -20,7 +26,10 @@ export interface TrackerViewEmbedProps {
      * drops the card chrome and fills its container, for a tab that is the view.
      */
     variant?: 'card' | 'page';
-    /** Body height in pixels for the `card` variant. */
+    /**
+     * Body height in pixels for the `card` variant. Unset, an ungrouped table
+     * fits its rows up to the default height and other modes use the default.
+     */
     height?: number;
     /** Read-only columns after the fields, in table mode (a type page's Where). */
     derivedColumns?: readonly TrackerGridDerivedColumn[];
@@ -31,6 +40,11 @@ export interface TrackerViewEmbedProps {
     typeIds?: readonly string[];
     /** Table cells edit their items unless this is set (or the host has no data source). */
     readOnly?: boolean;
+    headerActions?: ReactNode;
+    headerNotice?: ReactNode;
+    hiddenColumns?: readonly string[];
+    onSortChange?: (field: string, direction: 'asc' | 'desc') => void;
+    onWidthsChange?: (widths: Record<string, number>) => void;
 }
 /** Draws a view the caller supplies, without looking it up among the saved views. */
-export declare function TrackerViewEmbed({ view, onOpenAsTable, onOpenItem, variant, height, derivedColumns, typeIds, readOnly, }: TrackerViewEmbedProps): JSX.Element;
+export declare function TrackerViewEmbed({ view, onOpenAsTable, onOpenItem, variant, height, derivedColumns, typeIds, readOnly, headerActions, headerNotice, hiddenColumns, onSortChange, onWidthsChange, }: TrackerViewEmbedProps): JSX.Element;

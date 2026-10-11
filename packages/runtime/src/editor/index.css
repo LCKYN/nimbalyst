@@ -1050,7 +1050,11 @@ i.page-break,
   background-color: color-mix(in srgb, var(--nim-primary) 10%, transparent);
 }
 
-.editor-shell .editor-image .image-resizer {
+.block-resizer-wrapper--resizing {
+  touch-action: none;
+}
+
+.editor-shell .block-resizer {
   display: block;
   width: 7px;
   height: 7px;
@@ -1059,52 +1063,75 @@ i.page-break,
   border: 1px solid var(--nim-bg);
 }
 
-.editor-shell .editor-image .image-resizer.image-resizer-n {
+.editor-shell .block-resizer.block-resizer-n {
   top: -6px;
   left: 48%;
   cursor: n-resize;
 }
 
-.editor-shell .editor-image .image-resizer.image-resizer-ne {
+.editor-shell .block-resizer.block-resizer-ne {
   top: -6px;
   right: -6px;
   cursor: ne-resize;
 }
 
-.editor-shell .editor-image .image-resizer.image-resizer-e {
+.editor-shell .block-resizer.block-resizer-e {
   bottom: 48%;
   right: -6px;
   cursor: e-resize;
 }
 
-.editor-shell .editor-image .image-resizer.image-resizer-se {
+.editor-shell .block-resizer.block-resizer-se {
   bottom: -2px;
   right: -6px;
   cursor: nwse-resize;
 }
 
-.editor-shell .editor-image .image-resizer.image-resizer-s {
+.editor-shell .block-resizer.block-resizer-s {
   bottom: -2px;
   left: 48%;
   cursor: s-resize;
 }
 
-.editor-shell .editor-image .image-resizer.image-resizer-sw {
+.editor-shell .block-resizer.block-resizer-sw {
   bottom: -2px;
   left: -6px;
   cursor: sw-resize;
 }
 
-.editor-shell .editor-image .image-resizer.image-resizer-w {
+.editor-shell .block-resizer.block-resizer-w {
   bottom: 48%;
   left: -6px;
   cursor: w-resize;
 }
 
-.editor-shell .editor-image .image-resizer.image-resizer-nw {
+.editor-shell .block-resizer.block-resizer-nw {
   top: -6px;
   left: -6px;
   cursor: nw-resize;
+}
+
+/* The single bottom-right grip (`handles="corner"`): a triangle of diagonal
+   lines inside the block's corner, stronger on hover and while dragging. */
+.block-resizer-grip {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 2;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+  touch-action: none;
+  color: var(--nim-text-faint);
+  background:
+    linear-gradient(135deg, transparent 0 45%, currentColor 45% 52%, transparent 52% 70%, currentColor 70% 77%, transparent 77%);
+  opacity: 0.7;
+}
+
+.block-resizer-grip:hover,
+.block-resizer-wrapper--resizing .block-resizer-grip {
+  color: var(--nim-primary);
+  opacity: 1;
 }
 
 .editor-shell span.inline-editor-image {

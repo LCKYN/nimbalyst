@@ -14,7 +14,9 @@
 }
 
 .project-rail-projects {
-  flex: 1;
+  /* Size to content so the add button sits right below the last project;
+     shrink and scroll only when the list outgrows the rail. */
+  flex: 0 1 auto;
   min-height: 0;
   align-self: stretch;
   display: flex;
@@ -41,6 +43,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.project-rail-item.is-dragging {
+  z-index: 1;
+  opacity: 0.7;
+  cursor: grabbing;
+}
+
+.project-rail-item.is-dragging .project-rail-item-main {
+  cursor: grabbing;
 }
 
 .project-rail-item-main {

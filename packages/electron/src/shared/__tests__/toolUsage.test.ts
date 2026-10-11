@@ -7,7 +7,51 @@ import {
   toDayBucket,
   extractClaudeTools,
   extractCodexTools,
+  estimateTokens,
+  extractClaudeToolTokens,
+  codexItemTokens,
 } from '../toolUsage';
+
+// Per-tool tokens are sizes (providers bill per request, not per tool). What
+// must hold is the ranking: text scales with length, an image is a flat cost
+// rather than its base64 length, and protocol envelopes are not content.
+describe('estimateTokens', () => {
+  it('counts about four characters per token across nested content', () => {
+    expect(estimateTokens('x'.repeat(400))).toBe(100);
+    expect(estimateTokens({ file_path: 'a'.repeat(40), content: 'b'.repeat(360) })).toBe(100);
+    expect(estimateTokens(undefined)).toBe(0);
+  });
+
+  it('prices an image as a flat cost, not its base64 payload', () => {
+    const screenshot = { type: 'image', source: { type: 'base64', data: 'A'.repeat(2_000_000) } };
+    expect(estimateTokens([screenshot])).toBe(1600);
+  });
+
+  it('ignores block envelopes such as type and ids', () => {
+    expect(estimateTokens([{ type: 'text', text: 'abcd', id: 'x'.repeat(100) }])).toBe(1);
+  });
+});
+
+describe('tool token extraction', () => {
+  it('returns Claude call and result sizes keyed for pairing by tool_use id', () => {
+    const call = extractClaudeToolTokens({
+      message: { content: [{ type: 'tool_use', id: 'toolu_1', name: 'Read', input: { file_path: 'x'.repeat(40) } }] },
+    });
+    const result = extractClaudeToolTokens({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'y'.repeat(4000) }] },
+    });
+    expect(call).toEqual({ calls: [{ id: 'toolu_1', callTokens: 10 }], results: [] });
+    expect(result).toEqual({ calls: [], results: [{ toolUseId: 'toolu_1', resultTokens: 1000 }] });
+  });
+
+  it('reads Codex input and output from whichever key the item type uses', () => {
+    expect(codexItemTokens({
+      method: 'item/completed',
+      params: { item: { type: 'commandExecution', command: 'x'.repeat(40), aggregatedOutput: 'y'.repeat(400) } },
+    })).toEqual({ callTokens: 10, resultTokens: 100 });
+  });
+});
 
 describe('parseToolName', () => {
   it('treats built-in tools as non-MCP', () => {
@@ -98,6 +142,15 @@ describe('aggregateToolCalls', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ count: 1, errorCount: 1 });
+  });
+
+  it('sums token sizes per tool, keeping the terminal chunk of a repeated invocation', () => {
+    const result = aggregateToolCalls([
+      { name: 'Read', invocationId: 'a', callTokens: 5 },
+      { name: 'Read', invocationId: 'a', callTokens: 5, resultTokens: 900 },
+      { name: 'Read', invocationId: 'b', callTokens: 7, resultTokens: 100 },
+    ]);
+    expect(result[0]).toMatchObject({ count: 2, callTokens: 12, resultTokens: 1000 });
   });
 });
 

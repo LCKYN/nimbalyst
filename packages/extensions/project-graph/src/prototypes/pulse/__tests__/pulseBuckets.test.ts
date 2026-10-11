@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import {
   autoBucketUnit,
   buildBuckets,
@@ -19,13 +19,15 @@ const HOUR = 3_600_000;
  * timezone-independent invariants below still cover the rest.
  */
 const originalTz = process.env.TZ;
-let observesDst = false;
 
-beforeAll(() => {
-  process.env.TZ = 'America/New_York';
-  observesDst =
-    new Date(2026, 0, 15).getTimezoneOffset() !== new Date(2026, 6, 15).getTimezoneOffset();
-});
+// Set at module scope, not in `beforeAll`. Suites below build their fixtures in
+// the `describe` body, which vitest runs during collection -- before any
+// `beforeAll`. Setting the zone there left buckets built in the machine's own
+// zone and queried in New York, so `bucketIndexFor` disagreed for anyone far
+// enough from US eastern time (Asia/Bangkok reproduces it).
+process.env.TZ = 'America/New_York';
+const observesDst =
+  new Date(2026, 0, 15).getTimezoneOffset() !== new Date(2026, 6, 15).getTimezoneOffset();
 
 afterAll(() => {
   if (originalTz === undefined) delete process.env.TZ;
