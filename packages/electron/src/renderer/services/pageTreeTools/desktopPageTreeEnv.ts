@@ -5,7 +5,10 @@
  *
  * The Personal session is never the window's active collaboration scope, so it
  * is reached by workspace path, never through `activeCollabScopeAtom`; that is
- * what lets these tools work with no account.
+ * what lets these tools work with no account. Its data source is the Local
+ * wiki folder (`@nimbalyst/local-wiki` in main), so `section: personal` reads
+ * and writes files; a page's `personal://<id>` uri resolves to its file in
+ * `personalAgentEdit`.
  */
 import { store } from '@nimbalyst/runtime/store';
 import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
@@ -24,6 +27,8 @@ import { setPageType } from '../../components/CollabMode/setPageType';
 import { buildSetPageTypeDependencies, type SetPageTypeContext } from '../../components/CollabMode/useSetPageType';
 import { PERSONAL_PAGE_TAB_PREFIX } from '../../contexts/TabsContext';
 import { createCollaborativeDocument } from '../collaborativeDocumentCreationOrchestrator';
+import { personalPageSupportsType } from '../personalPageTypes';
+import { isLocalWikiPage, setLocalWikiPageType } from '../localWikiSetType';
 import { getCollaborativeDocumentTypeCatalog } from '../CollaborativeDocumentTypeCatalog';
 import type { PageTreeSection, PageTreeToolEnv } from '@nimbalyst/collab-client/docs/pageTreeToolCore';
 import { pagesTabStrip, type PagesTabStrip } from './pagesTabStrip';
@@ -89,7 +94,10 @@ export function createDesktopPageTreeEnv(payloadWorkspacePath: string | undefine
       return { itemId: record.id, typeId: record.primaryType, ...(record.issueKey ? { issueKey: record.issueKey } : {}) };
     },
 
-    createPage: async (_section, session: CollabDocsSession, input) => {
+    createPage: async (section, session: CollabDocsSession, input) => {
+      if (section === 'personal' && !personalPageSupportsType(input.documentType)) {
+        throw new Error(`A Local page cannot be a "${input.documentType}" page; create it in the team section.`);
+      }
       const catalog = getCollaborativeDocumentTypeCatalog();
       const resolution = catalog.resolveMetadata(input.documentType, catalog.inferFileExtension(input.documentType, input.title));
       if (resolution.state !== 'ready') throw new Error(resolution.reason);
@@ -99,7 +107,8 @@ export function createDesktopPageTreeEnv(payloadWorkspacePath: string | undefine
         requestedName: input.title,
         parentFolderId: input.parentId,
         ...(input.parentId && input.parentKind === 'item' ? { parentKind: 'item' as const } : {}),
-        sourceContent: input.content,
+        // No content for a drawing, sheet or other structured type means its own empty document, not ''.
+        sourceContent: input.content || input.documentType === 'markdown' ? input.content : undefined,
         // An agent filing dozens of pages must not open a tab for each.
         openAfterCreate: false,
         analyticsSource: 'agent_tool',
@@ -109,6 +118,10 @@ export function createDesktopPageTreeEnv(payloadWorkspacePath: string | undefine
     },
 
     setPageType: async (section, session: CollabDocsSession, page: SharedDocument, typeId) => {
+      // A Local wiki page takes its type in place: same file, same id.
+      if (section === 'personal' && isLocalWikiPage(workspacePath(), page.documentId)) {
+        return { status: 'done', itemId: await setLocalWikiPageType(workspacePath(), page.documentId, typeId) } as Awaited<ReturnType<typeof setPageType>>;
+      }
       const title = page.title.trim() || 'Untitled';
       const scope = section === 'team' ? teamScope() : null;
       const uri = pageUri(section, page.documentId) ?? '';

@@ -18,6 +18,8 @@ interface PromptQueueListProps {
   onCancel: (id: string) => void;
   onEdit?: (id: string, prompt: string) => void;
   onSendNow?: (id: string, prompt: string) => void;
+  /** The turn is blocked on an interactive prompt, so the queue will not drain on its own. */
+  blockedOnPrompt?: boolean;
 }
 
 function AttachmentIndicator({ attachments }: { attachments: QueuedPromptAttachment[] }) {
@@ -54,15 +56,22 @@ function AttachmentIndicator({ attachments }: { attachments: QueuedPromptAttachm
 /**
 - PromptQueueList - Displays queued prompts waiting to be processed
  */
-export function PromptQueueList({ queue, onCancel, onEdit, onSendNow }: PromptQueueListProps) {
+export function PromptQueueList({ queue, onCancel, onEdit, onSendNow, blockedOnPrompt }: PromptQueueListProps) {
   if (queue.length === 0) {
     return null;
   }
 
   return (
     <div className="prompt-queue-list px-3 py-2 border-b border-nim bg-nim-secondary">
-      <div className="prompt-queue-header flex items-center mb-1.5">
+      <div className="prompt-queue-header flex items-center gap-2 mb-1.5">
         <span className="prompt-queue-count text-[11px] font-medium text-nim-muted uppercase tracking-wide">{queue.length} queued</span>
+        {blockedOnPrompt && (
+          <span className="prompt-queue-blocked-note text-[11px] text-[var(--nim-warning)]">
+            {onSendNow
+              ? 'Waiting on the prompt above. Respond to it, or use Send now to interrupt.'
+              : 'Waiting on the prompt above. These run after you respond.'}
+          </span>
+        )}
       </div>
       <div className="prompt-queue-items flex flex-col gap-1 max-h-[30vh] overflow-y-auto">
         {queue.map((item, index) => (

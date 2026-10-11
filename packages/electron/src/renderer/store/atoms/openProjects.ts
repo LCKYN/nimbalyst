@@ -68,12 +68,12 @@ export const activeWorkspacePathAtom = atom<string | null>(null);
 export const multiProjectModeAtom = atom<boolean>(false);
 
 /**
- * When true, the rail rehydrates with the projects that were open at last
- * app close. When false (default), the rail starts with only the project
- * the user picked from the launch screen; additional projects are added
+ * When true (default), the rail rehydrates with the projects that were open
+ * at last app close. When false, the rail starts with only the project the
+ * user picked from the launch screen; additional projects are added
  * explicitly via the `+` button.
  */
-export const restorePreviousProjectsAtom = atom<boolean>(false);
+export const restorePreviousProjectsAtom = atom<boolean>(true);
 
 /**
  * Ordered list of open projects in the rail. First entry is leftmost.
@@ -156,6 +156,28 @@ export const closeOpenProjectAtom = atom(
     // keeping that logic outside this module avoids a cycle with the atom
     // files that already import `activeWorkspacePathAtom`.
     set(clearWorkspaceActivityAtom, pathToClose);
+  }
+);
+
+/**
+ * Move a project to where another one sits in the rail (drag-and-drop).
+ * Same semantics as dnd-kit's `arrayMove`: dragging down lands after the
+ * target, dragging up lands before it. No-op when either path is not in the
+ * rail or both are the same. The active project is unchanged.
+ */
+export const reorderOpenProjectsAtom = atom(
+  null,
+  (get, set, { fromPath, toPath }: { fromPath: string; toPath: string }) => {
+    if (fromPath === toPath) return;
+    const current = get(openProjectsAtom);
+    const from = current.findIndex((p) => p.path === fromPath);
+    const to = current.findIndex((p) => p.path === toPath);
+    if (from === -1 || to === -1) return;
+
+    const next = [...current];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    set(openProjectsAtom, next);
   }
 );
 
@@ -413,6 +435,11 @@ function schedulePersistOpenProjects(): void {
     const paths = projects.map((p) => p.path);
     window.electronAPI?.invoke?.('app:set-open-projects', paths).catch((err: unknown) => {
       console.error('[openProjects] Failed to persist openProjects:', err);
+    });
+    // The window state rebuilds the rail from registration order on a
+    // renderer reload; hand it the current order so a drag survives that.
+    window.electronAPI?.invoke?.('workspace:set-rail-order', { paths }).catch((err: unknown) => {
+      console.error('[openProjects] Failed to sync rail order:', err);
     });
   }, 300);
 }

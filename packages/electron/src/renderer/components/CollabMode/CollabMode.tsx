@@ -26,6 +26,7 @@ import {
   type TabData,
 } from '../../contexts/TabsContext';
 import { TabManager } from '../TabManager/TabManager';
+import { TrackerTabIssueKeyContext } from '../TabManager/trackerTabIssueKey';
 import { TabContent } from '../TabContent/TabContent';
 import type { DocumentSessionActions } from '../TabEditor/DocumentSessionControl';
 import { ChatSidebar, type ChatSidebarRef } from '../ChatSidebar';
@@ -40,9 +41,12 @@ import {
 import { activePageRow, openPageTab } from './collabPageTabs';
 import { composePagesCreateMenu } from './pagesCreateMenu';
 import { PagesTabHistoryButtons, usePagesTabNavigation } from './usePagesTabNavigation';
+import { PagesSwipeNavigation } from './PagesSwipeNavigation';
 import { useCollabTabPersistence } from './useCollabTabPersistence';
+import { useLocalWikiFileTabs } from './useLocalWikiFileTabs';
 import { usePublishPagesTabStrip } from '../../services/pageTreeTools/pagesTabStrip';
 import { PagesSidebarSections, useSectionHomeId } from './PagesSidebarSections';
+import { pageHeaderRequestPendingAtom } from './pageTypeRequest';
 import type { PagesSectionLane, PagesSectionView } from './pagesSectionTabs';
 import {
   initSharedDocuments,
@@ -242,6 +246,7 @@ export const CollabModeInner = forwardRef<CollabModeRef, CollabModeInnerProps>(f
   useTabNavigationShortcuts(isActive);
   // A click opens in the current tab (Cmd/Ctrl: a new one); each tab keeps Back/Forward.
   const { addTabFor, step: stepPagesHistory } = usePagesTabNavigation(isActive, workspacePath);
+  const tabContentAreaRef = useRef<HTMLDivElement>(null);
   const pendingDoc = useAtomValue(pendingCollabDocumentAtom);
   const sharedDocuments = useAtomValue(sharedDocumentsAtom);
   // Opening and naming an existing link also finds other projects' pages,
@@ -267,10 +272,12 @@ export const CollabModeInner = forwardRef<CollabModeRef, CollabModeInnerProps>(f
     personal: CollabSidebarCreateMenu | null;
   }>({ team: null, personal: null });
   const publishCreateMenu = useCallback(() => {
-    const menu = composePagesCreateMenu(createMenusRef.current.team, createMenusRef.current.personal);
+    const menu = composePagesCreateMenu(createMenusRef.current.team, createMenusRef.current.personal, (section) => {
+      void import('../../services/addFileToPages').then(({ addFileToPages }) => addFileToPages({ section, parentId: null, workspacePath }));
+    });
     createPrimaryRef.current = menu?.onPrimary ?? null;
     setTitleBarCreateMenu('collab', menu);
-  }, [setTitleBarCreateMenu]);
+  }, [setTitleBarCreateMenu, workspacePath]);
   const registerTeamCreateMenu = useCallback((menu: CollabSidebarCreateMenu | null) => {
     createMenusRef.current.team = menu;
     publishCreateMenu();
@@ -447,6 +454,12 @@ export const CollabModeInner = forwardRef<CollabModeRef, CollabModeInnerProps>(f
     });
   }, [workspacePath, sidebarWidth, chatWidth, sidebarCollapsed]);
 
+  // A page header's Set type, Move, Rename or Trash is answered by the sidebar, so it opens to run them.
+  const headerRequestPending = useAtomValue(pageHeaderRequestPendingAtom);
+  useEffect(() => {
+    if (headerRequestPending && sidebarCollapsed) toggleSidebarCollapsed();
+  }, [headerRequestPending, sidebarCollapsed, toggleSidebarCollapsed]);
+
   // Double-click a tab to maximize the editor (collapse doc list + AI chat).
   // Second double-click restores the exact prior collapse state.
   const { isMaximized: isEditorMaximized, toggle: toggleEditorMaximized, clearMaximize: clearEditorMaximized } =
@@ -577,10 +590,10 @@ export const CollabModeInner = forwardRef<CollabModeRef, CollabModeInnerProps>(f
     if (document) void handleDocumentSelect(document, undefined, source, options);
   }) : undefined, [teamScope, linkableDocuments, handleDocumentSelect, addTabFor]);
 
-  // Personal pages open as `personal://` tabs; their items and types open as
-  // pages, the same as the team's.
+  // Local pages open as their markdown files, database pages not exported yet
+  // as `personal://` tabs; items and types open as pages, the same as the team's.
   useEffect(() => getPersonalCollabHost(workspacePath).setOpenArtifactAdapter((target, _source, options) => {
-    if (target.kind === 'personal-page') {
+    if (target.kind === 'personal-page' || target.kind === 'local-file') {
       addTabFor(options)(target.path, '', true, target.title);
       return;
     }
@@ -602,6 +615,7 @@ export const CollabModeInner = forwardRef<CollabModeRef, CollabModeInnerProps>(f
       if (title && tab.fileName !== title) tabsActions.updateTab(tab.id, { fileName: title });
     }
   }, [personalDocuments, tabs, tabsActions]);
+  useLocalWikiFileTabs(workspacePath, personalDocuments, tabs, tabsActions);
 
   // Relationship clicks on an item page, and row clicks on a type page.
   const handleOpenTrackerPage = useCallback((trackerItemId: string, options?: CollabOpenOptions) => {
@@ -619,7 +633,7 @@ export const CollabModeInner = forwardRef<CollabModeRef, CollabModeInnerProps>(f
   }, [activeTabPath]);
   const activePersonalDocumentId = activeTabPath && isPersonalPageTabPath(activeTabPath)
     ? activeTabPath.slice(PERSONAL_PAGE_TAB_PREFIX.length)
-    : null;
+    : activeTabPath ? getPersonalCollabHost(workspacePath).source().documentIdForFile(activeTabPath) : null;
   const activeRow = useMemo(() => activePageRow(activeTabPath), [activeTabPath]);
 
   useEffect(() => {
@@ -838,7 +852,8 @@ export const CollabModeInner = forwardRef<CollabModeRef, CollabModeInnerProps>(f
       {/* Center: Tabs + editor. With a team the team's Home page reopens when
           the last tab closes, so the tab strip is always present; without one
           an empty Personal section shows a hint instead. */}
-      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+      <div ref={tabContentAreaRef} className="relative flex-1 flex flex-col overflow-hidden min-h-0">
+        {hasTabs && <PagesSwipeNavigation targetRef={tabContentAreaRef} onStep={stepPagesHistory} />}
         {!hasTabs && !teamScope && (
           <div
             className="pages-mode-empty flex-1 flex items-center justify-center text-sm text-nim-faint"
@@ -848,6 +863,7 @@ export const CollabModeInner = forwardRef<CollabModeRef, CollabModeInnerProps>(f
           </div>
         )}
         {hasTabs && (
+          <TrackerTabIssueKeyContext.Provider value={false}>
           <TabManager
             onTabClose={handleTabClose}
             onNewTab={() => (teamScope ? openSectionView('search', 'team') : createPrimaryRef.current?.())}
@@ -867,6 +883,7 @@ export const CollabModeInner = forwardRef<CollabModeRef, CollabModeInnerProps>(f
               trackerPageHeader
             />
           </TabManager>
+          </TrackerTabIssueKeyContext.Provider>
         )}
       </div>
 

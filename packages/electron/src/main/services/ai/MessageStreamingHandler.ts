@@ -59,6 +59,7 @@ import type { DriveReason } from './QueueDriveService';
 import { resolveExtensionAgentRef } from './providerResolution';
 import { resolveToolLoopTurnConfig } from './toolLoopTurnConfig';
 import { resolveProviderAuthRequirement } from './providerAuthRequirement';
+import { isWikiSkillAvailable } from './wikiSkillAvailability';
 
 /**
  * Read the OpenCode session role the user picked, from session metadata.
@@ -88,6 +89,7 @@ import { getGitOperationLogService } from '../GitOperationLogService';
 import { GitActivityBridge, bashCommandObservation } from './GitActivityBridge';
 import { FeatureUsageService, FEATURES } from '../FeatureUsageService.ts';
 import { ToolUsageService } from '../ToolUsageService';
+import { estimateTokens } from '../../../shared/toolUsage';
 import { historyManager } from '../../HistoryManager';
 import { addGitignoreBypass } from '../../file/WorkspaceEventBus';
 import { getSyncProvider, isDesktopTrulyAway } from '../SyncManager';
@@ -1399,7 +1401,8 @@ export class MessageStreamingHandler {
         rawContext,
         session.id,
         session.provider as AIProviderType,
-        undefined // No mode transition for now - will be added when integrating with SessionTranscript
+        undefined, // No mode transition for now - will be added when integrating with SessionTranscript
+        { wikiSkillAvailable: isWikiSkillAvailable() }
       );
 
       // Merge prepared document context with session metadata
@@ -2385,6 +2388,8 @@ export class MessageStreamingHandler {
                 contextFillTokens,
                 contextCompacted,
                 contextWindow: contextWindowForDisplay,
+                mainUsage: chunk.mainUsage,
+                subagentUsage: chunk.subagentUsage,
               });
 
               await this.svc.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
@@ -2442,6 +2447,7 @@ export class MessageStreamingHandler {
                 reportedContextWindow,
                 contextFillTokens,
                 contextCompacted,
+                modelId: sessionModelId,
               });
 
               await this.svc.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
@@ -2722,6 +2728,10 @@ export class MessageStreamingHandler {
                       tc?.isError === true ||
                       (tc?.result && (tc.result as any)?.success === false) ||
                       false,
+                    // Sizes, not billed tokens: providers bill per request, so
+                    // what a tool sent and received is the per-tool signal.
+                    callTokens: estimateTokens(tc?.arguments),
+                    resultTokens: estimateTokens(tc?.result),
                   }));
                 void ToolUsageService.getInstance()
                   .recordBatch(observations, {
