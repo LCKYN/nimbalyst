@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
 
-import { fillDailyCounts, formatCompactNumber, formatCompactUSD, formatUSD } from '../usageFormat';
+import { calendarWeeks, fillDailyCounts, formatCompactNumber, formatCompactUSD, formatUSD } from '../usageFormat';
 
 describe('fillDailyCounts', () => {
   const now = Date.parse('2026-07-05T12:00:00Z');
@@ -37,6 +37,32 @@ describe('fillDailyCounts', () => {
  * Token counts run into eight digits, which overflowed recharts' 60px default
  * Y axis and were clipped from the left -- `2400000` read as `400000`.
  */
+describe('calendarWeeks', () => {
+  // UTC-7: local midnight is 07:00Z, and the service's buckets start there.
+  const range = {
+    sinceMs: Date.parse('2026-10-01T07:00:00Z'), // Thursday
+    nowMs: Date.parse('2026-10-07T20:00:00Z'), // Wednesday afternoon local
+    timezoneOffsetMinutes: 420,
+  };
+
+  it('lays days out in Sunday-start weeks, padding before the range and zero-filling quiet days', () => {
+    const spend = { startMs: Date.parse('2026-10-02T07:00:00Z'), costUSD: 5, totalTokens: 100 };
+    const weeks = calendarWeeks([spend], range);
+    expect(weeks.map((w) => w.length)).toEqual([7, 4]);
+    expect(weeks[0].slice(0, 4)).toEqual([null, null, null, null]);
+    expect(weeks[0][5]).toEqual(spend); // Friday
+    expect(weeks[1][3]).toEqual({ startMs: Date.parse('2026-10-07T07:00:00Z'), costUSD: 0, totalTokens: 0 });
+  });
+
+  it('shows at most the last year, ending today', () => {
+    const old = { startMs: Date.parse('2023-01-03T07:00:00Z'), costUSD: 1, totalTokens: 1 };
+    const weeks = calendarWeeks([old], { ...range, sinceMs: undefined });
+    expect(weeks.length).toBeLessThanOrEqual(54);
+    expect(weeks.flat()).not.toContainEqual(old);
+    expect(weeks.at(-1)?.at(-1)?.startMs).toBe(Date.parse('2026-10-07T07:00:00Z'));
+  });
+});
+
 describe('formatCompactNumber', () => {
   it('abbreviates at each magnitude so a tick fits the axis', () => {
     expect(formatCompactNumber(0)).toBe('0');

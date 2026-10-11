@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 <!-- New features go here -->
 - Run sessions in your own Cloudflare sandbox with machine navigation, the shared composer, attachments and Actions, and profile/account selections remembered per project.
-- The AI Usage Report has a new Sessions tab breaking down cost and tokens per session, grouped by phase or tag, split between input, output, main and sub-agent usage, sortable by any column with per-group totals, and each row opens its session.
-- The AI Usage Report opens in the main window from the sidebar, and scopes every panel to one workspace and a shared date range; hovering the activity heatmap reports that hour's activity and token usage; the Tools tab estimates tokens per tool and flags tools that fail often or return oversized results.
+- The AI Usage Report has a new Sessions tab breaking down cost and tokens per session, grouped by phase or tag, split between input, output, cache read/write, cache hit rate, main and sub-agent usage, sortable by any column with per-group totals, searchable by title, and each row opens its session.
+- The AI Usage Report opens in the main window from the sidebar, and scopes every panel to one workspace and a shared date range; the Overview adds a spend-by-day calendar; hovering the activity heatmap reports that hour's activity and token usage; the Tools tab estimates tokens per tool and flags tools that fail often or return oversized results.
 - Opt into unlimited open projects with a project rail that scrolls once it fills, and cleanup of unused project resources.
 
 ### Changed
@@ -179,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Schedule prompts to run later from the chat input -- after a delay, at a clock time, or when your Claude usage resets -- with their attachments, and edit or cancel them before they fire (#1497).
 
 ### Changed
 <!-- Changes to existing functionality go here -->

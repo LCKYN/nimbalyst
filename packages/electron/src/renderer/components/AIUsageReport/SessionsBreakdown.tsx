@@ -55,12 +55,36 @@ const GROUP_BY_LABELS: Record<GroupBy, string> = {
 };
 
 /** Columns the table can be ordered by. `title` and `model` sort as text; the rest numerically. */
-type SortKey = 'title' | 'model' | 'costUSD' | 'totalTokens' | 'lastActiveAt';
+type SortKey =
+  | 'title'
+  | 'model'
+  | 'costUSD'
+  | 'inputTokens'
+  | 'outputTokens'
+  | 'cacheReadInputTokens'
+  | 'cacheCreationInputTokens'
+  | 'cacheHit'
+  | 'totalTokens'
+  | 'lastActiveAt';
 
 type SortState = BaseSortState<SortKey>;
 
 /** How many of the costliest sessions the summary line measures concentration over. */
 const TOP_N = 10;
+
+type TokenFigures = Pick<
+  SessionUsageBreakdownRow,
+  'inputTokens' | 'outputTokens' | 'cacheReadInputTokens' | 'cacheCreationInputTokens' | 'totalTokens'
+>;
+
+/**
+ * Share of prompt input served from cache. `null` when there was no input at
+ * all, so a session that never prompted doesn't read as a 0% hit rate.
+ */
+export function cacheHitRate(t: TokenFigures): number | null {
+  const promptInput = t.inputTokens + t.cacheReadInputTokens + t.cacheCreationInputTokens;
+  return promptInput > 0 ? t.cacheReadInputTokens / promptInput : null;
+}
 
 export function compareRows(
   a: SessionUsageBreakdownRow,
@@ -70,7 +94,14 @@ export function compareRows(
   const factor = sort.direction === 'asc' ? 1 : -1;
   if (sort.key === 'title') return factor * a.title.localeCompare(b.title);
   if (sort.key === 'model') return factor * a.modelLabel.localeCompare(b.modelLabel);
+  if (sort.key === 'cacheHit') return factor * ((cacheHitRate(a) ?? -1) - (cacheHitRate(b) ?? -1));
   return factor * (a[sort.key] - b[sort.key]);
+}
+
+/** Case-insensitive title match; a blank query keeps every row. */
+export function filterByTitle(rows: SessionUsageBreakdownRow[], query: string): SessionUsageBreakdownRow[] {
+  const needle = query.trim().toLowerCase();
+  return needle ? rows.filter((row) => row.title.toLowerCase().includes(needle)) : rows;
 }
 
 export interface ColumnTotals {
@@ -147,6 +178,34 @@ const Tokens: React.FC<{ value: number }> = ({ value }) => (
   <span title={`${Math.round(value).toLocaleString()} tokens`}>{formatCompactNumber(value)}</span>
 );
 
+const TOKEN_COLUMNS: ReadonlyArray<{ key: Exclude<keyof TokenFigures, 'totalTokens'>; label: string; title: string }> = [
+  { key: 'inputTokens', label: 'In', title: 'New input tokens, not served from cache' },
+  { key: 'outputTokens', label: 'Out', title: 'Output tokens' },
+  { key: 'cacheReadInputTokens', label: 'Cache read', title: 'Input tokens served from the prompt cache' },
+  { key: 'cacheCreationInputTokens', label: 'Cache write', title: 'Input tokens written to the prompt cache' },
+];
+
+/** Session, model, cost, the token kinds, cache hit, total, last active. */
+const COLUMN_COUNT = 3 + TOKEN_COLUMNS.length + 3;
+
+const CACHE_HIT_TOOLTIP = 'Cache reads as a share of all prompt input (new input + cache reads + cache writes)';
+
+/** The per-token-kind cells shared by session rows, group headers and the total row. */
+const TokenCells: React.FC<{ figures: TokenFigures; cellClassName: string }> = ({ figures, cellClassName }) => {
+  const hit = cacheHitRate(figures);
+  return (
+    <>
+      {TOKEN_COLUMNS.map((column) => (
+        <td key={column.key} className={`${cellClassName} text-right tabular-nums`}>
+          <Tokens value={figures[column.key]} />
+        </td>
+      ))}
+      <td className={`${cellClassName} text-right tabular-nums`}>{hit === null ? '-' : `${Math.round(hit * 100)}%`}</td>
+      <td className={`${cellClassName} text-right tabular-nums`}><Tokens value={figures.totalTokens} /></td>
+    </>
+  );
+};
+
 /** One labelled figure inside an expanded row. */
 const DetailFigure: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="sessions-detail-figure flex justify-between gap-4">
@@ -168,14 +227,6 @@ const SessionDetail: React.FC<{ row: SessionUsageBreakdownRow }> = ({ row }) => 
         </div>
       )}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-6">
-        <div className="sessions-detail-tokens flex flex-col gap-1">
-          <div className="font-semibold text-nim mb-0.5">Tokens</div>
-          <DetailFigure label="New input"><Tokens value={row.inputTokens} /></DetailFigure>
-          <DetailFigure label="Cache reads"><Tokens value={row.cacheReadInputTokens} /></DetailFigure>
-          <DetailFigure label="Cache writes"><Tokens value={row.cacheCreationInputTokens} /></DetailFigure>
-          <DetailFigure label="Output"><Tokens value={row.outputTokens} /></DetailFigure>
-        </div>
-
         {(row.mainUsage || row.subagentUsage) && (
           <div className="sessions-detail-origin flex flex-col gap-1">
             <div className="font-semibold text-nim mb-0.5">Who did the work</div>
@@ -218,6 +269,8 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState>({ key: 'costUSD', direction: 'desc' });
+  const [query, setQuery] = useState('');
+  const visibleRows = useMemo(() => filterByTitle(rows, query), [rows, query]);
 
   // Clicking the active column flips direction; a new column starts descending,
   // which is what you want for every numeric column here.
@@ -250,7 +303,7 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
 
   const groups = useMemo(() => {
     const byKey = new Map<string, { label: string; rows: SessionUsageBreakdownRow[] }>();
-    for (const row of rows) {
+    for (const row of visibleRows) {
       const { key, label } = groupFor(row, groupBy);
       const existing = byKey.get(key);
       if (existing) existing.rows.push(row);
@@ -264,9 +317,10 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
         totals: totalsFor(group.rows),
       }))
       .sort((a, b) => b.totals.costUSD - a.totals.costUSD || b.totals.totalTokens - a.totals.totalTokens);
-  }, [rows, groupBy, sort]);
+  }, [visibleRows, groupBy, sort]);
 
-  const grandTotals = useMemo(() => totalsFor(rows), [rows]);
+  // Totals, summary and share bars describe what the search left visible.
+  const grandTotals = useMemo(() => totalsFor(visibleRows), [visibleRows]);
   // The share bar follows the same measure as the Overview: spend, unless
   // nothing in range could be priced.
   const byCost = grandTotals.costUSD > 0;
@@ -301,9 +355,9 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
   }
 
   const summary = [
-    plural(rows.length, 'session'),
+    query.trim() ? `${plural(visibleRows.length, 'session')} of ${rows.length.toLocaleString()}` : plural(rows.length, 'session'),
     byCost ? `${grandTotals.costEstimated ? '~' : ''}${formatUSD(grandTotals.costUSD)}` : `${formatCompactNumber(grandTotals.totalTokens)} tokens`,
-    byCost && rows.length > TOP_N ? `top ${TOP_N} are ${Math.round(topShare(rows, TOP_N) * 100)}% of spend` : undefined,
+    byCost && visibleRows.length > TOP_N ? `top ${TOP_N} are ${Math.round(topShare(visibleRows, TOP_N) * 100)}% of spend` : undefined,
   ].filter(Boolean).join(' · ');
 
   return (
@@ -323,25 +377,67 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
         />
       </div>
 
-      <div className="sessions-breakdown-summary text-sm text-nim select-text">{summary}</div>
+      <div className="flex items-center justify-between gap-4">
+        <div className="sessions-breakdown-summary text-sm text-nim select-text">{summary}</div>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by title..."
+          aria-label="Search sessions by title"
+          className="sessions-breakdown-search nim-input w-[240px] px-2 py-1 text-xs text-[var(--nim-text)] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded outline-none placeholder:text-[var(--nim-text-faint)] focus:border-[var(--nim-primary)]"
+        />
+      </div>
 
-      <table className="sessions-breakdown-table w-full text-xs border-collapse table-fixed">
+      <div className="sessions-breakdown-scroll overflow-x-auto">
+      <table className="sessions-breakdown-table w-full min-w-[1040px] text-xs border-collapse table-fixed">
         <colgroup>
           <col />
-          <col className="w-[140px]" />
-          <col className="w-[180px]" />
-          <col className="w-[90px]" />
           <col className="w-[100px]" />
+          <col className="w-[160px]" />
+          {TOKEN_COLUMNS.map((column) => (
+            <col key={column.key} className="w-[76px]" />
+          ))}
+          <col className="w-[68px]" />
+          <col className="w-[76px]" />
+          <col className="w-[84px]" />
         </colgroup>
         <thead>
           <tr className="text-left text-nim-muted">
             <SortableHeader sortKey="title" sort={sort} onSort={toggleSort}>Session</SortableHeader>
             <SortableHeader sortKey="model" sort={sort} onSort={toggleSort}>Model</SortableHeader>
             <SortableHeader sortKey="costUSD" sort={sort} onSort={toggleSort}>{byCost ? 'Cost' : 'Share'}</SortableHeader>
-            <SortableHeader sortKey="totalTokens" sort={sort} onSort={toggleSort} align="right">Tokens</SortableHeader>
+            {TOKEN_COLUMNS.map((column) => (
+              <SortableHeader key={column.key} sortKey={column.key} sort={sort} onSort={toggleSort} align="right">
+                <span title={column.title}>{column.label}</span>
+              </SortableHeader>
+            ))}
+            <SortableHeader sortKey="cacheHit" sort={sort} onSort={toggleSort} align="right">
+              <span title={CACHE_HIT_TOOLTIP}>Cache hit</span>
+            </SortableHeader>
+            <SortableHeader sortKey="totalTokens" sort={sort} onSort={toggleSort} align="right">Total</SortableHeader>
             <SortableHeader sortKey="lastActiveAt" sort={sort} onSort={toggleSort} align="right">Last active</SortableHeader>
           </tr>
+          {/* Totals sit above the rows so they stay in reach of a long list. */}
+          <tr className="sessions-breakdown-totals border-t border-b-2 border-nim font-semibold text-nim">
+            <td className="py-2 pr-3">Total</td>
+            <td />
+            <td className="py-2 pr-3">
+              <Cost costUSD={grandTotals.costUSD} costEstimated={grandTotals.costEstimated} />
+            </td>
+            <TokenCells figures={grandTotals} cellClassName="py-2 pr-3" />
+            <td />
+          </tr>
         </thead>
+        {visibleRows.length === 0 && (
+          <tbody>
+            <tr>
+              <td colSpan={COLUMN_COUNT} className="sessions-breakdown-no-match py-6 text-center text-nim-muted">
+                No sessions match &ldquo;{query.trim()}&rdquo;.
+              </td>
+            </tr>
+          </tbody>
+        )}
         {groups.map((group) => (
           <tbody key={group.key} className="sessions-breakdown-group">
             {groupBy !== 'none' && (
@@ -355,7 +451,7 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
                   <Cost costUSD={group.totals.costUSD} costEstimated={group.totals.costEstimated} />
                   <span className="font-normal text-nim-muted"> · {Math.round(shareOf(group.totals))}%</span>
                 </td>
-                <td className="pt-3 pb-1 pr-3 text-right font-semibold text-nim"><Tokens value={group.totals.totalTokens} /></td>
+                <TokenCells figures={group.totals} cellClassName="pt-3 pb-1 pr-3 font-semibold text-nim" />
                 <td />
               </tr>
             )}
@@ -405,14 +501,14 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
                         </div>
                       </div>
                     </td>
-                    <td className="py-2 pr-3 text-right text-nim-muted"><Tokens value={row.totalTokens} /></td>
+                    <TokenCells figures={row} cellClassName="py-2 pr-3 text-nim-muted" />
                     <td className="py-2 pr-3 text-right text-nim-muted">
                       {new Date(row.lastActiveAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                     </td>
                   </tr>
                   {isExpanded && (
                     <tr className="sessions-breakdown-detail-row bg-[var(--nim-bg-tertiary)]">
-                      <td colSpan={5}>
+                      <td colSpan={COLUMN_COUNT}>
                         <SessionDetail row={row} />
                       </td>
                     </tr>
@@ -422,18 +518,8 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
             })}
           </tbody>
         ))}
-        <tfoot>
-          <tr className="sessions-breakdown-totals border-t-2 border-nim font-semibold text-nim">
-            <td className="py-2 pr-3">Total</td>
-            <td />
-            <td className="py-2 pr-3">
-              <Cost costUSD={grandTotals.costUSD} costEstimated={grandTotals.costEstimated} />
-            </td>
-            <td className="py-2 pr-3 text-right"><Tokens value={grandTotals.totalTokens} /></td>
-            <td />
-          </tr>
-        </tfoot>
       </table>
+      </div>
     </div>
   );
 };
