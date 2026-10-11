@@ -22,7 +22,7 @@ interface PromptQueueListProps {
   blockedOnPrompt?: boolean;
 }
 
-function AttachmentIndicator({ attachments }: { attachments: QueuedPromptAttachment[] }) {
+export function AttachmentIndicator({ attachments }: { attachments: QueuedPromptAttachment[] }) {
   const imageCount = attachments.filter(a => a.type === 'image').length;
   const fileCount = attachments.length - imageCount;
 
