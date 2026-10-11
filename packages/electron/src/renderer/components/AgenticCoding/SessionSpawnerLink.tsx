@@ -27,10 +27,11 @@ export function SessionSpawnerLink({ sessionId }: { sessionId: string }) {
   );
   const select = useSetAtom(selectSessionActionAtom);
   return spawnerId ? (
-    <div className="session-tree-from text-xs text-[var(--nim-text-muted)]">
-      from{' '}
+    <div className="session-tree-from flex min-w-0 gap-1 whitespace-nowrap text-xs text-[var(--nim-text-muted)]">
+      <span className="shrink-0">from</span>
       <button
-        className="underline"
+        className="min-w-0 truncate text-left underline"
+        title={title || undefined}
         onClick={(e) => {
           e.stopPropagation();
           void select(spawnerId);

@@ -165,9 +165,18 @@ export const agentModeLayoutAtom = atom<AgentModeLayout, [AgentModeLayout], void
 // Derived Atoms (read-only slices)
 // ============================================================
 
+/** App-settings key for the session history width, shared by every project. */
+export const SESSION_HISTORY_WIDTH_KEY = 'agentSessionHistoryWidth';
+
+/**
+ * One session history width for all projects. Null until the first layout
+ * load seeds it; until then the per-project persisted width is used.
+ */
+export const globalSessionHistoryWidthAtom = atom<number | null>(null);
+
 /** Session history panel width */
 export const sessionHistoryWidthAtom = atom(
-  (get) => get(agentModeLayoutAtom).sessionHistoryLayout.width
+  (get) => get(globalSessionHistoryWidthAtom) ?? get(agentModeLayoutAtom).sessionHistoryLayout.width
 );
 
 /** Whether session history is collapsed */
@@ -368,12 +377,15 @@ export const setAgentModeLayoutAtom = atom(
 );
 
 /**
- * Set session history width.
+ * Set session history width. Global: resizing in one project resizes all.
  */
 export const setSessionHistoryWidthAtom = atom(
   null,
-  (get, set, width: number) => {
-    set(setSessionHistoryLayoutAtom, { width });
+  (_get, set, width: number) => {
+    set(globalSessionHistoryWidthAtom, width);
+    window.electronAPI
+      .invoke('app-settings:set', SESSION_HISTORY_WIDTH_KEY, width)
+      .catch((err: unknown) => console.error('[agentMode] Failed to persist session history width:', err));
   }
 );
 
@@ -620,6 +632,18 @@ export async function initAgentModeLayout(
     if (agenticState?.selectedWorkstream) {
       const selection = agenticState.selectedWorkstream as { type: WorkstreamType; id: string };
       store.set(selectedWorkstreamAtom(workspacePath), selection);
+    }
+
+    if (store.get(globalSessionHistoryWidthAtom) === null) {
+      // Before any global width was saved, the first project loaded supplies it.
+      const savedWidth = await window.electronAPI.invoke('app-settings:get', SESSION_HISTORY_WIDTH_KEY);
+      // Re-check: a concurrent load or a resize may have set it during the await.
+      if (store.get(globalSessionHistoryWidthAtom) === null) {
+        store.set(
+          globalSessionHistoryWidthAtom,
+          typeof savedWidth === 'number' ? savedWidth : restoredLayout.sessionHistoryLayout.width
+        );
+      }
     }
   } catch (err) {
     console.error('[agentMode] Failed to load layout:', err);
