@@ -169,6 +169,17 @@ export async function registerUsageAnalyticsHandlers() {
     }
   });
 
+  // One session's turns with their cost, for the Sessions tab's expanded row
+  safeHandle('usage-analytics:get-session-turns', async (event, sessionId: string, sinceMs?: number) => {
+    if (!sessionId) throw new Error('usage-analytics:get-session-turns requires a sessionId');
+    try {
+      return await analyticsService!.getSessionTurns(sessionId, sinceMs);
+    } catch (error) {
+      console.error('[UsageAnalyticsHandlers] Failed to get session turns:', error);
+      throw error;
+    }
+  });
+
   // Get document edit time series
   safeHandle('usage-analytics:get-document-time-series', async (
     event,

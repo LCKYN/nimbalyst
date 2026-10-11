@@ -55,6 +55,13 @@ describe('totalsFor', () => {
     expect(totalsFor([row({ costEstimated: false })]).costEstimated).toBe(false);
   });
 
+  it('sums the cost splits of the rows that have one', () => {
+    const split = { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 };
+    expect(totalsFor([row({ costSplit: split }), row(), row({ costSplit: split })]).costSplit)
+      .toEqual({ input: 2, output: 4, cacheRead: 6, cacheWrite: 8 });
+    expect(totalsFor([row()]).costSplit).toBeUndefined();
+  });
+
   it('totals an empty set to zero rather than NaN', () => {
     expect(totalsFor([])).toMatchObject({ inputTokens: 0, totalTokens: 0, costUSD: 0, costEstimated: false });
   });

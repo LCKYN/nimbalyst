@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { estimateCostUSD } from '../modelPricing';
+import { estimateCostSplitUSD, estimateCostUSD, scaleCostSplit, sumCostSplit } from '../modelPricing';
 
 describe('estimateCostUSD', () => {
   it('computes input+output cost from the table rate', () => {
@@ -46,5 +46,34 @@ describe('estimateCostUSD', () => {
 
   it('returns 0 for a known model with no usage', () => {
     expect(estimateCostUSD('gpt-5', {})).toBe(0);
+  });
+});
+
+describe('estimateCostSplitUSD', () => {
+  const usage = {
+    inputTokens: 1_000_000,
+    outputTokens: 1_000_000,
+    cacheReadInputTokens: 1_000_000,
+    cacheCreationInputTokens: 1_000_000,
+  };
+
+  it('splits by token kind and adds up to estimateCostUSD', () => {
+    const split = estimateCostSplitUSD('claude-sonnet-5', usage)!;
+    expect(split).toEqual({ input: 3, output: 15, cacheRead: expect.closeTo(0.3, 6), cacheWrite: 3.75 });
+    expect(sumCostSplit(split)).toBeCloseTo(estimateCostUSD('claude-sonnet-5', usage)!, 9);
+  });
+
+  it('prices cache write at the input rate when the model has no cache write rate', () => {
+    expect(estimateCostSplitUSD('gpt-5', usage)!.cacheWrite).toBeCloseTo(1.25, 9);
+  });
+
+  it('returns undefined for an unknown model', () => {
+    expect(estimateCostSplitUSD('some-unknown-local-model', usage)).toBeUndefined();
+  });
+
+  it('scales the proportions to an exact cost', () => {
+    const scaled = scaleCostSplit({ input: 1, output: 3, cacheRead: 0, cacheWrite: 0 }, 8);
+    expect(scaled).toEqual({ input: 2, output: 6, cacheRead: 0, cacheWrite: 0 });
+    expect(sumCostSplit(scaleCostSplit({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, 5))).toBe(0);
   });
 });

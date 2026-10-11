@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import type { CostSplitUSD } from '@nimbalyst/runtime/ai/pricing/modelPricing';
 import { SectionHeading, SegmentedControl, SortableHeader, type SortState as BaseSortState } from './ReportControls';
+import { COST_SPLIT_KINDS, CostSplitBar, CostSplitLegend, CostSplitSwatch, type CostSplitTokens } from './CostSplitBar';
 import { formatCompactNumber, formatUSD } from './usageFormat';
 
 interface SessionsBreakdownProps {
@@ -36,6 +38,7 @@ interface SessionUsageBreakdownRow {
   totalTokens: number;
   costUSD: number;
   costEstimated: boolean;
+  costSplit?: CostSplitUSD;
   mainUsage?: TokenUsageBucketRow;
   subagentUsage?: TokenUsageBucketRow;
   byModel?: Record<string, TokenUsageBucketRow>;
@@ -112,6 +115,18 @@ export interface ColumnTotals {
   cacheReadInputTokens: number;
   cacheCreationInputTokens: number;
   costEstimated: boolean;
+  /** Sum of the rows' splits; unset when no row has one. */
+  costSplit?: CostSplitUSD;
+}
+
+function addSplit(a: CostSplitUSD | undefined, b: CostSplitUSD | undefined): CostSplitUSD | undefined {
+  if (!a || !b) return a ?? b;
+  return {
+    input: a.input + b.input,
+    output: a.output + b.output,
+    cacheRead: a.cacheRead + b.cacheRead,
+    cacheWrite: a.cacheWrite + b.cacheWrite,
+  };
 }
 
 export function totalsFor(rows: SessionUsageBreakdownRow[]): ColumnTotals {
@@ -126,6 +141,7 @@ export function totalsFor(rows: SessionUsageBreakdownRow[]): ColumnTotals {
       // One estimated row makes the whole column an estimate; saying otherwise
       // would present a total as exact when part of it is not.
       costEstimated: sum.costEstimated || row.costEstimated,
+      costSplit: addSplit(sum.costSplit, row.costSplit),
     }),
     {
       inputTokens: 0,
@@ -178,12 +194,28 @@ const Tokens: React.FC<{ value: number }> = ({ value }) => (
   <span title={`${Math.round(value).toLocaleString()} tokens`}>{formatCompactNumber(value)}</span>
 );
 
-const TOKEN_COLUMNS: ReadonlyArray<{ key: Exclude<keyof TokenFigures, 'totalTokens'>; label: string; title: string }> = [
-  { key: 'inputTokens', label: 'In', title: 'New input tokens, not served from cache' },
-  { key: 'outputTokens', label: 'Out', title: 'Output tokens' },
-  { key: 'cacheReadInputTokens', label: 'Cache read', title: 'Input tokens served from the prompt cache' },
-  { key: 'cacheCreationInputTokens', label: 'Cache write', title: 'Input tokens written to the prompt cache' },
+const TOKEN_COLUMNS: ReadonlyArray<{
+  key: Exclude<keyof TokenFigures, 'totalTokens'>;
+  splitKey: keyof CostSplitUSD;
+  label: string;
+  title: string;
+}> = [
+  { key: 'inputTokens', splitKey: 'input', label: 'In', title: 'New input tokens, not served from cache' },
+  { key: 'outputTokens', splitKey: 'output', label: 'Out', title: 'Output tokens' },
+  { key: 'cacheReadInputTokens', splitKey: 'cacheRead', label: 'Cache read', title: 'Input tokens served from the prompt cache' },
+  { key: 'cacheCreationInputTokens', splitKey: 'cacheWrite', label: 'Cache write', title: 'Input tokens written to the prompt cache' },
 ];
+
+const splitColor = (key: keyof CostSplitUSD) => COST_SPLIT_KINDS.find((kind) => kind.key === key)!.color;
+
+function splitTokens(figures: TokenFigures): CostSplitTokens {
+  return {
+    input: figures.inputTokens,
+    output: figures.outputTokens,
+    cacheRead: figures.cacheReadInputTokens,
+    cacheWrite: figures.cacheCreationInputTokens,
+  };
+}
 
 /** Session, model, cost, the token kinds, cache hit, total, last active. */
 const COLUMN_COUNT = 3 + TOKEN_COLUMNS.length + 3;
@@ -214,7 +246,112 @@ const DetailFigure: React.FC<{ label: string; children: React.ReactNode }> = ({ 
   </div>
 );
 
-const SessionDetail: React.FC<{ row: SessionUsageBreakdownRow }> = ({ row }) => {
+/** Mirrors `SessionTurn` in main/services/sessionTurnCosts.ts. */
+interface SessionTurn {
+  index: number;
+  startedAt: number;
+  endedAt: number | null;
+  promptPreview: string;
+  costUSD: number;
+  split: CostSplitUSD;
+  tokens: CostSplitTokens;
+  idleGapMs: number | null;
+  cacheTtlMs: number;
+  cacheLikelyExpired: boolean;
+}
+
+const TOP_TURNS = 5;
+
+function formatIdle(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  return minutes < 120 ? `${minutes} min` : `${Math.round(minutes / 60)} h`;
+}
+
+const CacheExpiredBadge: React.FC<{ turn: SessionTurn }> = ({ turn }) => (
+  <span
+    className="sessions-turn-cache-expired inline-block px-1.5 rounded-full border border-[var(--nim-warning)] text-[var(--nim-warning)] text-[10px] whitespace-nowrap"
+    title={
+      `Idle ${formatIdle(turn.idleGapMs ?? 0)} before this prompt. ` +
+      `The ${turn.cacheTtlMs >= 60 * 60_000 ? '1-hour' : '5-minute'} prompt cache expired, so the whole history was written to the cache again (${formatUSD(turn.split.cacheWrite)}). ` +
+      'After a long break, /compact or a new session is cheaper.'
+    }
+  >
+    Cache likely expired
+  </span>
+);
+
+type TurnsState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; turns: SessionTurn[] };
+
+/** The costliest prompts of one session, inside the report's range. */
+const ExpensiveTurns: React.FC<{ row: SessionUsageBreakdownRow; sinceMs?: number }> = ({ row, sinceMs }) => {
+  const supported = row.provider.startsWith('claude-code') || row.provider === 'openai-codex';
+  const [state, setState] = useState<TurnsState>({ status: 'loading' });
+
+  useEffect(() => {
+    if (!supported) return;
+    // Expanding another row unmounts this one mid-request.
+    let cancelled = false;
+    window.electronAPI
+      .invoke('usage-analytics:get-session-turns', row.id, sinceMs)
+      .then((turns: unknown) => {
+        if (!cancelled) setState({ status: 'ready', turns: Array.isArray(turns) ? turns : [] });
+      })
+      .catch((error: unknown) => {
+        console.error('[SessionsBreakdown] Failed to load session turns:', error);
+        if (!cancelled) setState({ status: 'error' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [row.id, sinceMs, supported]);
+
+  if (!supported) {
+    return <div className="sessions-turns-unsupported text-nim-muted">Per-turn costs are available for Claude Code and Codex sessions.</div>;
+  }
+  if (state.status === 'loading') {
+    return <div className="sessions-turns-loading h-[120px] text-nim-muted">Loading turns...</div>;
+  }
+  if (state.status === 'error') {
+    return <div className="sessions-turns-error text-nim-muted">Could not load per-turn costs.</div>;
+  }
+
+  const priced = state.turns.filter((turn) => turn.costUSD > 0);
+  // A "top 5" of one turn is noise.
+  if (priced.length < 2) return null;
+  const pricedTotal = priced.reduce((sum, turn) => sum + turn.costUSD, 0);
+  const top = [...priced].sort((a, b) => b.costUSD - a.costUSD).slice(0, TOP_TURNS);
+  const estimated = !row.provider.startsWith('claude-code');
+
+  return (
+    <div className="sessions-turns flex flex-col gap-1">
+      <div className="font-semibold text-nim mb-0.5">
+        Most expensive turns
+        <span className="font-normal text-nim-muted"> · top {top.length} of {plural(priced.length, 'turn')}</span>
+      </div>
+      {top.map((turn) => (
+        <div key={turn.index} className="sessions-turn flex items-center gap-3">
+          <span className="w-[36px] shrink-0 text-nim-muted tabular-nums">#{turn.index}</span>
+          <span className="w-[96px] shrink-0 text-nim-muted">
+            {new Date(turn.startedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </span>
+          <span className="flex-1 min-w-0 truncate text-nim select-text" title={turn.promptPreview || undefined}>
+            {turn.promptPreview || <span className="text-nim-muted">(no text)</span>}
+          </span>
+          <span className="w-[64px] shrink-0 text-right text-nim tabular-nums">
+            <Cost costUSD={turn.costUSD} costEstimated={estimated} />
+          </span>
+          <span className="w-[36px] shrink-0 text-right text-nim-muted tabular-nums">
+            {Math.round((turn.costUSD / pricedTotal) * 100)}%
+          </span>
+          <CostSplitBar className="w-[120px] shrink-0" split={turn.split} tokens={turn.tokens} estimated={estimated} />
+          <span className="w-[120px] shrink-0">{turn.cacheLikelyExpired && <CacheExpiredBadge turn={turn} />}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const SessionDetail: React.FC<{ row: SessionUsageBreakdownRow; sinceMs?: number }> = ({ row, sinceMs }) => {
   const byModel = row.byModel ? Object.entries(row.byModel).sort((a, b) => (b[1].costUSD ?? 0) - (a[1].costUSD ?? 0)) : [];
   const bucketTokens = (b: TokenUsageBucketRow) =>
     b.inputTokens + b.outputTokens + (b.cacheReadInputTokens ?? 0) + (b.cacheCreationInputTokens ?? 0);
@@ -259,6 +396,7 @@ const SessionDetail: React.FC<{ row: SessionUsageBreakdownRow }> = ({ row }) => 
           Per-model and sub-agent figures are only recorded for turns run since they were added.
         </div>
       )}
+      <ExpensiveTurns row={row} sinceMs={sinceMs} />
     </div>
   );
 };
@@ -379,14 +517,17 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
 
       <div className="flex items-center justify-between gap-4">
         <div className="sessions-breakdown-summary text-sm text-nim select-text">{summary}</div>
-        <input
+        <div className="flex items-center gap-4">
+          {byCost && <CostSplitLegend />}
+          <input
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search by title..."
           aria-label="Search sessions by title"
           className="sessions-breakdown-search nim-input w-[240px] px-2 py-1 text-xs text-[var(--nim-text)] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded outline-none placeholder:text-[var(--nim-text-faint)] focus:border-[var(--nim-primary)]"
-        />
+          />
+        </div>
       </div>
 
       <div className="sessions-breakdown-scroll overflow-x-auto">
@@ -409,7 +550,10 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
             <SortableHeader sortKey="costUSD" sort={sort} onSort={toggleSort}>{byCost ? 'Cost' : 'Share'}</SortableHeader>
             {TOKEN_COLUMNS.map((column) => (
               <SortableHeader key={column.key} sortKey={column.key} sort={sort} onSort={toggleSort} align="right">
-                <span title={column.title}>{column.label}</span>
+                <span title={column.title} className="inline-flex items-center gap-1">
+                  {byCost && <CostSplitSwatch color={splitColor(column.splitKey)} />}
+                  {column.label}
+                </span>
               </SortableHeader>
             ))}
             <SortableHeader sortKey="cacheHit" sort={sort} onSort={toggleSort} align="right">
@@ -423,7 +567,19 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
             <td className="py-2 pr-3">Total</td>
             <td />
             <td className="py-2 pr-3">
-              <Cost costUSD={grandTotals.costUSD} costEstimated={grandTotals.costEstimated} />
+              <div className="flex items-center gap-2">
+                <span className="w-[64px] shrink-0">
+                  <Cost costUSD={grandTotals.costUSD} costEstimated={grandTotals.costEstimated} />
+                </span>
+                {byCost && grandTotals.costSplit && (
+                  <CostSplitBar
+                    className="flex-1"
+                    split={grandTotals.costSplit}
+                    tokens={splitTokens(grandTotals)}
+                    estimated={grandTotals.costEstimated}
+                  />
+                )}
+              </div>
             </td>
             <TokenCells figures={grandTotals} cellClassName="py-2 pr-3" />
             <td />
@@ -448,8 +604,20 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
                 </td>
                 <td />
                 <td className="pt-3 pb-1 pr-3 font-semibold text-nim">
-                  <Cost costUSD={group.totals.costUSD} costEstimated={group.totals.costEstimated} />
-                  <span className="font-normal text-nim-muted"> · {Math.round(shareOf(group.totals))}%</span>
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0">
+                      <Cost costUSD={group.totals.costUSD} costEstimated={group.totals.costEstimated} />
+                      <span className="font-normal text-nim-muted"> · {Math.round(shareOf(group.totals))}%</span>
+                    </span>
+                    {byCost && group.totals.costSplit && (
+                      <CostSplitBar
+                        className="flex-1"
+                        split={group.totals.costSplit}
+                        tokens={splitTokens(group.totals)}
+                        estimated={group.totals.costEstimated}
+                      />
+                    )}
+                  </div>
                 </td>
                 <TokenCells figures={group.totals} cellClassName="pt-3 pb-1 pr-3 font-semibold text-nim" />
                 <td />
@@ -496,9 +664,19 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
                         <span className="w-[64px] shrink-0 text-nim">
                           {byCost ? <Cost costUSD={row.costUSD} costEstimated={row.costEstimated} /> : `${Math.round(share)}%`}
                         </span>
-                        <div className="sessions-breakdown-share h-1.5 flex-1 bg-[var(--nim-bg-tertiary)] rounded-sm overflow-hidden">
-                          <div className="h-full bg-[var(--nim-primary)] rounded-sm" style={{ width: `${share}%` }} />
-                        </div>
+                        {byCost && row.costSplit ? (
+                          <CostSplitBar
+                            className="sessions-breakdown-share flex-1"
+                            split={row.costSplit}
+                            tokens={splitTokens(row)}
+                            width={share}
+                            estimated={row.costEstimated}
+                          />
+                        ) : (
+                          <div className="sessions-breakdown-share h-1.5 flex-1 bg-[var(--nim-bg-tertiary)] rounded-sm overflow-hidden">
+                            <div className="h-full bg-[var(--nim-primary)] rounded-sm" style={{ width: `${share}%` }} />
+                          </div>
+                        )}
                       </div>
                     </td>
                     <TokenCells figures={row} cellClassName="py-2 pr-3 text-nim-muted" />
@@ -509,7 +687,7 @@ export const SessionsBreakdown: React.FC<SessionsBreakdownProps> = ({ workspaceI
                   {isExpanded && (
                     <tr className="sessions-breakdown-detail-row bg-[var(--nim-bg-tertiary)]">
                       <td colSpan={COLUMN_COUNT}>
-                        <SessionDetail row={row} />
+                        <SessionDetail row={row} sinceMs={sinceMs} />
                       </td>
                     </tr>
                   )}

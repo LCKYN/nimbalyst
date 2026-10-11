@@ -8,10 +8,13 @@ import {
   buildUsageOverview,
   displayModelName,
   resolveSessionUsage,
+  sessionCostSplit,
   sessionRangeActivity,
   type SessionUsageSource,
   type UsageOverview,
 } from './usageOverview';
+import { scaleCostSplit, sumCostSplit, type CostSplitUSD } from '@nimbalyst/runtime/ai/pricing/modelPricing';
+import { buildSessionTurns, type SessionTurn } from './sessionTurnCosts';
 
 export interface TokenUsageStats {
   totalInputTokens: number;
@@ -109,6 +112,8 @@ export interface SessionUsageBreakdownRow {
   totalTokens: number;
   costUSD: number;
   costEstimated: boolean;
+  /** `costUSD` by token kind (subagents included); unset when no model could be priced. */
+  costSplit?: CostSplitUSD;
   mainUsage?: TokenUsageBucketRow;
   subagentUsage?: TokenUsageBucketRow;
   byModel?: Record<string, TokenUsageBucketRow>;
@@ -384,6 +389,7 @@ export class UsageAnalyticsService {
       // figure where there is one, the price table where there is not.
       const resolved = resolveSessionUsage({ provider: row.provider, model: row.model ?? null, metadata });
       const costUSD = resolved?.reduce((sum, entry) => sum + entry.amount.costUSD, 0) ?? 0;
+      const costSplit = sessionCostSplit(row.provider, resolved);
       const rootId = resolveWorkstreamRootId(row.id);
 
       rows.push({
@@ -406,6 +412,7 @@ export class UsageAnalyticsService {
         totalTokens: (inputTokens + cacheReadInputTokens + cacheCreationInputTokens + outputTokens) * share,
         costUSD: costUSD * share,
         costEstimated: resolved?.some((entry) => entry.costEstimated) ?? false,
+        costSplit: costSplit && scaleCostSplit(costSplit, sumCostSplit(costSplit) * share),
         mainUsage: scaleBucket(normalizeTokenUsageBucket(tokenUsage.mainUsage), share),
         subagentUsage: scaleBucket(normalizeTokenUsageBucket(tokenUsage.subagentUsage), share),
         byModel: scaleByModel(normalizeTokenUsageByModel(tokenUsage.byModel), share),
@@ -418,6 +425,47 @@ export class UsageAnalyticsService {
 
     rows.sort((a, b) => b.costUSD - a.costUSD);
     return rows;
+  }
+
+  /**
+   * One session's turns with their cost, for the Sessions tab's "most expensive
+   * turns". See `sessionTurnCosts.ts` for the rules. Turn numbers count the
+   * whole session; only turns prompted at or after `sinceMs` are returned.
+   *
+   * Rows are narrowed in SQL with plain `LIKE` (no JSON operators, so both
+   * backends run it): prompts, Claude `result` frames and Codex
+   * `turn.completed` frames. `metadata` is JSONB on PGLite, whose text form
+   * puts a space after each colon, so its pattern matches the value alone.
+   */
+  async getSessionTurns(sessionId: string, sinceMs?: number): Promise<SessionTurn[]> {
+    const session = await this.db.query<{ provider: string; model: string | null }>(
+      'SELECT provider, model FROM ai_sessions WHERE id = $1',
+      [sessionId],
+    );
+    const row = session.rows[0];
+    if (!row) return [];
+
+    const frames = await this.db.query<{ direction: string; created_at: unknown; content: unknown; metadata: unknown }>(
+      `SELECT direction, created_at, content, metadata
+       FROM ai_agent_messages
+       WHERE session_id = $1
+         AND (direction = 'input'
+              OR content LIKE '%"type":"result"%'
+              OR metadata::text LIKE '%turn.completed%')
+       ORDER BY created_at ASC, id ASC`,
+      [sessionId],
+    );
+    const turns = buildSessionTurns(
+      frames.rows.map((frame) => ({
+        direction: frame.direction,
+        createdAtMs: toEpochMs(frame.created_at),
+        content: frame.content,
+        metadata: frame.metadata,
+      })),
+      row.provider,
+      row.model ?? null,
+    );
+    return sinceMs ? turns.filter((turn) => turn.startedAt >= sinceMs) : turns;
   }
 
   /**
