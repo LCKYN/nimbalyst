@@ -9,10 +9,12 @@
  * stays as a fallback).
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 import { getShowInFileBrowserLabel } from '@nimbalyst/runtime';
 import {
   useFloating,
+  autoUpdate,
   FloatingPortal,
   useDismiss,
   useHover,
@@ -22,9 +24,27 @@ import {
   flip,
   shift,
   size,
+  useMergeRefs,
   type VirtualElement,
 } from '@floating-ui/react';
-import { windowControlsClearance } from '@nimbalyst/runtime/ui/floating/windowControlsClearance';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type Modifier,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { clearWindowControls, getWindowControlsZones, windowControlsClearance } from '@nimbalyst/runtime/ui/floating/windowControlsClearance';
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
 import { OrgSwitcher } from './OrgSwitcher';
 import {
@@ -34,16 +54,50 @@ import {
   isOpenProjectsAtCapAtom,
   addOpenProjectAtom,
   closeOpenProjectAtom,
+  reorderOpenProjectsAtom,
   type OpenProject,
 } from '../store/atoms/openProjects';
 import {
   globalSessionActivityAtom,
   projectActivitySummaryAtom,
 } from '../store/atoms/sessionActivity';
+import { projectAwaitingInputCountAtom } from '../store/atoms/sessions';
 import { generateWorkspaceAccentColor } from './WorkspaceSummaryHeader';
+import { requestConfirmation } from '../dialogs/requestConfirmation';
+import { errorNotificationService } from '../services/ErrorNotificationService';
 import './ProjectRail.css';
 
 const REVEAL_LABEL = getShowInFileBrowserLabel();
+
+// The rail is a single column; keep a dragged icon on it.
+const restrictToVerticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 });
+
+const PROJECT_ICON_CHOICES = [
+  '😀', '🚀', '🔥', '⭐', '💡', '🧪', '🛠️', '📦',
+  '🎨', '📝', '🤖', '🧠', '💼', '🏠', '🌱', '🐛',
+];
+
+// Material Symbols names (the full font is bundled), stored as `icon:<name>`.
+const PROJECT_SYMBOL_CHOICES = [
+  'code', 'terminal', 'database', 'cloud', 'api', 'web', 'smartphone', 'dns',
+  'rocket_launch', 'bolt', 'science', 'psychology', 'shield', 'work', 'school', 'storefront',
+  'description', 'folder', 'analytics', 'payments', 'group', 'chat', 'sports_esports', 'favorite',
+];
+const SYMBOL_PREFIX = 'icon:';
+
+const PROJECT_COLOR_CHOICES = [
+  '#ffffff', '#111827', '#ef4444', '#f97316', '#eab308', '#22c55e',
+  '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899',
+];
+const COLOR_SLOTS = [
+  { slot: 'fg', label: 'Icon & text' },
+  { slot: 'bg', label: 'Background' },
+] as const;
+// A typed lowercase word is a Material Symbols name; anything else is an emoji.
+const toStoredIcon = (input: string) => {
+  const trimmed = input.trim();
+  return /^[a-z0-9_]+$/.test(trimmed) ? `${SYMBOL_PREFIX}${trimmed}` : trimmed;
+};
 
 function projectInitials(name: string): string {
   const trimmed = name.trim();
@@ -58,8 +112,11 @@ function projectInitials(name: string): string {
 interface ProjectRailIconProps {
   project: OpenProject;
   isActive: boolean;
+  awaitingCount: number;
   processingCount: number;
   unreadCount: number;
+  /** Bumped after the user changes the icon so it is fetched again. */
+  iconVersion: number;
   onActivate: (path: string) => void;
   onClose: (project: OpenProject) => void;
   onContextMenu: (project: OpenProject, x: number, y: number) => void;
@@ -68,8 +125,10 @@ interface ProjectRailIconProps {
 function ProjectRailIcon({
   project,
   isActive,
+  awaitingCount,
   processingCount,
   unreadCount,
+  iconVersion,
   onActivate,
   onClose,
   onContextMenu,
@@ -88,6 +147,16 @@ function ProjectRailIcon({
   const tooltipHover = useHover(tooltipContext, { delay: { open: 200, close: 0 }, move: false });
   const { getReferenceProps: getTooltipRefProps, getFloatingProps: getTooltipFloatingProps } =
     useInteractions([tooltipHover]);
+
+  // Drag to reorder. The wrapper is both the sortable node and the keyboard
+  // activator, so Enter/Space on the inner buttons still click them instead
+  // of starting a keyboard drag.
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id: project.path });
+  const wrapperRef = useMergeRefs([tooltipRefs.setReference, setNodeRef, setActivatorNodeRef]);
+  // Routed through getReferenceProps so the drag listeners and the tooltip's
+  // hover handlers (both use onPointerDown) are chained, not overwritten.
+  const wrapperHandlers = getTooltipRefProps(listeners);
 
   const handleClick = useCallback(() => {
     onActivate(project.path);
@@ -110,7 +179,7 @@ function ProjectRailIcon({
     [onContextMenu, project]
   );
 
-  const className = isActive ? 'project-rail-item is-active' : 'project-rail-item';
+  const className = `project-rail-item${isActive ? ' is-active' : ''}${isDragging ? ' is-dragging' : ''}`;
 
   // Per-project accent color, derived deterministically from the workspace
   // path so the rail icon matches the colored bar shown in the workspace
@@ -120,21 +189,50 @@ function ProjectRailIcon({
   // Inactive projects show a badge when something needs attention. Active
   // projects already have the user's eyes on them so we suppress the
   // badge to keep the rail quiet.
-  const showBadge = !isActive && (processingCount > 0 || unreadCount > 0);
-  const badgeLabel = processingCount > 0 ? `${processingCount}` : unreadCount > 0 ? `${unreadCount}` : '';
+  // Priority: waiting for input > streaming > unread.
+  // Finished-but-unread shows a check instead of a count.
+  const showBadge = !isActive && (awaitingCount > 0 || processingCount > 0 || unreadCount > 0);
+  const badgeKind = awaitingCount > 0 ? 'is-awaiting' : processingCount > 0 ? 'is-processing' : 'is-finished';
+  const badgeAriaLabel = awaitingCount > 0
+    ? `${awaitingCount} waiting for your response`
+    : processingCount > 0 ? `${processingCount} streaming session(s)` : `${unreadCount} finished, unread`;
+
+  // A user-picked emoji, else a project logo (favicon etc.) as a data URL,
+  // else initials.
+  const [iconSrc, setIconSrc] = useState<string | null>(null);
+  // User-picked icon/text (`fg`) and tile (`bg`) colors; unset falls back to the accent.
+  const [colors, setColors] = useState<{ fg?: string; bg?: string }>({});
+  useEffect(() => {
+    if (!window.electronAPI?.invoke) return;
+    let cancelled = false;
+    window.electronAPI.invoke('workspace:get-icon', { workspacePath: project.path })
+      .then((src: string | null) => { if (!cancelled) setIconSrc(src); })
+      .catch(() => {});
+    window.electronAPI.invoke('workspace:get-colors', { workspacePath: project.path })
+      .then((next: { fg?: string; bg?: string } | null) => { if (!cancelled) setColors(next ?? {}); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [project.path, iconVersion]);
 
   // Wrapper is a non-interactive container so the activate button and the
   // close button can sit as siblings. Nesting a button inside a button is
   // invalid HTML and confuses screen readers / keyboard navigation.
   return (
     <div
-      ref={tooltipRefs.setReference}
+      ref={wrapperRef}
       className={className}
       onContextMenu={handleContextMenu}
       data-testid="project-rail-item"
       data-project-path={project.path}
-      style={{ ['--rail-item-accent' as any]: accentColor }}
-      {...getTooltipRefProps()}
+      style={{
+        ['--rail-item-accent' as any]: accentColor,
+        ...(colors.fg ? { ['--rail-item-fg' as any]: colors.fg } : {}),
+        ...(colors.bg ? { ['--rail-item-bg' as any]: colors.bg } : {}),
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      {...attributes}
+      {...wrapperHandlers}
     >
       <button
         type="button"
@@ -143,13 +241,22 @@ function ProjectRailIcon({
         aria-label={`Switch to project ${project.name}`}
         aria-current={isActive ? 'true' : undefined}
       >
-        {projectInitials(project.name)}
+        {iconSrc?.startsWith('data:') ? (
+          <img className="project-rail-item-icon" src={iconSrc} alt="" onError={() => setIconSrc(null)} />
+        ) : iconSrc?.startsWith(SYMBOL_PREFIX) ? (
+          <MaterialSymbol icon={iconSrc.slice(SYMBOL_PREFIX.length)} size={22} />
+        ) : iconSrc ? (
+          <span className="project-rail-item-emoji">{iconSrc}</span>
+        ) : (
+          projectInitials(project.name)
+        )}
         {showBadge && (
-          <span
-            className="project-rail-item-badge"
-            aria-label={processingCount > 0 ? `${processingCount} streaming session(s)` : `${unreadCount} unread`}
-          >
-            {badgeLabel}
+          <span className={`project-rail-item-badge ${badgeKind}`} aria-label={badgeAriaLabel}>
+            {badgeKind === 'is-finished' ? (
+              <MaterialSymbol icon="check" size={10} />
+            ) : (
+              awaitingCount || processingCount
+            )}
           </span>
         )}
       </button>
@@ -161,7 +268,7 @@ function ProjectRailIcon({
       >
         ×
       </button>
-      {tooltipOpen && (
+      {tooltipOpen && !isDragging && (
         <FloatingPortal>
           <div
             ref={tooltipRefs.setFloating}
@@ -186,8 +293,10 @@ export function ProjectRail() {
   const atCap = useAtomValue(isOpenProjectsAtCapAtom);
   const addProject = useSetAtom(addOpenProjectAtom);
   const closeProject = useSetAtom(closeOpenProjectAtom);
+  const reorderProjects = useSetAtom(reorderOpenProjectsAtom);
   const activity = useAtomValue(globalSessionActivityAtom);
   const activitySummary = useAtomValue(projectActivitySummaryAtom);
+  const awaitingCounts = useAtomValue(projectAwaitingInputCountAtom);
   const projectListRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useLayoutEffect(() => {
@@ -213,8 +322,35 @@ export function ProjectRail() {
     return () => observer.disconnect();
   }, [activePath, openProjects, isMultiProjectMode]);
 
+  // The distance constraint lets a plain click through to switch projects or
+  // hit the close button; only a real drag reorders.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const projectPaths = useMemo(() => openProjects.map((p) => p.path), [openProjects]);
+
+  // Releasing a drag over the icon still fires a click on it. Swallow that
+  // one click so dropping a project does not also switch to it.
+  const suppressClickRef = React.useRef(false);
+  const suppressNextClick = useCallback(() => {
+    suppressClickRef.current = true;
+    setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+  }, []);
+  const handleDragEnd = useCallback(
+    ({ active, over }: DragEndEvent) => {
+      suppressNextClick();
+      if (!over || over.id === active.id) return;
+      reorderProjects({ fromPath: String(active.id), toPath: String(over.id) });
+    },
+    [reorderProjects, suppressNextClick]
+  );
+
   const handleActivate = useCallback(
     (path: string) => {
+      if (suppressClickRef.current) return;
       if (path === activePath) return;
       // The atom subscriber in initOpenProjects() forwards the change to
       // the main process via `workspace:set-active`, so there is no direct
@@ -278,7 +414,10 @@ export function ProjectRail() {
 
   const handleOpenAddMenu = useCallback(() => {
     if (atCap) {
-      window.alert('The project limit is eight per window. Close a project or enable Allow unlimited projects in Settings > Advanced.');
+      errorNotificationService.showWarning(
+        'Project limit reached',
+        'The project limit is eight per window. Close a project or enable Allow unlimited projects in Settings > Advanced.',
+      );
       return;
     }
     refreshRecents();
@@ -294,9 +433,11 @@ export function ProjectRail() {
       // the prompt when closing an inactive rail project.
       const streaming = activity.get(project.path)?.streaming.size ?? 0;
       if (streaming > 0) {
-        const proceed = window.confirm(
-          `${project.name} has ${streaming} streaming session${streaming === 1 ? '' : 's'}. Close anyway? Sessions will be paused.`
-        );
+        const proceed = await requestConfirmation({
+          title: 'Close project',
+          message: `${project.name} has ${streaming} streaming session${streaming === 1 ? '' : 's'}. Close anyway? Sessions will be paused.`,
+          confirmLabel: 'Close project',
+        });
         if (!proceed) return;
       }
 
@@ -342,12 +483,11 @@ export function ProjectRail() {
   } = useFloating({
     open: addMenuOpen,
     onOpenChange: setAddMenuOpen,
-    // `right-start` grows the menu downward from the top of the `+` button.
-    // The old `right-end` grew it upward, so with two or more recents it was
-    // taller than the space above the button and `shift()` clamped it to the
-    // top of the window — beside the traffic lights and ~140px away from the
-    // button that opened it, which read as "the + did nothing" (GitHub #1096).
-    placement: 'right-start',
+    // The Add button stays at the bottom of the rail. Align the menu's
+    // bottom with it, and track size changes as recent folders load.
+    placement: 'right-end',
+    strategy: 'fixed',
+    whileElementsMounted: autoUpdate,
     middleware: [
       offset(8),
       flip({ padding: 8 }),
@@ -355,9 +495,12 @@ export function ProjectRail() {
       windowControlsClearance(),
       size({
         padding: 8,
-        apply({ availableHeight, elements, middlewareData }) {
-          const pushed = middlewareData.windowControlsClearance?.pushed ?? 0;
-          elements.floating.style.maxHeight = `${Math.max(0, availableHeight - pushed)}px`;
+        apply({ availableHeight, elements, x, rects }) {
+          // Reserve the controls band from the viewport's padded top, not
+          // from the menu's current y: bottom alignment makes y depend on
+          // height, so subtracting the last push can cause a resize loop.
+          const reserved = clearWindowControls(x, 8, rects.floating.width, getWindowControlsZones()) - 8;
+          elements.floating.style.maxHeight = `${Math.max(0, availableHeight - reserved)}px`;
           elements.floating.style.overflowY = 'auto';
         },
       }),
@@ -445,6 +588,30 @@ export function ProjectRail() {
     }
   }, [closeMenu]);
 
+  const [iconVersions, setIconVersions] = useState<Record<string, number>>({});
+  const [customIcon, setCustomIcon] = useState('');
+  const handleSetIcon = useCallback(async (project: OpenProject, icon: string | null) => {
+    closeMenu();
+    setCustomIcon('');
+    try {
+      await window.electronAPI?.invoke?.('workspace:set-icon', { workspacePath: project.path, icon });
+      setIconVersions((prev) => ({ ...prev, [project.path]: (prev[project.path] ?? 0) + 1 }));
+    } catch (err) {
+      console.error('[ProjectRail] set-icon failed:', err);
+    }
+  }, [closeMenu]);
+
+  const colorTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Colors keep the menu open so several can be tried in a row.
+  const handleSetColor = useCallback(async (project: OpenProject, slot: 'fg' | 'bg', color: string | null) => {
+    try {
+      await window.electronAPI?.invoke?.('workspace:set-color', { workspacePath: project.path, slot, color });
+      setIconVersions((prev) => ({ ...prev, [project.path]: (prev[project.path] ?? 0) + 1 }));
+    } catch (err) {
+      console.error('[ProjectRail] set-color failed:', err);
+    }
+  }, []);
+
   if (!isMultiProjectMode) return null;
 
   return (
@@ -452,21 +619,33 @@ export function ProjectRail() {
       {/* Epic H1: org switcher sits above the project switcher. */}
       <OrgSwitcher />
       <div ref={projectListRef} className="project-rail-projects" data-testid="project-rail-projects">
-        {openProjects.map((project) => {
-          const activity = activitySummary.get(project.path);
-          return (
-            <ProjectRailIcon
-              key={project.path}
-              project={project}
-              isActive={project.path === activePath}
-              processingCount={activity?.processing ?? 0}
-              unreadCount={activity?.unread ?? 0}
-              onActivate={handleActivate}
-              onClose={handleClose}
-              onContextMenu={handleContextMenu}
-            />
-          );
-        })}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis]}
+          onDragEnd={handleDragEnd}
+          onDragCancel={suppressNextClick}
+        >
+          <SortableContext items={projectPaths} strategy={verticalListSortingStrategy}>
+            {openProjects.map((project) => {
+              const activity = activitySummary.get(project.path);
+              return (
+                <ProjectRailIcon
+                  key={project.path}
+                  project={project}
+                  isActive={project.path === activePath}
+                  awaitingCount={awaitingCounts.get(project.path) ?? 0}
+                  processingCount={activity?.processing ?? 0}
+                  unreadCount={activity?.unread ?? 0}
+                  iconVersion={iconVersions[project.path] ?? 0}
+                  onActivate={handleActivate}
+                  onClose={handleClose}
+                  onContextMenu={handleContextMenu}
+                />
+              );
+            })}
+          </SortableContext>
+        </DndContext>
       </div>
       {openProjects.length > 0 && <div className="project-rail-divider" aria-hidden="true" />}
       <button
@@ -561,6 +740,95 @@ export function ProjectRail() {
             >
               {REVEAL_LABEL}
             </button>
+            <div className="project-rail-context-menu-divider" />
+            <div className="project-rail-context-menu-heading">Icon</div>
+            <div className="project-rail-icon-picker" data-testid="project-rail-icon-picker">
+              {PROJECT_ICON_CHOICES.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="project-rail-icon-choice"
+                  onClick={() => handleSetIcon(menu.project, emoji)}
+                  aria-label={`Use ${emoji} as project icon`}
+                >
+                  {emoji}
+                </button>
+              ))}
+              {PROJECT_SYMBOL_CHOICES.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  className="project-rail-icon-choice"
+                  onClick={() => handleSetIcon(menu.project, `${SYMBOL_PREFIX}${name}`)}
+                  aria-label={`Use ${name} icon as project icon`}
+                  title={name}
+                >
+                  <MaterialSymbol icon={name} size={18} />
+                </button>
+              ))}
+            </div>
+            <form
+              className="project-rail-icon-custom"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (customIcon.trim()) handleSetIcon(menu.project, toStoredIcon(customIcon));
+              }}
+            >
+              <input
+                value={customIcon}
+                onChange={(event) => setCustomIcon(event.target.value)}
+                maxLength={48}
+                placeholder="Emoji or icon name, then Enter"
+                aria-label="Custom project icon"
+              />
+            </form>
+            <button
+              type="button"
+              className="project-rail-context-menu-item"
+              onClick={() => handleSetIcon(menu.project, null)}
+            >
+              Reset icon
+            </button>
+            <div className="project-rail-context-menu-divider" />
+            <div className="project-rail-context-menu-heading">Color</div>
+            {COLOR_SLOTS.map(({ slot, label }) => (
+              <div key={slot} className="project-rail-color-row" data-testid={`project-rail-color-${slot}`}>
+                <span className="project-rail-color-label">{label}</span>
+                <div className="project-rail-color-swatches">
+                  {PROJECT_COLOR_CHOICES.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className="project-rail-color-swatch"
+                      style={{ backgroundColor: color }}
+                      onClick={() => handleSetColor(menu.project, slot, color)}
+                      aria-label={`${label} ${color}`}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    className="project-rail-color-custom"
+                    defaultValue="#ffffff"
+                    onChange={(event) => {
+                      const color = event.target.value;
+                      if (colorTimer.current) clearTimeout(colorTimer.current);
+                      colorTimer.current = setTimeout(() => handleSetColor(menu.project, slot, color), 250);
+                    }}
+                    aria-label={`Custom ${label.toLowerCase()} color`}
+                    title="Custom color"
+                  />
+                  <button
+                    type="button"
+                    className="project-rail-color-reset"
+                    onClick={() => handleSetColor(menu.project, slot, null)}
+                    aria-label={`Reset ${label.toLowerCase()} color`}
+                    title="Reset"
+                  >
+                    <MaterialSymbol icon="format_color_reset" size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
             <div className="project-rail-context-menu-divider" />
             <button
               type="button"

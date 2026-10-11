@@ -11,7 +11,9 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { hasFocusedWindow } from '../services/analytics/dailyActiveHeartbeat';
 import { getPackageRoot } from '../utils/appPaths';
 import { resolveImageExtension } from '../utils/imageFormat';
+import { applyRailOrder } from '../utils/railOrder';
 import { resolveWorkspaceAttachmentStagingDirectory } from '../services/attachments/attachmentStagingRoot';
+import { registerConsoleLinkHandlers, routeConsoleLink } from '../services/consoleLinks/consoleLinkHandlers';
 
 /** Timestamp of last app_foregrounded event, used to throttle to once per 30 minutes */
 let lastForegroundedEventAt = 0;
@@ -41,8 +43,11 @@ export function registerWindowHandlers() {
         if (!state) return null;
 
         if (state.mode === 'workspace' && state.workspacePath) {
-            const openProjectPaths = [state.workspacePath, ...(state.additionalWorkspacePaths ?? [])]
-                .filter((path, index, paths) => typeof path === 'string' && path.length > 0 && paths.indexOf(path) === index);
+            const openProjectPaths = applyRailOrder(
+                [state.workspacePath, ...(state.additionalWorkspacePaths ?? [])]
+                    .filter((path, index, paths) => typeof path === 'string' && path.length > 0 && paths.indexOf(path) === index),
+                state.railOrder,
+            );
             const activeWorkspacePath =
                 state.activeWorkspacePath && openProjectPaths.includes(state.activeWorkspacePath)
                     ? state.activeWorkspacePath
@@ -61,9 +66,22 @@ export function registerWindowHandlers() {
         };
     });
 
-    // Open external URL in default browser
+    registerConsoleLinkHandlers();
+
+    // Open external URL in default browser. A console link to a page, typed
+    // page, type, view or citation goes to the window first, which opens it
+    // in the app when it can.
     safeHandle('open-external', async (event, url: string) => {
         if (url && typeof url === 'string') {
+            if (routeConsoleLink(url, event.sender)) return;
+            await shell.openExternal(url);
+        }
+    });
+
+    // An explicit "Open in browser" action: always the browser, never routed
+    // back into the app (that would reopen the doc the user is already on).
+    safeHandle('open-in-browser', async (_event, url: string) => {
+        if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
             await shell.openExternal(url);
         }
     });

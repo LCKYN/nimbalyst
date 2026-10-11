@@ -78,6 +78,8 @@ import { registerPullRequestHandlers, stopPullRequestPollScheduler } from './ipc
 import { registerGithubIssueHandlers } from './ipc/GithubIssueHandlers';
 import { registerReadReceiptHandlers } from './ipc/ReadReceiptHandlers';
 import { registerTrackerPersonalStateHandlers } from './ipc/TrackerPersonalStateHandlers';
+import { registerTrackerPageLinkHandlers } from './ipc/TrackerPageLinkHandlers';
+import { registerTrackerPageTypeHandlers } from './ipc/TrackerPageTypeHandlers';
 import {
     registerTeamInboxHandlers,
     shutdownTeamInboxHandlers,
@@ -193,7 +195,8 @@ import {
 } from './protocols/collabAssetProtocol';
 import { SessionNamingService } from './services/SessionNamingService';
 import { SessionWakeupScheduler } from './services/SessionWakeupScheduler';
-import { getSessionWakeupsStore, repositoryManager } from './services/RepositoryManager';
+import { getPendingSubmissionStore, getSessionWakeupsStore, repositoryManager } from './services/RepositoryManager';
+import { recoverPendingSubmissionsOnBoot } from './services/ai/pendingSubmissions';
 import { ExtensionDevService } from './services/ExtensionDevService';
 import { MetaAgentService } from './services/MetaAgentService';
 import { notificationService } from './services/NotificationService';
@@ -282,6 +285,8 @@ import { ensureWorkspaceLocalNumbersInBackground } from './services/tracker/ensu
 import { initTrackerSchemaService, updateTrackerSchemaWorkspace } from './services/TrackerSchemaService';
 import { registerTrackerLifecycleIpc } from './services/tracker/trackerLifecycleService';
 import { initTrackerNavigationService } from './services/TrackerNavigationService';
+import { initPersonalPagesService } from './services/PersonalPagesService';
+import { initLocalWikiService } from './services/localWiki/LocalWikiService';
 import { initTrackerSavedViewService } from './services/TrackerSavedViewService';
 import { initTrackerRevisionService } from './services/tracker/trackerRevisionService';
 import {
@@ -321,10 +326,12 @@ import { registerCollabV3TestHandlers } from './ipc/CollabV3TestHandlers';
 import { registerHeapSnapshotHandlers } from './ipc/HeapSnapshotHandlers';
 import { getPermissionService } from './services/PermissionService';
 import { ClaudeSettingsManager } from './services/ClaudeSettingsManager';
+import { setClaudeModelPickerSource } from '@nimbalyst/runtime/ai/claudeCustomModels';
 import { TrayManager } from './tray/TrayManager';
 import { pathToFileURL } from 'url';
 import { registerLinuxAppImageProtocolHandler } from './services/LinuxProtocolRegistration';
 import { installWindowOpenGuard } from './window/windowOpenGuard';
+import { openConsoleDeepLink } from './services/consoleLinks/consoleLinkHandlers';
 import { resolveClaudeConfigDir } from '@nimbalyst/runtime/ai/server/providers/claudeCode/claudeConfigDir';
 import { parseConversationDeepLink } from '../shared/conversationDeepLinks';
 import {
@@ -1049,6 +1056,9 @@ async function handleDeepLink(url: string): Promise<void> {
         // port matches the pending-flow ledger.
         if (parsed.host === 'auth' && parsed.pathname === '/callback') {
             await handleAuthCallbackUrl(url);
+        } else if (parsed.host === 'console') {
+            // A console link the web console handed back: nimbalyst://console/<console path>
+            openConsoleDeepLink(url, getMostRecentlyFocusedWorkspaceWindow());
         } else if (parsed.host === 'install' || parsed.pathname?.startsWith('/install/')) {
             // Handle extension install: nimbalyst://install/com.nimbalyst.excalidraw
             const extensionId = parsed.host === 'install'
@@ -1941,6 +1951,16 @@ app.whenReady().then(async () => {
             return documentServices.get(workspacePath)?.listTrackerItems() ?? [];
         },
     });
+    // Lets the AI Usage Report open a session it is showing a cost for. The
+    // tray's own select-session channel is gated to the tray panel's sender, so
+    // it cannot be reused. TrayManager already knows how to focus the right
+    // window for a (session, workspace) pair, which is what both the standalone
+    // report window and the in-window report mode need.
+    safeHandle('usage-report:open-session', async (_event, sessionId?: string, workspacePath?: string) => {
+        if (!sessionId || !workspacePath) return { success: false };
+        TrayManager.getInstance().handleSessionClick(sessionId, workspacePath);
+        return { success: true };
+    });
     setupTrayPanelHandlers({
         getFeed: () => TrayManager.getInstance().buildPanelFeed(),
         onSelectSession: (sessionId, workspacePath) =>
@@ -1992,6 +2012,8 @@ app.whenReady().then(async () => {
     registerGithubIssueHandlers();
     registerReadReceiptHandlers();
     registerTrackerPersonalStateHandlers();
+    registerTrackerPageLinkHandlers();
+    registerTrackerPageTypeHandlers();
     registerWakeupHandlers();
     registerBlitzHandlers();
     registerProjectMigrationHandlers();
@@ -2024,6 +2046,8 @@ app.whenReady().then(async () => {
     initTrackerSchemaService(); // Register IPC handlers + load built-in schemas
     registerTrackerLifecycleIpc(); // Promote to team / archive, from the UI
     initTrackerNavigationService();
+    initPersonalPagesService();
+    initLocalWikiService();
     initTrackerSavedViewService();
     initTrackerRevisionService();
 
@@ -2376,6 +2400,8 @@ app.whenReady().then(async () => {
         const settingsManager = ClaudeSettingsManager.getInstance();
         return settingsManager.getUserLevelEnv();
     });
+    // Custom gateway models from Claude settings `modelPicker` for the picker.
+    setClaudeModelPickerSource((workspacePath) => ClaudeSettingsManager.getInstance().getModelPicker(workspacePath));
     OpenAICodexProvider.setClaudeSettingsEnvLoader(async () => {
         const settingsManager = ClaudeSettingsManager.getInstance();
         return settingsManager.getUserLevelEnv();
@@ -2870,6 +2896,8 @@ app.whenReady().then(async () => {
     } catch (sweepErr) {
       logger.main.error('[Main] Boot sweep failed:', sweepErr);
     }
+
+    await recoverPendingSubmissionsOnBoot(getPendingSubmissionStore());
 
     // Check for pending restart continuations and queue continuation prompts
     await checkForRestartContinuation(aiService);

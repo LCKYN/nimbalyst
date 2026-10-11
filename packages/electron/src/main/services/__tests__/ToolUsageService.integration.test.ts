@@ -92,7 +92,7 @@ describe('ToolUsageService (real SQLite backend)', () => {
   });
 
   it('produces report aggregates (top tools, by kind, by provider)', async () => {
-    await service.recordBatch([{ name: 'Read' }, { name: 'Read' }], {
+    await service.recordBatch([{ name: 'Read' }, { name: 'Read', isError: true }], {
       provider: 'claude-code',
       projectPath: '/repo',
       day: '2026-07-20',
@@ -106,6 +106,7 @@ describe('ToolUsageService (real SQLite backend)', () => {
     const report = await service.getReport();
     expect(report.topTools[0]).toMatchObject({ toolName: 'Read', count: 2 });
     expect(report.byKind).toEqual({ builtin: 2, mcp: 1 });
+    expect(report.errorCount).toBe(1);
     expect(report.overTime.map((d) => d.day)).toEqual([
       '2026-07-20',
       '2026-07-21',
@@ -253,5 +254,54 @@ describe('ToolUsageService (real SQLite backend)', () => {
     const second = await service.backfillFromRawMessages();
     expect(second).toEqual({ sessionsProcessed: 0, toolCallsCounted: 0 });
     expect((await service.getRollup()).Read.count).toBe(2);
+  });
+
+  it('reports estimated tokens per tool, ranked separately from call counts', async () => {
+    await service.recordBatch(
+      [
+        { name: 'Grep', callTokens: 5, resultTokens: 20 },
+        { name: 'Grep', callTokens: 5, resultTokens: 20 },
+        { name: 'Grep', callTokens: 5, resultTokens: 20 },
+        { name: 'Read', callTokens: 10, resultTokens: 5_000 },
+      ],
+      { provider: 'claude-code', projectPath: '/repo', day: '2026-07-21' },
+    );
+
+    const report = await service.getReport();
+    expect(report.topTools[0].toolName).toBe('Grep');
+    expect(report.heaviestTools[0]).toMatchObject({ toolName: 'Read', callTokens: 10, resultTokens: 5_000 });
+    expect(report.tokens).toEqual({ call: 25, result: 5_060 });
+  });
+
+  // Sizes for calls made before this version come from stored messages. The
+  // call and its result arrive in different messages, repeated chunks must not
+  // double a call, and the counts the call already has must not change.
+  it('backfills historical tool sizes without touching counts, once', async () => {
+    const handle = sqlite.getRawHandle()!;
+    handle
+      .prepare(`INSERT INTO ai_sessions (id, workspace_id, provider, title, created_at) VALUES (?, ?, ?, ?, ?)`)
+      .run('old-claude', '/repo', 'claude-code', 'Old', '2026-01-02T00:00:00.000Z');
+    const insertMessage = handle.prepare(
+      `INSERT INTO ai_agent_messages (session_id, source, direction, content, created_at)
+       VALUES ('old-claude', 'claude-code', 'output', ?, '2026-01-02T03:04:05.000Z')`,
+    );
+    const toolUse = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', id: 'toolu_9', name: 'Read', input: { file_path: 'x'.repeat(40) } }] },
+    });
+    insertMessage.run(toolUse);
+    insertMessage.run(toolUse);
+    insertMessage.run(JSON.stringify({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_9', content: 'y'.repeat(8_000) }] },
+    }));
+
+    expect((await service.getReport()).sizeBackfillPending).toBe(true);
+    await service.backfillFromRawMessages();
+    await service.backfillFromRawMessages();
+
+    const report = await service.getReport();
+    expect(report.sizeBackfillPending).toBe(false);
+    expect(report.heaviestTools[0]).toMatchObject({ toolName: 'Read', count: 1, callTokens: 10, resultTokens: 2_000 });
   });
 });
