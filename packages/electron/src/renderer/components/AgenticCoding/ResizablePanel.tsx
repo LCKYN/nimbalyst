@@ -78,7 +78,8 @@ export const ResizablePanel: React.FC<ResizablePanelProps> = ({
             aria-valuemin={minWidth}
             aria-valuemax={maxWidth}
           >
-            <div className="resizable-panel-divider-handle absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-10 bg-transparent pointer-events-none" />
+            {/* Invisible 10px grab area over the 2px line, above the list's scrollbar. */}
+            <div className="resizable-panel-divider-handle absolute inset-y-0 -left-1 -right-1 z-10" />
           </div>
         </>
       )}

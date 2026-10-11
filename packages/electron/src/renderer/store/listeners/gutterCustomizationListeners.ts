@@ -11,9 +11,12 @@
  * The value is applied directly to the atom (not through the persisting
  * setters), so it does not re-persist or echo. Main already excludes the
  * originating window from the broadcast, so a window never hears its own write.
+ *
+ * The global Agent session history width rides the same broadcast.
  */
 import { store } from '@nimbalyst/runtime/store';
 import { gutterCustomizationAtom } from '../atoms/appSettings';
+import { globalSessionHistoryWidthAtom, SESSION_HISTORY_WIDTH_KEY } from '../atoms/agentMode';
 import {
   HIDDEN_GUTTER_ITEMS_KEY,
   GUTTER_ITEM_ORDER_KEY,
@@ -41,6 +44,8 @@ export function registerGutterCustomizationListener(): void {
           ? (value as GutterCustomizationState['order'])
           : {};
       store.set(gutterCustomizationAtom, (prev) => ({ ...prev, order }));
+    } else if (key === SESSION_HISTORY_WIDTH_KEY && typeof value === 'number') {
+      store.set(globalSessionHistoryWidthAtom, value);
     }
   });
 }
