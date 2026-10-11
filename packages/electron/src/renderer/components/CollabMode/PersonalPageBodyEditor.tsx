@@ -11,7 +11,8 @@
  * `personal-doc://<documentId>`, the key main records snapshots under.
  */
 
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
+import type { LexicalEditor } from 'lexical';
 import { NimbalystEditor, type EditorConfig } from '@nimbalyst/runtime/editor';
 import type { UploadedEditorAsset } from '@nimbalyst/runtime/editor/EditorConfig';
 import { DocumentPathProvider } from '@nimbalyst/runtime/DocumentPathContext';
@@ -68,9 +69,14 @@ export interface PersonalPageBodyEditorProps {
   workspacePath: string;
   /** Classes for the element holding the editor (layout differs per host). */
   className?: string;
+  onEditorReady?: (editor: LexicalEditor | null) => void;
+  /** Scrolls with the body, above it (the page's title and type row). */
+  documentHeader?: React.ReactNode;
 }
 
-export const PersonalPageBodyEditor: React.FC<PersonalPageBodyEditorProps> = ({ documentId, workspacePath, className }) => {
+export const PersonalPageBodyEditor: React.FC<PersonalPageBodyEditorProps> = ({ documentId, workspacePath, className, onEditorReady, documentHeader }) => {
+  const readyRef = useRef(onEditorReady); readyRef.current = onEditorReady;
+  useEffect(() => () => readyRef.current?.(null), [documentId, workspacePath]);
   const body = usePersonalPageBody({ workspacePath, documentId });
   const getContentRef = useRef<(() => string) | null>(null);
   const onEditRef = useRef(body.onEdit);
@@ -85,6 +91,8 @@ export const PersonalPageBodyEditor: React.FC<PersonalPageBodyEditorProps> = ({ 
     if (body.status !== 'ready') return null;
     return {
       ...hostConfig,
+      documentHeader,
+      onEditorReady: editor => readyRef.current?.(editor),
       isRichText: true,
       editable: true,
       showToolbar: false,
@@ -99,7 +107,7 @@ export const PersonalPageBodyEditor: React.FC<PersonalPageBodyEditorProps> = ({ 
         if (isDirty && getContentRef.current) onEditRef.current(getContentRef.current());
       },
     };
-  }, [body.status, body.initialContent, hostConfig]);
+  }, [body.status, body.initialContent, hostConfig, documentHeader]);
 
   const documentPath = personalPageDocumentPath(documentId);
 
@@ -119,8 +127,13 @@ export const PersonalPageBodyEditor: React.FC<PersonalPageBodyEditorProps> = ({ 
             <NimbalystEditor key={`${documentId}-${body.editorEpoch}`} config={editorConfig} />
           </DocumentPathProvider>
         ) : (
-          <div className="py-4 text-center text-sm text-nim-faint">
-            {body.status === 'error' ? 'This page could not be loaded.' : 'Loading...'}
+          <div className="py-4 text-center text-sm text-nim-faint" role="status">
+            {body.status === 'unavailable'
+              ? 'This page is unavailable on this device. It may have been deleted. Check Wiki Trash for a recoverable copy.'
+              : body.status === 'error' ? 'This page could not be loaded.' : 'Loading...'}
+            {(body.status === 'unavailable' || body.status === 'error') && (
+              <button type="button" className="ml-2 text-nim-link hover:underline" onClick={body.retryLoad}>Try again</button>
+            )}
           </div>
         )}
       </div>

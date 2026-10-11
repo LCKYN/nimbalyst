@@ -287,6 +287,7 @@ import { initTrackerSchemaService, updateTrackerSchemaWorkspace } from './servic
 import { registerTrackerLifecycleIpc } from './services/tracker/trackerLifecycleService';
 import { initTrackerNavigationService } from './services/TrackerNavigationService';
 import { initPersonalPagesService } from './services/PersonalPagesService';
+import { initLocalWikiService } from './services/localWiki/LocalWikiService';
 import { initTrackerSavedViewService } from './services/TrackerSavedViewService';
 import { initTrackerRevisionService } from './services/tracker/trackerRevisionService';
 import {
@@ -326,6 +327,7 @@ import { registerCollabV3TestHandlers } from './ipc/CollabV3TestHandlers';
 import { registerHeapSnapshotHandlers } from './ipc/HeapSnapshotHandlers';
 import { getPermissionService } from './services/PermissionService';
 import { ClaudeSettingsManager } from './services/ClaudeSettingsManager';
+import { setClaudeModelPickerSource } from '@nimbalyst/runtime/ai/claudeCustomModels';
 import { TrayManager } from './tray/TrayManager';
 import { pathToFileURL } from 'url';
 import { registerLinuxAppImageProtocolHandler } from './services/LinuxProtocolRegistration';
@@ -1950,6 +1952,16 @@ app.whenReady().then(async () => {
             return documentServices.get(workspacePath)?.listTrackerItems() ?? [];
         },
     });
+    // Lets the AI Usage Report open a session it is showing a cost for. The
+    // tray's own select-session channel is gated to the tray panel's sender, so
+    // it cannot be reused. TrayManager already knows how to focus the right
+    // window for a (session, workspace) pair, which is what both the standalone
+    // report window and the in-window report mode need.
+    safeHandle('usage-report:open-session', async (_event, sessionId?: string, workspacePath?: string) => {
+        if (!sessionId || !workspacePath) return { success: false };
+        TrayManager.getInstance().handleSessionClick(sessionId, workspacePath);
+        return { success: true };
+    });
     setupTrayPanelHandlers({
         getFeed: () => TrayManager.getInstance().buildPanelFeed(),
         onSelectSession: (sessionId, workspacePath) =>
@@ -2036,6 +2048,7 @@ app.whenReady().then(async () => {
     registerTrackerLifecycleIpc(); // Promote to team / archive, from the UI
     initTrackerNavigationService();
     initPersonalPagesService();
+    initLocalWikiService();
     initTrackerSavedViewService();
     initTrackerRevisionService();
 
@@ -2375,6 +2388,8 @@ app.whenReady().then(async () => {
         const settingsManager = ClaudeSettingsManager.getInstance();
         return settingsManager.getUserLevelEnv();
     });
+    // Custom gateway models from Claude settings `modelPicker` for the picker.
+    setClaudeModelPickerSource((workspacePath) => ClaudeSettingsManager.getInstance().getModelPicker(workspacePath));
     OpenAICodexProvider.setClaudeSettingsEnvLoader(async () => {
         const settingsManager = ClaudeSettingsManager.getInstance();
         return settingsManager.getUserLevelEnv();

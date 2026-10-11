@@ -1,11 +1,12 @@
 /**
- * Pages mode's left sidebar: the Team section over the Personal section, each
- * a `CollabSidebar` bound to its own docs session. With no team scope the
- * Personal section stands alone under a one-line note.
+ * Pages mode's left sidebar: the Team section over the Local section (the
+ * project's wiki folder, formerly Personal), each a `CollabSidebar` bound to
+ * its own docs session. With no team scope the Local section stands alone
+ * under a one-line note.
  */
 
-import React, { useState } from 'react';
-import { atom, useAtomValue } from 'jotai';
+import React, { useEffect, useState } from 'react';
+import { atom, useAtom, useAtomValue } from 'jotai';
 import type { CollabHost, CollabOpenOptions, CollabScope } from '@nimbalyst/collab-client/core';
 import type { CollabDocsSession } from '@nimbalyst/collab-client/docs';
 import type { PageTypeLane } from '@nimbalyst/collab-client/docs/pageTypes';
@@ -23,8 +24,14 @@ import { ElectronCollabDocsUIRoot } from './ElectronCollabDocsUIProvider';
 import { useCollabTypeResolver } from './useCollabTypeResolver';
 import { useDefineTrackerType } from './useDefineTrackerType';
 import { useSetPageType } from './useSetPageType';
+import { pageActionRequestAtom, pageMoveRequestAtom, pageTypeRequestAtom } from './pageTypeRequest';
+import { movePageAcrossSections } from './moveAcrossSectionsDesktop';
+import { useTabsActions } from '../../contexts/TabsContext';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { usePagesSidebarCollapse } from './usePagesSidebarCollapse';
 import { archiveTrackerItem } from '../../services/archiveTrackerItem';
+import { exportPersonalPagesToFiles } from '../../services/exportPersonalPages';
+import { localWikiStatusAtomFamily } from '../../store/atoms/localWiki';
 
 interface PagesSidebarSectionsProps {
   workspacePath: string;
@@ -71,6 +78,29 @@ export function PagesSidebarSections({
   const personalTypeResolver = useCollabTypeResolver('personal');
   const setPageType = useSetPageType(workspacePath, teamScope);
   const [typingPage, setTypingPage] = useState<{ lane: PageTypeLane; page: SharedDocument } | null>(null);
+  // A page's own header asks for Set type through this atom.
+  const [typeRequest, setTypeRequest] = useAtom(pageTypeRequestAtom);
+  useEffect(() => {
+    if (!typeRequest) return;
+    setTypingPage(typeRequest);
+    setTypeRequest(null);
+  }, [typeRequest, setTypeRequest]);
+  const tabsActions = useTabsActions();
+  const [moveRequest, setMoveRequest] = useAtom(pageMoveRequestAtom);
+  useEffect(() => {
+    if (!moveRequest) return;
+    setMoveRequest(null);
+    if (!teamScope) {
+      errorNotificationService.showError('Could not move this page', 'This project is not connected to its team.');
+      return;
+    }
+    void movePageAcrossSections({ ...moveRequest, workspacePath, teamScope, tabsActions }).then((result) => {
+      if (result && !result.ok) errorNotificationService.showError('Could not move this page', result.error);
+    });
+  }, [moveRequest, setMoveRequest, teamScope, workspacePath, tabsActions]);
+  // Rename, Move to..., New page inside and Trash from a page header: its section's tree runs them.
+  const [actionRequest, setActionRequest] = useAtom(pageActionRequestAtom);
+  const clearActionRequest = () => setActionRequest(null);
   const [creatingType, setCreatingType] = useState(false);
   const defineType = useDefineTrackerType(workspacePath);
   const { collapsed, toggle } = usePagesSidebarCollapse(workspacePath, teamScope !== null);
@@ -78,6 +108,14 @@ export function PagesSidebarSections({
   const sectionClass = (isCollapsed: boolean) => (isCollapsed ? 'shrink-0' : 'flex-1 min-h-0');
   const teamHomeId = useSectionHomeId(teamScope, teamScope ? getElectronCollabDocsSession(teamScope) : null);
   const personalHomeId = useSectionHomeId(null, getPersonalCollabDocsSession(workspacePath));
+  // Database Personal pages from before the Local wiki: exported only when the user asks.
+  const { unexportedPageCount } = useAtomValue(localWikiStatusAtomFamily(workspacePath));
+  const localMenuItems = unexportedPageCount > 0 ? [{
+    id: 'export-database-pages',
+    label: `Export ${unexportedPageCount} database page${unexportedPageCount === 1 ? '' : 's'} to files`,
+    icon: 'drive_file_move',
+    onSelect: () => { void exportPersonalPagesToFiles(workspacePath, unexportedPageCount); },
+  }] : undefined;
   const entries = (lane: PagesSectionLane, scope: CollabScope, host: CollabHost, homeId: string | null, activeDocumentId: string | null) => (
     <PagesSectionEntries
       active={activeSectionEntry(lane, activeTabPath, activeDocumentId)}
@@ -119,6 +157,8 @@ export function PagesSidebarSections({
               collapsed={collapsed.team}
               onToggleCollapsed={() => toggle('team')}
               onSetPageType={(page) => setTypingPage({ lane: 'team', page })}
+              pageActionRequest={actionRequest?.lane === 'team' ? actionRequest : null}
+              onPageActionHandled={clearActionRequest}
             />
           </ElectronCollabDocsUIRoot>
         </div>
@@ -133,7 +173,8 @@ export function PagesSidebarSections({
       <div className={`pages-sidebar-personal-section ${sectionClass(collapsed.personal)}`}>
         <ElectronCollabDocsUIRoot scope={personalScope}>
           <CollabSidebar
-            sectionTitle="Personal"
+            sectionTitle="Local"
+            extraSectionMenuItems={localMenuItems}
             activeDocumentId={activePersonalDocumentId}
             sectionEntries={entries('personal', personalScope, getPersonalCollabHost(workspacePath), personalHomeId, activePersonalDocumentId)}
             activeItemId={activeRow.itemId}
@@ -144,6 +185,8 @@ export function PagesSidebarSections({
             collapsed={collapsed.personal}
             onToggleCollapsed={() => toggle('personal')}
             onSetPageType={(page) => setTypingPage({ lane: 'personal', page })}
+            pageActionRequest={actionRequest?.lane === 'personal' ? actionRequest : null}
+            onPageActionHandled={clearActionRequest}
           />
         </ElectronCollabDocsUIRoot>
       </div>

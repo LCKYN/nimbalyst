@@ -399,7 +399,7 @@ interface ElectronAPI {
   listShares: () => Promise<{ success: boolean; shares?: Array<{ shareId: string; sessionId: string; title: string; sizeBytes: number; createdAt: string; expiresAt: string | null; viewCount: number; owningPersonalOrgId: string }>; error?: string }>;
   deleteShare: (options: { shareId: string; sessionId?: string; owningPersonalOrgId?: string }) => Promise<{ success: boolean; error?: string }>;
   getShareKeys: () => Promise<Record<string, string>>;
-  shareFileAsLink: (options: { filePath: string; expirationDays?: number; personalOrgId?: string }) => Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; owningPersonalOrgId?: string; error?: string }>;
+  shareFileAsLink: (options: { filePath: string; expirationDays?: number; personalOrgId?: string; mermaidSvgs?: Record<string, string> }) => Promise<{ success: boolean; url?: string; shareId?: string; isUpdate?: boolean; encryptionKey?: string; owningPersonalOrgId?: string; error?: string }>;
   getShareExpirationPreference: () => Promise<number>;
   setShareExpirationPreference: (days: number) => Promise<void>;
 
@@ -869,9 +869,13 @@ interface ElectronAPI {
   // Per-tool usage (tip targeting rollup + AI Usage Report Tools tab)
   toolUsage: {
     getRollup: () => Promise<Record<string, { count: number; firstUsed: string; lastUsed: string }>>;
-    getReport: (workspaceId?: string) => Promise<{
-      topTools: Array<{ toolName: string; mcpServer: string | null; count: number; errorCount: number }>;
+    getReport: (workspaceId?: string, sinceMs?: number) => Promise<{
+      topTools: Array<{ toolName: string; mcpServer: string | null; count: number; errorCount: number; callTokens: number; resultTokens: number }>;
+      heaviestTools: Array<{ toolName: string; mcpServer: string | null; count: number; errorCount: number; callTokens: number; resultTokens: number }>;
       byKind: { builtin: number; mcp: number };
+      errorCount: number;
+      tokens: { call: number; result: number };
+      sizeBackfillPending: boolean;
       byProvider: Array<{ provider: string; count: number }>;
       overTime: Array<{ day: string; count: number }>;
       byProject: Array<{ projectPath: string; count: number }>;
@@ -1957,6 +1961,8 @@ interface ElectronAPI {
 
   // Open external links
   openExternal: (url: string) => Promise<void>;
+  /** Always the browser; skips the in-app routing `openExternal` applies to console links. */
+  openInBrowser: (url: string) => Promise<void>;
   openThirdPartyNotices: () => Promise<{ success: boolean; error?: string }>;
 
   // Image operations

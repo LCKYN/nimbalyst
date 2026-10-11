@@ -11,6 +11,7 @@ import type { EditorContextItem } from '@nimbalyst/extension-sdk/types/editor';
 import type { EffortLevel, ThinkingMode } from './effortLevels';
 import type { ToolResult } from './protocols/ProtocolInterface';
 import { ModelIdentifier } from './ModelIdentifier';
+import { claudeCustomModelName } from '../claudeCustomModels';
 import {
   CLAUDE_CODE_ACCEPTED_VARIANT_INPUTS,
   CLAUDE_CODE_PINNED_SDK_MODELS,
@@ -291,8 +292,10 @@ export function shouldBlockStartedSessionProviderSwitch(
  *
  * `fable` is the Fable tier above Opus (currently Fable 5.1). `fable-5` is the
  * pinned previous-generation Fable. Both run a 1M window natively.
+ *
+ * `haiku` is Haiku 5.5; `haiku-4-5` keeps Haiku 4.5 selectable.
  */
-export const CLAUDE_CODE_VARIANTS = ['fable', 'fable-5', 'opus', 'opus-5', 'opus-4-8', 'opus-4-7', 'opus-4-6', 'sonnet', 'sonnet-5', 'sonnet-4-6', 'haiku'] as const;
+export const CLAUDE_CODE_VARIANTS = ['fable', 'fable-5', 'opus', 'opus-5', 'opus-4-8', 'opus-4-7', 'opus-4-6', 'sonnet', 'sonnet-5', 'sonnet-4-6', 'haiku', 'haiku-4-5'] as const;
 
 /**
  * Resolves a configured model string to the SDK model value.
@@ -314,6 +317,10 @@ export function resolveClaudeCodeModelVariant(configuredModel: string | undefine
 
   // Try parsing with ModelIdentifier
   const parsed = ModelIdentifier.tryParse(configured);
+  // Custom gateway models go to the SDK verbatim (no pinning, no [1m]); the
+  // user's router decides what they mean.
+  const customModel = parsed?.customClaudeModel ?? claudeCustomModelName(configured);
+  if (customModel) return customModel;
   if (parsed && isClaudeCodeFamily(parsed.provider)) {
     // baseVariant strips suffixes like -1m
     const variant = parsed.baseVariant as ClaudeCodeVariant;
@@ -361,6 +368,11 @@ export interface AIModel {
    * so a revoked credential never silently erases a selection (#916).
    */
   unavailable?: boolean;
+  /**
+   * Custom Claude gateway models only: the Anthropic model id whose
+   * capabilities this model shares (from Claude settings `modelPicker`).
+   */
+  behavesAs?: string;
 }
 
 export interface AIModelCost {
@@ -418,6 +430,15 @@ export interface TokenUsageCategory {
   percentage: number;
 }
 
+/** A tokens/cost bucket, used for main-vs-subagent and per-model breakdowns in `tokenUsage`. #1496 */
+export interface TokenUsageBucket {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  costUSD?: number;
+}
+
 export interface SessionData {
   id: string;  // Our session ID
   provider: AIProviderType | string;  // Provider type
@@ -427,6 +448,8 @@ export interface SessionData {
   agentRole?: AgentRole;
   createdBySessionId?: string | null;
   messages: TranscriptViewMessage[];
+  /** Renderer-only: messages were dropped from memory; metadata is still current. */
+  messagesEvicted?: boolean;
   documentContext?: DocumentContext;
   workspacePath?: string;
   title?: string;
@@ -481,7 +504,7 @@ export interface SessionData {
     providerCumulativeCachedInputTokens?: number;
     contextWindow?: number;   // Max context window size for the model (legacy, use currentContext)
     categories?: TokenUsageCategory[]; // Breakdown parsed from /context output (legacy, use currentContext)
-    costUSD?: number;         // Total cost in USD (from SDK modelUsage)
+    costUSD?: number;         // Total cost in USD (from SDK modelUsage, or the pricing-table estimate)
     webSearchRequests?: number; // Number of web searches performed (from SDK modelUsage)
     // Current context window snapshot (from SDK modelUsage for Claude Code)
     // This is separate from cumulative tokens - resets on compaction
@@ -491,6 +514,20 @@ export interface SessionData {
       categories?: TokenUsageCategory[]; // Category breakdown from /context
       rawResponse?: string;   // Raw markdown from /context for display on session reload
     };
+    // True once any turn's costUSD came from the modelPricing.ts fallback table
+    // rather than an SDK/API-reported exact figure. Session-level, not
+    // per-turn: once any turn estimates, the whole session total is treated as
+    // estimated for display rather than splitting a total into exact+estimated
+    // portions. Surfaced in the UI as a `*` + tooltip. #1496.
+    costEstimated?: boolean;
+    // Cumulative split of tokenUsage between the lead conversation and
+    // Task-tool sub-agents. claude-code only -- see
+    // ClaudeCodeProvider.ts/turnState.ts `attributeModelUsageByOrigin`. #1496.
+    mainUsage?: TokenUsageBucket;
+    subagentUsage?: TokenUsageBucket;
+    // Cumulative per-model breakdown, union of `mainUsage`/`subagentUsage`'s
+    // models. #1496.
+    byModel?: Record<string, TokenUsageBucket>;
   };
 
   // Additional metadata
@@ -615,6 +652,10 @@ export interface StreamChunk {
     total_tokens: number;
     cache_read_input_tokens?: number;
     cache_creation_input_tokens?: number;
+    // Exact cost from the provider's own API/SDK response, when it reports one.
+    // Most non-claude-code providers don't; MessageStreamingHandler falls back
+    // to modelPricing.ts's estimateCostUSD() and marks costEstimated. #1496.
+    costUSD?: number;
   };
   // Structured `/context` report from the agent SDK (0.3.241+), when the binary
   // attaches one. Set only on the `complete` chunk of a /context turn; the
@@ -634,6 +675,13 @@ export interface StreamChunk {
     contextWindow?: number;
     webSearchRequests?: number;
   }>;
+  // `modelUsage` split by where the tokens were spent this turn: the lead
+  // conversation vs. Task-tool sub-agents. Each is the SUM of the whole
+  // `modelUsage` entries attributed to that origin (see
+  // `attributeModelUsageByOrigin` in claudeCode/turnState.ts) -- not a
+  // token-level split of a single model's usage. claude-code only. #1496.
+  mainUsage?: TokenUsageBucket;
+  subagentUsage?: TokenUsageBucket;
   // Actual tokens in context window from last assistant message (input + cacheRead + cacheCreation).
   // Unlike modelUsage which is cumulative, this reflects the real context fill level per turn.
   contextFillTokens?: number;

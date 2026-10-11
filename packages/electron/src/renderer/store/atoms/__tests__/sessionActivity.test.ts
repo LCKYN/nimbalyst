@@ -13,6 +13,7 @@ import {
   clearWorkspaceActivityAtom,
   projectActivitySummaryAtom,
 } from '../sessionActivity';
+import { projectAwaitingInputCountAtom, sessionHasPendingInteractivePromptAtom } from '../sessions';
 
 const PATH_A = '/ws/a';
 const PATH_B = '/ws/b';
@@ -143,6 +144,21 @@ describe('sessionActivity atoms', () => {
     it('omits workspaces with no activity', () => {
       const summary = jotaiStore.get(projectActivitySummaryAtom);
       expect(summary.size).toBe(0);
+    });
+  });
+
+  describe('projectAwaitingInputCountAtom', () => {
+    it('counts sessions waiting on a prompt per workspace, including inactive ones', () => {
+      jotaiStore.set(markSessionStreamingAtom, { sessionId: 'w1', workspacePath: PATH_A });
+      jotaiStore.set(markSessionStreamingAtom, { sessionId: 'w2', workspacePath: PATH_A });
+      jotaiStore.set(markSessionStreamingAtom, { sessionId: 'w3', workspacePath: PATH_B });
+      jotaiStore.set(sessionHasPendingInteractivePromptAtom('w1'), true);
+      jotaiStore.set(sessionHasPendingInteractivePromptAtom('w3'), true);
+
+      expect(jotaiStore.get(projectAwaitingInputCountAtom)).toEqual(new Map([[PATH_A, 1], [PATH_B, 1]]));
+
+      jotaiStore.set(sessionHasPendingInteractivePromptAtom('w3'), false);
+      expect(jotaiStore.get(projectAwaitingInputCountAtom).has(PATH_B)).toBe(false);
     });
   });
 });

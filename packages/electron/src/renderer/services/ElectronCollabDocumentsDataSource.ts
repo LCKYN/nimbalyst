@@ -13,7 +13,14 @@ import type {
   SharedItemPlacement,
   SharedTypePlacement,
 } from '@nimbalyst/collab-client/docs';
-import type { ItemPlacementNode, PageSearchRequest, PageSearchResponse, TypePlacementNode } from '@nimbalyst/collab-protocol';
+import {
+  applyPageFieldsPatch,
+  samePageFields,
+  type ItemPlacementNode,
+  type PageSearchRequest,
+  type PageSearchResponse,
+  type TypePlacementNode,
+} from '@nimbalyst/collab-protocol';
 import {
   TeamSyncProvider,
   type TeamDocIndexEntry,
@@ -72,6 +79,7 @@ function mapDocument(document: TeamDocIndexEntry): SharedDocument {
     sortOrder: document.sortOrder ?? null,
     trashedAt: document.trashedAt,
     hasContent: document.hasContent,
+    ...(document.fields ? { fields: document.fields } : {}),
     decryptFailed: document.decryptFailed,
   };
 }
@@ -154,6 +162,8 @@ export class ElectronCollabDocumentsDataSource implements CollabDocsDataSource {
   private readonly placementConfirmations: ItemPlacementConfirmations;
   /** Confirmed page moves and type placements (Set type moves a page's children). */
   private readonly documentConfirmations: CollabWriteConfirmations<TeamDocIndexEntry>;
+  private readonly titleConfirmations: CollabWriteConfirmations<TeamDocIndexEntry>;
+  private readonly fieldConfirmations: CollabWriteConfirmations<TeamDocIndexEntry>;
   private readonly typeConfirmations: CollabWriteConfirmations<TypePlacementNode>;
   /** Page and subtree deletes, keyed by the removed id; only when the server echoes them. */
   private readonly removalConfirmations: CollabWriteConfirmations<true>;
@@ -171,6 +181,10 @@ export class ElectronCollabDocumentsDataSource implements CollabDocsDataSource {
     const typeConfirmations = new CollabWriteConfirmations<TypePlacementNode>(options.placementConfirmTimeoutMs, 'placement');
     const removalConfirmations = new CollabWriteConfirmations<true>(options.placementConfirmTimeoutMs, 'delete');
     this.documentConfirmations = documentConfirmations;
+    const titleConfirmations = new CollabWriteConfirmations<TeamDocIndexEntry>(options.placementConfirmTimeoutMs, 'rename');
+    this.titleConfirmations = titleConfirmations;
+    const fieldConfirmations = new CollabWriteConfirmations<TeamDocIndexEntry>(options.placementConfirmTimeoutMs, 'field change');
+    this.fieldConfirmations = fieldConfirmations;
     this.typeConfirmations = typeConfirmations;
     this.removalConfirmations = removalConfirmations;
     const emitSnapshot = () => this.emit({
@@ -187,6 +201,8 @@ export class ElectronCollabDocumentsDataSource implements CollabDocsDataSource {
       onDocumentsLoaded: emitSnapshot,
       onDocumentChanged: (document) => {
         documentConfirmations.changed(document.documentId, document);
+        titleConfirmations.changed(document.documentId, document);
+        fieldConfirmations.changed(document.documentId, document);
         // A page-tree server moves a live page to Trash instead of deleting it,
         // and the trashed row is its answer to the delete.
         if (document.trashedAt != null) removalConfirmations.changed(document.documentId, true);
@@ -209,6 +225,8 @@ export class ElectronCollabDocumentsDataSource implements CollabDocsDataSource {
       },
       onWriteRefused: (requestId, error) => {
         documentConfirmations.refused(requestId, error.message);
+        titleConfirmations.refused(requestId, error.message);
+        fieldConfirmations.refused(requestId, error.message);
         removalConfirmations.refused(requestId, error.message);
       },
       // Placement changes ride the snapshot change; see CollabDocsSnapshot.
@@ -237,6 +255,8 @@ export class ElectronCollabDocumentsDataSource implements CollabDocsDataSource {
       onStatusChange: (status) => {
         confirmations.connectionChanged(status === 'connected');
         documentConfirmations.connectionChanged(status === 'connected');
+        titleConfirmations.connectionChanged(status === 'connected');
+        fieldConfirmations.connectionChanged(status === 'connected');
         typeConfirmations.connectionChanged(status === 'connected');
         removalConfirmations.connectionChanged(status === 'connected');
         this.emit({ type: 'status', status });
@@ -335,9 +355,24 @@ export class ElectronCollabDocumentsDataSource implements CollabDocsDataSource {
         );
         return { ok: true, registrationAcked };
       }
-      case 'update-document-title':
-        await this.provider.updateDocumentTitle(command.documentId, command.title);
+      case 'update-document-title': {
+        if (!this.provider.echoesTitleWrites?.()) throw new Error('This server cannot confirm page renames yet. Try again after the server is updated.');
+        const requestId = crypto.randomUUID();
+        const confirmed = this.titleConfirmations.expect(command.documentId, (row) => row.title === command.title, requestId);
+        await Promise.all([this.provider.updateDocumentTitle(command.documentId, command.title, { requestId }), confirmed]);
         return { ok: true };
+      }
+      case 'set-document-fields': {
+        if (!this.provider.storesPageFields?.()) throw new Error('This server cannot store page fields yet. Try again after the server is updated.');
+        const requestId = crypto.randomUUID();
+        // The echo holds the patch when applying it again changes nothing; a
+        // teammate's change to another field meanwhile does not matter.
+        const confirmed = this.fieldConfirmations.expect(command.documentId, (row) =>
+          samePageFields(applyPageFieldsPatch(row.fields, command.fields), row.fields), requestId);
+        this.provider.setDocumentFields(command.documentId, command.fields, { requestId });
+        await confirmed;
+        return { ok: true };
+      }
       case 'remove-document': {
         const requestId = this.authorEchoRequestId();
         const confirmed = requestId ? this.removalConfirmations.expect(command.documentId, () => true, requestId) : null;
@@ -438,6 +473,8 @@ export class ElectronCollabDocumentsDataSource implements CollabDocsDataSource {
     this.listeners.clear();
     this.placementConfirmations.dispose();
     this.documentConfirmations.dispose();
+    this.titleConfirmations.dispose();
+    this.fieldConfirmations.dispose();
     this.typeConfirmations.dispose();
     this.removalConfirmations.dispose();
     this.provider.destroy();
@@ -465,6 +502,8 @@ export class ElectronCollabDocumentsDataSource implements CollabDocsDataSource {
       ...(itemPlacements ? { itemPlacements: itemPlacements.map(mapItemPlacement) } : {}),
       // The server's snapshot flag: its folders are now pages.
       ...(this.provider.isPageTree() ? { pageTree: true } : {}),
+      // The server's snapshot flag: it stores plain-page fields.
+      ...(this.provider.storesPageFields?.() ? { pageFields: true } : {}),
       ...(metadata ? { primaryProjectId: metadata.teamProjectId ?? null } : {}),
     };
   }
