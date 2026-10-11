@@ -48,6 +48,7 @@ import {
   type PendingPrompt,
 } from './atoms/sessions';
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
+import { sessionErrorNoticeAtom } from './atoms/sessionTranscript';
 import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
 import { activeWorkspacePathAtom, multiProjectModeAtom, openProjectsAtom } from './atoms/openProjects';
 import {
@@ -336,6 +337,7 @@ export function initSessionStateListeners(): () => void {
       // Session is actively running
       case 'session:started':
         store.set(sessionProcessingAtom(sessionId), true);
+        store.set(sessionErrorNoticeAtom(sessionId), null);
         store.set(markSessionStreamingAtom, { sessionId, workspacePath: resolvedWorkspacePath });
         store.set(markSessionTurnActivityAtom, {
           sessionId,

@@ -94,6 +94,7 @@ import { historyManager } from '../../HistoryManager';
 import { addGitignoreBypass } from '../../file/WorkspaceEventBus';
 import { getSyncProvider, isDesktopTrulyAway } from '../SyncManager';
 import { requestMobilePush } from './mobilePushRequest';
+import { agentErrorNoticeText, classifyAgentErrorNotice, type AgentErrorNotice } from './agentErrorNotice';
 import { createAskUserQuestionListeners } from './askUserQuestionListeners';
 import { createTeammateIdleWakeListener } from './teammateIdleWake';
 // The per-session pending-prompt bit is derived from the set of prompts still
@@ -289,6 +290,23 @@ async function getWorkspacePathForSession(sessionId: string): Promise<string | n
     // Ignore — caller will skip the broadcast.
   }
   return null;
+}
+
+/**
+ * Persist (or clear) the session's last provider error in
+ * `metadata.errorNotice`, so the session-row (!) and the usage-limit continue
+ * bar survive a restart. Never throws: losing the marker beats failing the turn.
+ */
+async function persistErrorNotice(sessionId: string, notice: AgentErrorNotice | null, message?: string): Promise<void> {
+  try {
+    await AISessionsRepository.updateMetadata(sessionId, {
+      metadata: {
+        errorNotice: notice ? { kind: notice.kind, message: message ?? notice.body, resetsAt: notice.resetsAt } : null,
+      },
+    });
+  } catch (err) {
+    logger.main.warn(`[AIService] Failed to persist error notice for ${sessionId}:`, err);
+  }
 }
 
 export class MessageStreamingHandler {
@@ -1262,6 +1280,11 @@ export class MessageStreamingHandler {
       markAlive: (sessionId) => stateManager.markTurnAlive(sessionId),
     });
 
+    // The previous turn's error notice (session-row (!)) ends when a new turn starts.
+    if ((session.metadata as Record<string, unknown> | undefined)?.errorNotice) {
+      await persistErrorNotice(session.id, null);
+    }
+
     let inboxTurn: ReturnType<typeof sessionInbox.current>;
     let questionTurn: ReturnType<typeof codexQuestionTurns.current>;
     const setup = beginTurnSetup(session.id, { submissionId: (documentContext as any)?.submissionId });
@@ -1278,6 +1301,7 @@ export class MessageStreamingHandler {
       let hasStreamingContent = false;  // Track if we used streamContent tool
       let hadError = false;  // Track if an error occurred during the stream
       let providerError: string | undefined;
+      let providerErrorNotice: AgentErrorNotice | undefined;
       let providerCrashed = false;  // The agent subprocess died from a native fault (#1361)
       let sawCompleteChunk = false;  // A terminal 'complete' chunk arrived
       let settledOnErrorChunk = false;  // The error branch already ended the session
@@ -2222,6 +2246,8 @@ export class MessageStreamingHandler {
             // Detect Bedrock tool search error even if runtime didn't flag it
             const errorMsg = chunk.error || 'Unknown error occurred';
             providerError = errorMsg;
+            providerErrorNotice = classifyAgentErrorNotice(errorMsg, fullResponse);
+            await persistErrorNotice(session.id, providerErrorNotice, errorMsg);
             if (chunk.isProcessCrash) providerCrashed = true;
             const isBedrockToolError = chunk.isBedrockToolError || isBedrockToolSearchError(errorMsg);
             const isServerError = chunk.isServerError || false;
@@ -2233,6 +2259,8 @@ export class MessageStreamingHandler {
               isBedrockToolError,
               isServerError,
               isCodexAuthRequired: chunk.isCodexAuthRequired || false,
+              errorKind: providerErrorNotice.kind,
+              resetsAt: providerErrorNotice.resetsAt,
             });
 
             // An in-band 'error' chunk from a tool-loop agent (Gemini's only
@@ -2618,9 +2646,11 @@ export class MessageStreamingHandler {
               // before the timer fires.
               this.svc.hooklessWatcher.scheduleStop(session.id, 500);
 
-              // Play completion sound if enabled
+              // A turn that ended on a provider error needs attention, not a
+              // "Response Ready" chime.
               const soundService = SoundNotificationService.getInstance();
-              soundService.playCompletionSound(workspacePath);
+              if (providerErrorNotice) soundService.playPermissionSound(workspacePath);
+              else soundService.playCompletionSound(workspacePath);
 
               // Show OS notification if enabled and window not focused
               // Use lastTextSection (text after last tool call) for more relevant notification content
@@ -2643,9 +2673,9 @@ export class MessageStreamingHandler {
               // });
 
               await notificationService.showNotification({
-                title: composeNotificationTitle(sessionLabel, 'Response Ready'),
-                body: notificationBody,
-                kind: 'agent-complete',
+                title: composeNotificationTitle(sessionLabel, providerErrorNotice?.title ?? 'Response Ready'),
+                body: providerErrorNotice ? agentErrorNoticeText(providerErrorNotice) : notificationBody,
+                kind: providerErrorNotice ? 'needs-input' : 'agent-complete',
                 sessionId: session.id,
                 workspacePath: workspacePath,
                 sourceLabel: sessionLabel,
@@ -2657,7 +2687,16 @@ export class MessageStreamingHandler {
               // past threshold). When the window is merely unfocused (user in another app),
               // the Electron notification above already covers it -- sending a mobile push
               // too causes duplicates via iPhone Mirroring / Continuity.
-              if (syncProvider && isDesktopTrulyAway()) {
+              if (syncProvider && providerErrorNotice) {
+                // Forced like the outer catch (#1268): an agent stopped by an
+                // error is exactly when the user needs to hear about it.
+                void requestMobilePush(
+                  session.id,
+                  session.title || 'AI Session',
+                  agentErrorNoticeText(providerErrorNotice),
+                  { force: true, reason: 'agent_error' }
+                );
+              } else if (syncProvider && isDesktopTrulyAway()) {
                 void requestMobilePush(
                   session.id,
                   session.title || 'AI Session',
@@ -2869,6 +2908,13 @@ export class MessageStreamingHandler {
       }
 
       console.error(`${logPrefix} Error after ${errorTime}ms:`, error);
+      const errorNotice = classifyAgentErrorNotice(
+        error instanceof Error ? error.message : 'Unknown error occurred',
+        '', // The streamed text is out of scope here; resetsAt comes from the message.
+      );
+      if (session?.id) {
+        await persistErrorNotice(session.id, errorNotice, error instanceof Error ? error.message : 'Unknown error occurred');
+      }
 
       // Track AI request failure (only if we have session info)
       if (session) {
@@ -2950,9 +2996,24 @@ export class MessageStreamingHandler {
           void requestMobilePush(
             session.id,
             session.title || 'AI Session',
-            'Error occurred',
+            agentErrorNoticeText(errorNotice),
             { force: true, reason: 'agent_error' }
           );
+        }
+
+        const sessionLabel = session.title || session.provider;
+        try {
+          await notificationService.showNotification({
+            title: composeNotificationTitle(sessionLabel, errorNotice.title),
+            body: agentErrorNoticeText(errorNotice),
+            kind: 'needs-input',
+            sessionId: session.id,
+            workspacePath,
+            sourceLabel: sessionLabel,
+            provider: session.provider,
+          });
+        } catch (notifyError) {
+          logger.main.warn('[AIService] Failed to show error notification:', notifyError);
         }
       }
 
@@ -2967,7 +3028,9 @@ export class MessageStreamingHandler {
         // Send error to renderer
         safeSend(event, 'ai:error', {
           sessionId: session?.id,
-          message: error instanceof Error ? error.message : 'Unknown error occurred'
+          message: error instanceof Error ? error.message : 'Unknown error occurred',
+          errorKind: errorNotice.kind,
+          resetsAt: errorNotice.resetsAt,
         });
       }
 

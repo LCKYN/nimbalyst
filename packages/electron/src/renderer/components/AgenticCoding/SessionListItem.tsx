@@ -14,6 +14,8 @@ import { SessionContextMenu } from './SessionContextMenu';
 import { FullTitleTooltip } from './FullTitleTooltip';
 import { settingAtom } from '../../store/atoms/settingAtomFamily';
 import { sessionAgentWakePendingAtom } from '../../store/atoms/teamInbox';
+import { sessionErrorNoticeAtom } from '../../store/atoms/sessionTranscript';
+import { wakeupTooltip, errorNoticeTooltip } from './sessionStatusTooltips';
 import { sessionBackgroundTasksAtom, describeBackgroundWait } from '../../store/atoms/sessionBackgroundTasks';
 
 /**
@@ -29,6 +31,7 @@ export const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: n
   const hasAgentWakePending = useAtomValue(sessionAgentWakePendingAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
   const wakeups = useAtomValue(sessionWakeupsAtom(sessionId));
+  const errorNotice = useAtomValue(sessionErrorNoticeAtom(sessionId));
   // Lead turn is over; the session is only draining background shells/sub-agents.
   const backgroundTasks = useAtomValue(sessionBackgroundTasksAtom(sessionId));
 
@@ -74,19 +77,19 @@ export const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: n
     );
   }
 
-  // A session can hold several schedules; the icon reflects the soonest, and
-  // says how many more are behind it rather than hiding them.
-  const wakeup = wakeups[0];
-  if (wakeup) {
-    const isOverdue = wakeup.status === 'overdue';
-    const colorClass = isOverdue ? 'text-[var(--nim-warning)]' : 'text-[var(--nim-primary)]';
-    const more = wakeups.length > 1 ? ` (+${wakeups.length - 1} more)` : '';
-    const tooltip = isOverdue
-      ? `Overdue wakeup${wakeup.reason ? ` — ${wakeup.reason}` : ''}${more}`
-      : `Scheduled wakeup at ${new Date(wakeup.fireAt).toLocaleString()}${wakeup.reason ? ` — ${wakeup.reason}` : ''}${more}`;
+  if (wakeups.length > 0) {
+    const colorClass = wakeups[0].status === 'overdue' ? 'text-[var(--nim-warning)]' : 'text-[var(--nim-primary)]';
     return (
-      <div className={`session-list-item-status wakeup flex items-center justify-center w-5 h-5 ${colorClass} opacity-80`} title={tooltip}>
+      <div className={`session-list-item-status wakeup flex items-center justify-center w-5 h-5 ${colorClass} opacity-80`} title={wakeupTooltip(wakeups)}>
         <MaterialSymbol icon="schedule" size={14} />
+      </div>
+    );
+  }
+
+  if (errorNotice) {
+    return (
+      <div className="session-list-item-status error flex items-center justify-center w-5 h-5 text-[var(--nim-error)]" title={errorNoticeTooltip(errorNotice)}>
+        <MaterialSymbol icon="error" size={14} />
       </div>
     );
   }
