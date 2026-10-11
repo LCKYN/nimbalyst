@@ -28,13 +28,14 @@ describe('contextWindowForCliModel', () => {
     expect(contextWindowForCliModel('claude-code-cli:sonnet-1M')).toBe(1_000_000);
     expect(contextWindowForCliModel('claude-code-cli:fable-1m')).toBe(1_000_000);
   });
-  it('returns 1M for legacy pinned variants (single row, no -1m duplicate) and 200k for haiku', () => {
+  it('returns 1M for legacy pinned variants (single row, no -1m duplicate) and 200k for haiku-4-5', () => {
     // opus-4-6/opus-4-7/sonnet-4-6 are 1M models too — matched by EXACT variant,
     // not family, so the mapping is precise rather than an accidental collapse.
     expect(contextWindowForCliModel('claude-code-cli:opus-4-6')).toBe(1_000_000);
     expect(contextWindowForCliModel('claude-code-cli:opus-4-7')).toBe(1_000_000);
     expect(contextWindowForCliModel('claude-code-cli:sonnet-4-6')).toBe(1_000_000);
-    expect(contextWindowForCliModel('claude-code-cli:haiku')).toBe(200_000);
+    expect(contextWindowForCliModel('claude-code-cli:haiku')).toBe(1_000_000);
+    expect(contextWindowForCliModel('claude-code-cli:haiku-4-5')).toBe(200_000);
     expect(contextWindowForCliModel(undefined)).toBe(200_000);
   });
 
@@ -48,7 +49,7 @@ describe('contextWindowForCliModel', () => {
   it('lets an observed 1M signal override the static per-variant seed', () => {
     expect(contextWindowForCliModel('claude-code-cli:opus', false)).toBe(200_000);
     expect(contextWindowForCliModel('claude-code-cli:opus-1m', false)).toBe(200_000);
-    expect(contextWindowForCliModel('claude-code-cli:haiku', true)).toBe(1_000_000);
+    expect(contextWindowForCliModel('claude-code-cli:haiku-4-5', true)).toBe(1_000_000);
     // No observation yet -> unchanged seed behavior.
     expect(contextWindowForCliModel('claude-code-cli:opus', undefined)).toBe(1_000_000);
   });
@@ -99,6 +100,41 @@ describe('buildClaudeCliTokenUsage', () => {
       totalTokens: 12,
       currentContext: { tokens: 5 + 8388, contextWindow: 1_000_000 },
     });
+  });
+
+  // #1496: unlike input/output/context, cost on this path can ONLY come from
+  // modelPricing.ts's estimate -- the proxy never sees an exact SDK figure.
+  it('estimates cost from modelPricing.ts when the CLI model resolves to a real Anthropic id', () => {
+    const usage = buildClaudeCliTokenUsage(
+      undefined,
+      { inputTokens: 1_000_000, outputTokens: 1_000_000, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+      1_000_000,
+      'claude-code-cli:sonnet',
+    );
+    // claude-sonnet-5: $3/$15 per million tokens.
+    expect(usage.costUSD).toBeCloseTo(18, 6);
+    expect(usage.costEstimated).toBe(true);
+  });
+
+  it('leaves costUSD untouched when no model is given', () => {
+    const usage = buildClaudeCliTokenUsage(
+      { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 1.25 },
+      { inputTokens: 3, outputTokens: 42, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+      200_000,
+    );
+    expect(usage.costUSD).toBe(1.25);
+    expect(usage.costEstimated).toBeUndefined();
+  });
+
+  it('accumulates cacheReadInputTokens/cacheCreationInputTokens cumulatively across turns', () => {
+    const prev = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadInputTokens: 100, cacheCreationInputTokens: 20 };
+    const usage = buildClaudeCliTokenUsage(
+      prev,
+      { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 50, cacheCreationInputTokens: 10 },
+      200_000,
+    );
+    expect(usage.cacheReadInputTokens).toBe(150);
+    expect(usage.cacheCreationInputTokens).toBe(30);
   });
 });
 

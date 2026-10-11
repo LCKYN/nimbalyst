@@ -34,8 +34,8 @@
       "default": "./src/docs-ui/setPageType/index.ts"
     },
     "./docs-ui/EditorHeaderBar": {
-      "types": "./src/docs-ui/primitives/EditorHeaderBar.tsx",
-      "default": "./src/docs-ui/primitives/EditorHeaderBar.tsx"
+      "types": "./src/ui-primitives/EditorHeaderBar.tsx",
+      "default": "./src/ui-primitives/EditorHeaderBar.tsx"
     },
     "./docs-ui/history": {
       "types": "./src/docs-ui/history/index.ts",
@@ -98,11 +98,11 @@
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.19",
-    "@nimbalyst/collab-protocol": "*",
-    "@nimbalyst/tracker-schema": "0.1.0",
-    "@nimbalyst/tracker-engine": "0.1.0",
-    "@nimbalyst/runtime": "*",
-    "@nimbalyst/tracker-core": "*",
+    "@nimbalyst/collab-protocol": "workspace:*",
+    "@nimbalyst/tracker-schema": "workspace:*",
+    "@nimbalyst/tracker-engine": "workspace:*",
+    "@nimbalyst/runtime": "workspace:*",
+    "@nimbalyst/tracker-core": "workspace:*",
     "jotai": "^2.16.1",
     "jotai-family": "^1.1.0"
   },
@@ -126,6 +126,6 @@
     "@types/react": "^19.2.17",
     "react": "^19.2.7",
     "typescript": "^5.0.0",
-    "yjs": ">=13.5.42"
+    "yjs": "13.6.32"
   }
 }

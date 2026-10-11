@@ -1,5 +1,5 @@
 /**
- * The Pages agent tools as one contract: the tools a terminal agent reaches on
+ * The Wiki agent tools as one contract: the tools a terminal agent reaches on
  * the remote MCP server (`/mcp`), with the same names and arguments as the
  * desktop agent's tools, so one skill text serves both.
  *
@@ -20,6 +20,7 @@
  */
 
 import type { ConsoleLinkScope, ConsoleTeamScope } from './consoleLinks.js';
+import type { PageFields } from './pageFields.js';
 
 export type PageToolJsonSchema = { readonly [key: string]: unknown };
 
@@ -73,6 +74,7 @@ export const PAGE_TOOL_NAMES = [
   'renameSharedItem',
   'deleteSharedItem',
   'setPageType',
+  'setPageFields',
   'findOrgMembers',
   'tracker_list_types',
   'tracker_define_type',
@@ -116,7 +118,7 @@ export const PAGE_TOOL_DESKTOP_PROJECT_ARG = {
 const SECTION = {
   type: 'string',
   enum: ['team', 'personal'],
-  description: "Pages section. Only 'team' here; Personal pages live in the desktop app.",
+  description: "Wiki section. Only 'team' here; Personal pages live in the desktop app.",
 } as const;
 
 const TEAM_SECTION_ONLY: Readonly<Record<string, PageToolAcceptedValues>> = {
@@ -183,8 +185,16 @@ export const PAGE_TOOL_CONTRACT: readonly PageToolContract[] = [
     availability: 'shared',
     readOnly: true,
     description:
-      "List the project's pages as a tree: pages, placed types and typed pages, each with nodeId, kind, id, title, parentNodeId, depth, sortOrder and the https link to write in page content (types also a viewLink); pages carry the uri to read and edit their body, typed pages their issueKey and whether they are placed outside their type.",
-    inputSchema: { type: 'object', properties: { section: SECTION } },
+      "List the project's pages as a paginated tree (100 nodes by default, maximum 500): use nextCursor with the same query until truncated is false; changed trees require restarting. Supports root/maxDepth/kinds and compact projection. Nodes include childCount and available updatedAt/hasContent. Pages, placed types and typed pages, each with nodeId, kind, id, title, parentNodeId, depth, sortOrder and the https link to write in page content (types also a viewLink); pages carry the uri to read and edit their body, typed pages their issueKey and whether they are placed outside their type.",
+    inputSchema: { type: 'object', properties: {
+      section: SECTION,
+      root: { type: 'string', description: 'Only this subtree, including its root: nodeId, page id, type id, or typed-page issue key.' },
+      maxDepth: { type: 'integer', minimum: 0, maximum: 100, description: 'Depth below the root (0 returns the root only; without root, top-level nodes only).' },
+      kinds: { type: 'array', minItems: 1, items: { type: 'string', enum: ['page', 'typedPage', 'type'] } },
+      limit: { type: 'integer', minimum: 1, maximum: 500, description: 'Maximum nodes per response. Default 100; at most 500.' },
+      cursor: { type: 'string', description: 'nextCursor from the previous response. Keep the same query; restart if the tree changes.' },
+      projection: { type: 'string', enum: ['full', 'compact'], description: 'Compact omits content links; full (default) preserves all navigation fields.' },
+    } },
     remoteAcceptedValues: TEAM_SECTION_ONLY,
     desktopProjectArg: true,
   },
@@ -355,6 +365,32 @@ export const PAGE_TOOL_CONTRACT: readonly PageToolContract[] = [
         typeId: { type: 'string', description: "A type from tracker_list_types." },
       },
       required: ['pageId', 'typeId'],
+    },
+    remoteAcceptedValues: TEAM_SECTION_ONLY,
+  },
+  {
+    name: 'setPageFields',
+    availability: 'shared',
+    readOnly: false,
+    description:
+      "Set a plain page's own fields: owner (a member's email from findOrgMembers), status (draft, current or outdated), summary (one line, at most 280 characters) and tags. Only the fields you pass change; null clears one. A value that does not fit is ignored, so the reply names the fields the page has now. listPages shows them on each page. A typed page's fields are set with tracker_update.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        section: SECTION,
+        itemId: { type: 'string', description: 'The page id.' },
+        fields: {
+          type: 'object',
+          description: 'The fields to change. Null clears one.',
+          properties: {
+            owner: { type: ['string', 'null'], description: "The owner's email." },
+            status: { type: ['string', 'null'], enum: ['draft', 'current', 'outdated', null] },
+            summary: { type: ['string', 'null'], description: 'One line: what the page is for.' },
+            tags: { type: ['array', 'null'], items: { type: 'string' } },
+          },
+        },
+      },
+      required: ['itemId', 'fields'],
     },
     remoteAcceptedValues: TEAM_SECTION_ONLY,
   },
@@ -639,10 +675,14 @@ interface PageTreeNodeBase {
   sortOrder: number | null;
   /** The https link to write in page content; absent when the section has no console scope yet. */
   link?: string;
+  childCount?: number;
+  updatedAt?: number;
+  hasContent?: boolean;
 }
 
 export type PageTreeNodeSummary =
-  | (PageTreeNodeBase & { kind: 'page'; uri: string | null })
+  /** `fields`: the page's own fields, when any are set. */
+  | (PageTreeNodeBase & { kind: 'page'; uri: string | null; fields?: PageFields })
   | (PageTreeNodeBase & { kind: 'typedPage'; typeId: string; issueKey?: string; placed: boolean })
   | (PageTreeNodeBase & { kind: 'type'; viewLink?: string });
 
@@ -658,6 +698,9 @@ export interface ListPagesResult {
   consoleScope: ConsoleLinkScope | null;
   openMarksViewLink?: string;
   nodes: PageTreeNodeSummary[];
+  total?: number;
+  truncated?: boolean;
+  nextCursor?: string | null;
   /** Desktop, team section: the project listed, and the org's other projects to pass as `project`. */
   project?: PageToolProjectSummary;
   otherProjects?: PageToolProjectSummary[];
@@ -708,6 +751,11 @@ export interface SetPageTypeResult {
   itemId?: string;
   issueKey?: string;
   link?: string;
+}
+
+export interface SetPageFieldsResult {
+  /** The page's fields after the write. */
+  fields: PageFields;
 }
 
 export interface FindOrgMembersResult {

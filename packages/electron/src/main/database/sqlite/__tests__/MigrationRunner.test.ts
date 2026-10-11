@@ -216,30 +216,22 @@ describe('runMigrations', () => {
     stageMigrationFiles(tmp);
     const raw = new BetterSqlite(path.join(tmp, 'renumbered.sqlite'));
     try {
-      // Installs from the fork applied the session_wakeup migrations as 48/49
-      // before upstream took those numbers; they now ship as 53/54.
+      // Installs from the fork applied tool_usage_token_estimates as 52 before
+      // upstream took that number; it now ships as 55.
       raw.exec(`CREATE TABLE _migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT '')`);
       const record = raw.prepare('INSERT INTO _migrations (version, name) VALUES (?, ?)');
-      const notYetRecorded = new Set([
-        'tracker_relationship_index_qualifiers', 'personal_pages', 'personal_pages_one_tree',
-        'personal_pages_parents_and_order', 'session_wakeup_attachments', 'session_wakeup_origin',
-      ]);
+      const notYetRecorded = new Set(['personal_pages_fields', 'tool_usage_token_estimates']);
       for (const m of getMigrations(tmp)) {
         if (!notYetRecorded.has(m.name)) record.run(m.version, m.name);
       }
-      record.run(48, 'session_wakeup_attachments');
-      record.run(49, 'session_wakeup_origin');
+      record.run(52, 'tool_usage_token_estimates');
 
       const result = runMigrations(raw, tmp);
 
-      expect(result.applied).toEqual([48, 49, 50, 51]);
-      expect(raw.prepare('SELECT version, name FROM _migrations WHERE version IN (48, 49, 50, 51, 53, 54) ORDER BY version').all()).toEqual([
-        { version: 48, name: 'tracker_relationship_index_qualifiers' },
-        { version: 49, name: 'personal_pages' },
-        { version: 50, name: 'personal_pages_one_tree' },
-        { version: 51, name: 'personal_pages_parents_and_order' },
-        { version: 53, name: 'session_wakeup_attachments' },
-        { version: 54, name: 'session_wakeup_origin' },
+      expect(result.applied).toEqual([52]);
+      expect(raw.prepare('SELECT version, name FROM _migrations WHERE version IN (52, 55) ORDER BY version').all()).toEqual([
+        { version: 52, name: 'personal_pages_fields' },
+        { version: 55, name: 'tool_usage_token_estimates' },
       ]);
     } finally {
       raw.close();

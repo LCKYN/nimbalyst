@@ -29,6 +29,11 @@ export type ParsedItem =
   | { kind: 'tool_use'; toolId: string; toolName: string; args: Record<string, unknown>; isMcp: boolean; isSubagent: boolean }
   | { kind: 'tool_result'; toolUseId: string; content: unknown; isError: boolean }
   | { kind: 'usage'; usage: any; modelUsage?: any; isPerStep: boolean }
+  // Per-step usage tagged with its origin (lead conversation vs. Task-tool
+  // sub-agent) and model, for attributing (not recomputing) the final
+  // per-model totals. Fires for EVERY per-step usage this turn, unlike the
+  // `usage` item above which guards sub-agent chunks out. See #1496.
+  | { kind: 'step_model_usage'; origin: 'main' | 'subagent'; model: string | undefined; usage: any }
   // Structured twin of the `/context` markdown table, attached by the SDK to
   // the same synthetic assistant message. Only ever present on /context turns.
   | { kind: 'context_report'; usage: unknown }
@@ -215,6 +220,20 @@ export class ClaudeCodeTranscriptAdapter {
     // indicator updates per step (NIM-868). Same guard the session_id capture uses.
     if (chunk.message.usage && !chunk.parent_tool_use_id) {
       items.push({ kind: 'usage', usage: chunk.message.usage, isPerStep: true });
+    }
+
+    // Additive, parallel emission for subagent-vs-main origin tracking. Unlike
+    // the guarded emission above, this ALWAYS fires -- including for sub-agent
+    // chunks (parent_tool_use_id set) -- because attributing origin requires
+    // seeing exactly the chunks the guard above exists to hide from context-fill
+    // tracking. Does not touch or replace either existing guarded path.
+    if (chunk.message.usage) {
+      items.push({
+        kind: 'step_model_usage',
+        origin: chunk.parent_tool_use_id ? 'subagent' : 'main',
+        model: chunk.message.model,
+        usage: chunk.message.usage,
+      });
     }
 
     // A wrapper-level sibling of `message`, so it is never replayed to the

@@ -98,6 +98,12 @@ interface NavigationGutterProps {
 }
 
 // Shared nav-button styling. `active` swaps the filled/primary look.
+/**
+ * Org mode is unfinished, so its gutter button is hidden. The mode itself, its
+ * shortcut and the menu item still work. Flip this to bring the button back.
+ */
+export const ORG_MODE_GUTTER_BUTTON_ENABLED = false;
+
 const NAV_BTN_BASE =
   'nav-button group relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2';
 const navBtnClass = (active: boolean): string =>
@@ -371,9 +377,9 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       }),
     },
     {
-      id: 'tracker', section: 'modes', icon: 'assignment', label: 'Tracker', hideable: true,
+      id: 'tracker', section: 'modes', icon: 'database', label: 'Tracker', hideable: true,
       render: () => renderModeButton({
-        icon: 'assignment',
+        icon: 'database',
         label: `Tracker (${getShortcutDisplay(KeyboardShortcuts.view.trackerMode)})`,
         contentMode: 'tracker', testId: 'tracker-mode-button',
         onReclick: () => onToggleTrackerCollapsed?.(),
@@ -387,12 +393,19 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         contentMode: 'pr-review', testId: 'pr-review-mode-button',
       }),
     }] : []),
-    ...(pagesAvailable ? [{
-      id: 'collab', section: 'modes' as GutterSection, icon: 'description', label: 'Pages', hideable: true,
+    {
+      id: 'ai-usage-report', section: 'modes', icon: 'query_stats', label: 'AI Usage', hideable: true,
       render: () => renderModeButton({
-        icon: 'description',
-        badgeIcon: 'groups',
-        label: `Pages (${getShortcutDisplay(KeyboardShortcuts.view.collabMode)})`,
+        icon: 'query_stats',
+        label: 'AI Usage',
+        contentMode: 'usage-report', testId: 'ai-usage-report-button',
+      }),
+    },
+    ...(pagesAvailable ? [{
+      id: 'collab', section: 'modes' as GutterSection, icon: 'public', label: 'Wiki', hideable: true,
+      render: () => renderModeButton({
+        icon: 'public',
+        label: `Wiki (${getShortcutDisplay(KeyboardShortcuts.view.collabMode)})`,
         contentMode: 'collab', testId: 'collab-mode-button',
         onReclick: () => onToggleCollabCollapsed?.(),
         decoration: <AlphaBadge size="dot" className="absolute top-0 right-0.5 pointer-events-none" />,
@@ -400,7 +413,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     }] : []),
     // Org mode is gated on the project actually belonging to an organization,
     // the same rule Shared Docs uses. Without one there is no inbox to show.
-    ...(projectOrg ? [{
+    ...(ORG_MODE_GUTTER_BUTTON_ENABLED && projectOrg ? [{
       id: 'org', section: 'modes' as GutterSection, icon: 'forum', label: 'Organization', hideable: true,
       render: () => renderModeButton({
         icon: 'forum',

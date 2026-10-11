@@ -8,12 +8,15 @@
  * the same IPC paths, through the desktop tracker data source given to it.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { atom, useAtomValue, useSetAtom, useStore, type Atom } from 'jotai';
+import type { LexicalEditor } from 'lexical';
+import { ensureTypePageDocument } from '../../services/collaborativeDocumentCreationOrchestrator';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { atom, useAtom, useAtomValue, useSetAtom, useStore, type Atom } from 'jotai';
 import type { CollabOpenOptions, CollabScope } from '@nimbalyst/collab-client/core';
 import type { SharedDocument } from '@nimbalyst/collab-client/docs';
 import { DESKTOP_TRACKER_UI_CAPABILITIES, TrackersUIProvider } from '@nimbalyst/collab-client/trackers-ui';
-import { PageHistoryButton, TypePageTable, crumbItemLookup, trackerPageCrumbFolders, typePageTypeIds } from '@nimbalyst/collab-client/trackers-ui/page';
+import { PageHeaderBar, TypePageTable, crumbItemLookup, trackerPageCrumbFolderRefs, typePageTypeIds } from '@nimbalyst/collab-client/trackers-ui/page';
+import { openPageAncestor } from './pageHeaderNavigation';
 import { TYPE_PAGE_DOCUMENT_PREFIX } from '@nimbalyst/collab-client/docs';
 import { buildCollabUri } from '@nimbalyst/collab-protocol';
 import '@nimbalyst/collab-client/trackers-ui/page.css';
@@ -29,11 +32,16 @@ import {
 } from '../../store/atoms/collabDocuments';
 import { createDesktopTrackerDataSource } from '../EmbedFrame/desktopTrackerDataSource';
 import { useDesktopTrackerIdentity } from '../EmbedFrame/useDesktopTrackerIdentity';
+import { useTrackerTeamMembers } from '../TrackerMode/useTrackerTeamMembers';
 import { isTeamTrackerSharing } from '../Settings/panels/trackerConfigUpgrade';
 import { typePageTitle } from './collabPageTabs';
 import { TypePageProse } from './TypePageProse';
+import { useTypePageMenuItems } from './usePageMenuItems';
+import { editorExportMenuItems } from '../TabEditor/editorExport';
 import { personalPageHistoryKey } from '../../../shared/personalPageUri';
 import { historyDialogFileAtom } from '../../store/atoms/historyDialog';
+import { temporaryTypeViewAtom, temporaryTypeViewKey } from './temporaryTypeViews';
+import { useNamedPageViewsController } from './useNamedPageViewsController';
 import './TypePageTab.css';
 
 type Lane = 'team' | 'personal';
@@ -86,6 +94,7 @@ export interface TypePageTabProps {
 export const TypePageTab: React.FC<TypePageTabProps> = ({ typeId, workspacePath, onOpenItem }) => {
   const store = useStore();
   const identity = useDesktopTrackerIdentity(workspacePath);
+  const teamMembers = useTrackerTeamMembers(workspacePath);
   const writer = useMemo(() => new ElectronTrackerDataSource({ workspacePath }), [workspacePath]);
   useEffect(() => () => writer.dispose(), [writer]);
   const dataSource = useMemo(
@@ -99,6 +108,10 @@ export const TypePageTab: React.FC<TypePageTabProps> = ({ typeId, workspacePath,
   const lane: Lane = model && isTeamTrackerSharing(model.sharing ?? 'personal') ? 'team' : 'personal';
   const typeName = typePageTitle(typeId);
   const scope = useTypePageScope(workspacePath, lane);
+  const [temporaryView, setTemporaryView] = useAtom(temporaryTypeViewAtom(temporaryTypeViewKey(workspacePath, scope?.scopeKey ?? '', typeId)));
+  const editorKey = JSON.stringify([workspacePath, scope?.scopeKey, typeId]);
+  const [viewsEditor, setViewsEditor] = useState<{ key: string; editor: LexicalEditor | null } | null>(null);
+  const onViewsEditor = useCallback((editor: LexicalEditor | null) => setViewsEditor(current => current?.key === editorKey && current.editor === editor ? current : { key: editorKey, editor }), [editorKey]);
   const session = useMemo(() => (scope ? getElectronCollabDocsSession(scope) : null), [scope]);
   const typePlacements = useAtomValue<readonly TypePlacementRow[]>(session?.atoms.typePlacements ?? NO_TYPE_PLACEMENTS);
   const itemPlacements = useAtomValue<readonly ItemPlacementRow[]>(session?.atoms.itemPlacements ?? NO_ITEM_PLACEMENTS);
@@ -119,9 +132,9 @@ export const TypePageTab: React.FC<TypePageTabProps> = ({ typeId, workspacePath,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [store, typePlacements, itemPlacements, pages],
   );
-  const crumb = useMemo(
-    () => [...(lane === 'personal' ? ['Personal'] : []), ...trackerPageCrumbFolders(typeId, typePlacements, pages, { itemPlacements, item: itemLookup })],
-    [lane, typeId, typePlacements, pages, itemPlacements, itemLookup],
+  const crumbPath = useMemo(
+    () => trackerPageCrumbFolderRefs(typeId, typePlacements, pages, { itemPlacements, item: itemLookup }),
+    [typeId, typePlacements, pages, itemPlacements, itemLookup],
   );
   const parentFolderId = typePlacements.find((placement) => placement.typeId === typeId)?.parentFolderId ?? null;
   const fieldLabels = useMemo(() => typeFieldLabels(typeId), [typeId, model]);
@@ -131,21 +144,29 @@ export const TypePageTab: React.FC<TypePageTabProps> = ({ typeId, workspacePath,
   const proseExists = documents.some((document) => document.documentId === proseId);
   const historyKey = !proseExists ? null : lane === 'personal' ? personalPageHistoryKey(proseId) : scope ? buildCollabUri(scope.orgId, proseId) : null;
   const openHistory = useSetAtom(historyDialogFileAtom);
+  const proseEditor = viewsEditor?.key === editorKey ? viewsEditor.editor : null;
+  const viewsController = useNamedPageViewsController(proseEditor, typeId);
+  const exportItems = useMemo(() => editorExportMenuItems(proseEditor, typeName), [proseEditor, typeName]);
+  const menuItems = useTypePageMenuItems(lane, typeId, typePlacements.some((placement) => placement.typeId === typeId), exportItems);
 
   return (
     <div className="type-page-tab tracker-page-view flex h-full min-h-0 flex-col overflow-hidden bg-nim" data-testid="type-page-tab" data-type-id={typeId}>
+      <PageHeaderBar
+        testId="type-page-header-bar"
+        section={lane === 'personal' ? 'Personal' : null}
+        path={crumbPath}
+        title={typeName}
+        titleIcon={model?.icon || 'table'}
+        onOpenAncestor={(ancestor) => {
+          if (lane === 'personal') openPageAncestor(ancestor, { personal: true, workspacePath });
+          else if (scope) openPageAncestor(ancestor, { personal: false, scope });
+        }}
+        onShowHistory={historyKey ? () => openHistory(historyKey) : undefined}
+        menuItems={menuItems}
+      />
       <div className="type-page-tab-scroller min-h-0 flex-1 overflow-y-auto">
         <div className="type-page-tab-column">
-          <div className="tracker-page-view-header">
-            <div className="tracker-page-view-crumb-row mb-2.5 flex items-center gap-2">
-              <div className="tracker-page-view-crumb min-w-0 flex-1 truncate text-xs text-nim-faint select-text" data-testid="type-page-crumb">
-                {crumb.map((part, index) => (
-                  <span key={`${index}:${part}`}>{part} / </span>
-                ))}
-                <span className="text-nim-muted">{typeName}</span>
-              </div>
-              {historyKey && <PageHistoryButton onClick={() => openHistory(historyKey)} />}
-            </div>
+          <div className="tracker-page-view-header tracker-page-view-header--bar">
             <h1 className="type-page-tab-title m-0 mb-3 flex items-center gap-2 break-words text-[28px] font-medium leading-tight text-nim select-text">
               {model?.icon ? <MaterialSymbol icon={model.icon} size={26} style={{ color: model.color }} /> : null}
               {typeName}
@@ -168,7 +189,8 @@ export const TypePageTab: React.FC<TypePageTabProps> = ({ typeId, workspacePath,
             </div>
           </div>
           <TypePageProse
-            key={typeId}
+            key={editorKey}
+            onEditorReady={onViewsEditor}
             typeId={typeId}
             typeName={typeName}
             itemName={model?.displayName || typeName}
@@ -178,9 +200,18 @@ export const TypePageTab: React.FC<TypePageTabProps> = ({ typeId, workspacePath,
             parentFolderId={parentFolderId}
             documents={documents}
           />
-          <TrackersUIProvider dataSource={dataSource} identity={trackerIdentity} capabilities={DESKTOP_TRACKER_UI_CAPABILITIES}>
+          <TrackersUIProvider dataSource={dataSource} identity={trackerIdentity} capabilities={DESKTOP_TRACKER_UI_CAPABILITIES} teamMembers={teamMembers}>
             <TypePageTable
+              key={editorKey}
+              viewsController={viewsController}
+              viewScope={lane === 'personal' ? 'local' : scope?.indexConfig.teamProjectId ? { orgId: scope.orgId, projectId: scope.indexConfig.teamProjectId } : undefined}
+              onPrepareViewsDocument={async () => {
+                if (!scope) throw new Error('The page is still opening.');
+                await ensureTypePageDocument({ scope, typeId, typeName, parentFolderId });
+              }}
               typeId={typeId}
+              temporaryView={scope ? temporaryView : null}
+              onClearTemporaryView={() => setTemporaryView(null)}
               typeLabel={typeName}
               rootLabel={lane === 'personal' ? 'Personal' : 'Team'}
               itemPlacements={itemPlacements}

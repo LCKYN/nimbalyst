@@ -11,6 +11,8 @@ vi.mock('../../../store/atoms/collabDocuments', () => ({
   activeCollabScopeAtom: { toString: () => 'activeCollabScopeAtom' },
   getElectronCollabDocsSession: vi.fn(),
   getPersonalCollabDocsSession: vi.fn(),
+  // Every page here is a database page, on the copy-into-an-item path.
+  getPersonalCollabHost: () => ({ source: () => ({ isLegacyDocument: () => true }) }),
 }));
 vi.mock('../../../components/CollabMode/collabTypeResolver', () => ({ buildCollabTypeResolver: vi.fn() }));
 vi.mock('../../collaborativeDocumentCreationOrchestrator', () => ({ createCollaborativeDocument: vi.fn() }));
@@ -80,5 +82,30 @@ describe('agent Set type and the Pages tab strip', () => {
     setPagesTabStripForTest(WS, strip);
     await createDesktopPageTreeEnv(WS).setPageType('personal', session, page, 'decision');
     expect(paths()).toEqual(['personal://other']);
+  });
+});
+
+describe('agent createSharedDoc', () => {
+  it('seeds a structured type from its own default when given no content, and keeps Local pages markdown', async () => {
+    const { createCollaborativeDocument } = await import('../../collaborativeDocumentCreationOrchestrator');
+    const { getCollaborativeDocumentTypeCatalog } = await import('../../CollaborativeDocumentTypeCatalog');
+    vi.mocked(getCollaborativeDocumentTypeCatalog).mockReturnValue({
+      inferFileExtension: () => '.x',
+      resolveMetadata: (documentType: string) => ({ state: 'ready', descriptor: { documentType } }),
+    } as never);
+    vi.mocked(createCollaborativeDocument).mockResolvedValue({ documentId: 'new' } as never);
+    const env = createDesktopPageTreeEnv(WS);
+    const input = { title: 'Diagram', parentId: null, parentKind: 'page' as const, content: '' };
+
+    await env.createPage('team', session, { ...input, documentType: 'excalidraw' });
+    expect(vi.mocked(createCollaborativeDocument).mock.calls[0]![0].sourceContent).toBeUndefined();
+    await env.createPage('team', session, { ...input, documentType: 'markdown' });
+    expect(vi.mocked(createCollaborativeDocument).mock.calls[1]![0].sourceContent).toBe('');
+
+    // A Local page is a file in the wiki folder: markdown or an editor type, never code.
+    await env.createPage('personal', session, { ...input, documentType: 'markdown' });
+    await env.createPage('personal', session, { ...input, documentType: 'excalidraw' });
+    await expect(env.createPage('personal', session, { ...input, documentType: 'code' })).rejects.toThrow(/cannot be a "code" page/);
+    expect(createCollaborativeDocument).toHaveBeenCalledTimes(4);
   });
 });

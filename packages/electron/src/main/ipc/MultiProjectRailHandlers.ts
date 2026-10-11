@@ -15,6 +15,8 @@
  * - `workspace:set-active` -- update the visible project in a window
  *   without spawning a new BrowserWindow (the legacy `project-selected`
  *   path stays for the "open in new window" escape hatch).
+ * - `workspace:set-rail-order` -- remember the order the user dragged the
+ *   rail into, so a renderer reload restores it.
  *
  * It also owns attach/detach for multi-root workspaces. An attached folder is
  * NOT a rail project: it has no identity of its own (no settings entry, no
@@ -54,6 +56,10 @@ import {
   detachFolderFromWorkspace,
   getWorkspaceNavigationHistory,
   getWorkspaceRoots,
+  getProjectRailIcon,
+  setProjectRailIcon,
+  getProjectRailColors,
+  setProjectRailColor,
   MAX_ATTACHED_FOLDERS,
 } from '../utils/store';
 import { navigationHistoryService } from '../services/NavigationHistoryService';
@@ -64,6 +70,7 @@ import {
   clearFileSystemServiceFor,
 } from '@nimbalyst/runtime';
 import { logger } from '../utils/logger';
+import { findProjectIcon } from '../utils/projectIcon';
 import { notifyWorkspaceUsageChanged, pruneUnusedGitWatchers, releaseWhenWorkspaceUnused } from '../file/GitWatcherLifecycle';
 
 // Re-uses the same Maps that WindowManager populates. WindowManager exports
@@ -307,6 +314,68 @@ export function registerMultiProjectRailHandlers(): void {
 
         return { success: true };
     });
+
+    // The renderer reports the rail order after a drag so `get-initial-state`
+    // can hand it back on a renderer reload. Stored as-is; stale or missing
+    // entries are reconciled against the registered paths when it is read.
+    safeHandle('workspace:set-rail-order', async (event, data: { paths: string[] }) => {
+        const paths = data?.paths;
+        if (!Array.isArray(paths) || !paths.every((path) => typeof path === 'string')) {
+            return { success: false, error: 'paths must be a string array' };
+        }
+
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return { success: false, error: 'No window for event sender' };
+        const windowId = getWindowId(window);
+        if (windowId === null) return { success: false, error: 'No windowId' };
+
+        const state = windowStates.get(windowId);
+        if (!state) return { success: false, error: 'No window state' };
+
+        state.railOrder = [...paths];
+        return { success: true };
+    });
+
+    safeHandle('workspace:get-icon', async (_event, data: { workspacePath: string }) => {
+        const { workspacePath } = data ?? {};
+        if (!workspacePath || typeof workspacePath !== 'string') return null;
+        return getProjectRailIcon(workspacePath) ?? findProjectIcon(workspacePath);
+    });
+
+    safeHandle('workspace:set-icon', async (_event, data: { workspacePath: string; icon: string | null }) => {
+        const { workspacePath, icon } = data ?? {};
+        if (!workspacePath || typeof workspacePath !== 'string') {
+            return { success: false, error: 'workspacePath required' };
+        }
+        // An emoji or `icon:<material symbol name>`; anything longer is neither.
+        const trimmed = typeof icon === 'string' ? icon.trim() : '';
+        if (trimmed.length > 64) return { success: false, error: 'Icon too long' };
+        setProjectRailIcon(workspacePath, trimmed || null);
+        return { success: true };
+    });
+
+    safeHandle('workspace:get-colors', async (_event, data: { workspacePath: string }) => {
+        const { workspacePath } = data ?? {};
+        if (!workspacePath || typeof workspacePath !== 'string') return {};
+        return getProjectRailColors(workspacePath);
+    });
+
+    safeHandle(
+        'workspace:set-color',
+        async (_event, data: { workspacePath: string; slot: 'fg' | 'bg'; color: string | null }) => {
+            const { workspacePath, slot, color } = data ?? {};
+            if (!workspacePath || typeof workspacePath !== 'string') {
+                return { success: false, error: 'workspacePath required' };
+            }
+            if (slot !== 'fg' && slot !== 'bg') return { success: false, error: 'slot must be fg or bg' };
+            // The value lands in an inline CSS variable, so only plain hex is accepted.
+            if (color !== null && !/^#[0-9a-f]{6}$/i.test(String(color))) {
+                return { success: false, error: 'color must be #rrggbb' };
+            }
+            setProjectRailColor(workspacePath, slot, color);
+            return { success: true };
+        },
+    );
 
     safeHandle('workspace:get-folders', async (_event, data: { workspacePath: string }) => {
         const { workspacePath } = data ?? {};

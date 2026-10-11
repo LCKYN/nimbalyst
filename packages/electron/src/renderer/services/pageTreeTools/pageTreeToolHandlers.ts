@@ -14,6 +14,7 @@ import {
   movePageTreeNodeTool,
   renamePageTool,
   searchPagesTool,
+  setPageFieldsTool,
   setPageTypeTool,
   type PageTreeToolEnv,
   type PageTreeToolResult,
@@ -48,6 +49,9 @@ const TOOLS: Record<string, (env: PageTreeToolEnv, args: Record<string, unknown>
   'mcp:renameSharedItem': renamePageTool,
   'mcp:deleteSharedItem': deletePageTool,
   'mcp:setPageType': setPageTypeTool,
+  'mcp:setPageFields': setPageFieldsTool,
+  // Loaded on first use: it brings in the share flow and its dialogs.
+  'mcp:importFileToPages': (env, args) => import('./importFileToPagesTool').then(({ importFileToPagesTool }) => importFileToPagesTool(env, args)),
 };
 
 /** Subscribe every page tree tool channel; returns the unsubscribers. */

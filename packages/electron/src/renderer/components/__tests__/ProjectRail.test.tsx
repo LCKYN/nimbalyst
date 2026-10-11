@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ProjectRail } from '../ProjectRail';
@@ -55,4 +55,54 @@ it('reveals restored and newly selected projects, handles resize, and leaves man
   expect(list.scrollTop).toBe(0);
   view.unmount();
   expect(disconnect).toHaveBeenCalled();
+});
+
+it('replaces initials with a picked emoji and restores them on reset', async () => {
+  const store = createStore();
+  store.set(multiProjectModeAtom, true);
+  store.set(openProjectsAtom, [{ path: '/p/app', name: 'poc-app', openedAt: 0 }]);
+  let saved: string | null = null;
+  const colors: Record<string, string> = {};
+  const invoke = vi.fn(async (channel: string, data?: { icon?: string | null; slot?: string; color?: string | null }) => {
+    if (channel === 'workspace:set-icon') saved = data?.icon ?? null;
+    if (channel === 'workspace:get-icon') return saved;
+    if (channel === 'workspace:set-color') {
+      if (data?.color) colors[data.slot!] = data.color;
+      else delete colors[data!.slot!];
+    }
+    if (channel === 'workspace:get-colors') return { ...colors };
+    return null;
+  });
+  vi.stubGlobal('electronAPI', { invoke });
+  const view = render(<Provider store={store}><ProjectRail /></Provider>);
+  const tile = view.getByRole('button', { name: 'Switch to project poc-app' });
+  await act(async () => {});
+  expect(tile.textContent).toBe('PA');
+
+  fireEvent.contextMenu(tile);
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Use 🚀 as project icon' })); });
+  expect(invoke).toHaveBeenCalledWith('workspace:set-icon', { workspacePath: '/p/app', icon: '🚀' });
+  expect(tile.textContent).toBe('🚀');
+
+  // A typed lowercase word is stored as a Material Symbols icon, not text.
+  fireEvent.contextMenu(tile);
+  fireEvent.change(view.getByRole('textbox', { name: 'Custom project icon' }), { target: { value: 'database' } });
+  await act(async () => { fireEvent.submit(view.getByRole('textbox', { name: 'Custom project icon' })); });
+  expect(invoke).toHaveBeenCalledWith('workspace:set-icon', { workspacePath: '/p/app', icon: 'icon:database' });
+  expect(tile.querySelector('.material-symbols-outlined')?.textContent).toBe('database');
+
+  fireEvent.contextMenu(tile);
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Reset icon' })); });
+  expect(tile.textContent).toBe('PA');
+
+  // Colors override the tile's accent and stay put until reset.
+  const item = tile.parentElement!;
+  fireEvent.contextMenu(tile);
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Background #22c55e' })); });
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Icon & text #111827' })); });
+  expect(item.style.getPropertyValue('--rail-item-bg')).toBe('#22c55e');
+  expect(item.style.getPropertyValue('--rail-item-fg')).toBe('#111827');
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Reset background color' })); });
+  expect(item.style.getPropertyValue('--rail-item-bg')).toBe('');
+  expect(item.style.getPropertyValue('--rail-item-fg')).toBe('#111827');
 });
