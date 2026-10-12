@@ -31,6 +31,7 @@ import {
   startExtensionBackendModules,
   stopExtensionBackendModules,
   startWorkspaceBackendModules,
+  restartAwaitingTrustBackendModules,
   syncEnabledBackendModulesOnStartup,
   type BackendModuleLifecycleDeps,
   type ResolvedBackendModules,
@@ -332,4 +333,29 @@ it('releases running siblings without waiting for unanswered consent, including 
     answer();
     await Promise.all([opening, closing, reopening]);
   }
+});
+
+it('restarts a module parked on awaiting-trust once the workspace is trusted', async () => {
+  let trusted = false;
+  const handles = new Map<string, ModuleHandle>();
+  const deps = makeDeps({
+    startModule: vi.fn(async (args) => {
+      const handle: ModuleHandle = {
+        extensionId: args.extensionId,
+        moduleId: args.module.id,
+        workspacePath: args.workspacePath,
+        state: trusted ? { status: 'running', startedAt: 0, methods: [] } : { status: 'awaiting-trust' },
+      };
+      handles.set(args.workspacePath, handle);
+      return handle;
+    }),
+    listModuleHandles: vi.fn(() => [...handles.values()]),
+  });
+
+  await new WorkspaceBackendLifecycle(deps).open('/ws/untrusted');
+  expect(handles.get('/ws/untrusted')?.state.status).toBe('awaiting-trust');
+
+  trusted = true;
+  await restartAwaitingTrustBackendModules(deps);
+  expect(handles.get('/ws/untrusted')?.state.status).toBe('running');
 });
