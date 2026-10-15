@@ -67,6 +67,18 @@ describe('BrowserSurface attachment lifecycle', () => {
     expect(detachBrowserSession).toHaveBeenCalledTimes(2);
   });
 
+  // #1597: agent browser tools mount a hidden editor at (-9999, -9999). Its
+  // placeholder is laid out at full size, so only its position shows it is
+  // off-window -- and a native view attached there covered the user's window.
+  it('does not attach a placeholder parked off-window', async () => {
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue(
+      new DOMRect(-9999, -9959, 1280, 760),
+    );
+    render(<BrowserSurface sessionId="preview" visible />);
+    await act(async () => frame(0));
+    expect(attachBrowserSession).not.toHaveBeenCalled();
+  });
+
   it('retries a rejected attach at the same bounds', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.mocked(attachBrowserSession)

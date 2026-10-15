@@ -62,13 +62,24 @@ describe('clampBounds', () => {
     });
   });
 
-  it('clamps negative origin to zero', () => {
+  it('crops the part of the rect above or left of the container', () => {
     expect(clampBounds({ x: -5, y: -10, width: 100, height: 100 }, container)).toEqual({
       x: 0,
       y: 0,
-      width: 100,
-      height: 100,
+      width: 95,
+      height: 90,
     });
+  });
+
+  // #1597: an agent's browser tool mounts a hidden browser editor parked at
+  // (-9999, -9999). Shifting that rect onto the window instead of cropping it
+  // drew the page over the top-left of the user's window.
+  it('collapses a rect entirely above-left of the container to nothing', () => {
+    const { width, height } = clampBounds(
+      { x: -9999, y: -9959, width: 1280, height: 760 },
+      container,
+    );
+    expect(width * height).toBe(0);
   });
 
   it('clips width/height that overflow the container', () => {

@@ -168,18 +168,23 @@ export function scaleBoundsForZoom(
  * Pure-function bounds clamper. Exposed for unit tests so we can verify that
  * a negative or oversized rect (which Electron silently accepts) is corrected
  * before we hand it to `view.setBounds`.
+ *
+ * Returns the part of the rect that lies inside the container. It crops, never
+ * shifts: a rect parked off-window must stay off-window. #1597: hidden browser
+ * editors live at (-9999, -9999), and shifting that rect onto the window drew
+ * the page over the top-left of the user's window.
  */
 export function clampBounds(
   bounds: BrowserSessionBounds,
   container: { width: number; height: number },
 ): BrowserSessionBounds {
-  const x = Math.max(0, Math.floor(bounds.x));
-  const y = Math.max(0, Math.floor(bounds.y));
-  // Width/height are non-negative integers; if the requested rect extends past
-  // the container we clip so we never produce a view with negative dims.
-  const width = Math.max(0, Math.min(Math.floor(bounds.width), container.width - x));
-  const height = Math.max(0, Math.min(Math.floor(bounds.height), container.height - y));
-  return { x, y, width, height };
+  const left = Math.floor(bounds.x);
+  const top = Math.floor(bounds.y);
+  const x = Math.min(Math.max(0, left), container.width);
+  const y = Math.min(Math.max(0, top), container.height);
+  const right = Math.min(left + Math.floor(bounds.width), container.width);
+  const bottom = Math.min(top + Math.floor(bounds.height), container.height);
+  return { x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y) };
 }
 
 /**
