@@ -2,9 +2,9 @@ import { app, nativeImage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { getWorkspaceState, updateWorkspaceState } from '../utils/store';
+import { getLegacyProjectRailAppearance, getWorkspaceState, updateWorkspaceState } from '../utils/store';
 import { addNimAssetRoot, encodeNimAssetUrl } from '../protocols/nimAssetProtocol';
-import { initialsLength, type ProjectAppearanceSnapshot, type ProjectAppearanceUpdate, type StoredProjectAppearance } from '../../shared/projectAppearance';
+import { initialsLength, projectSymbol, type ProjectAppearanceSnapshot, type ProjectAppearanceUpdate, type StoredProjectAppearance } from '../../shared/projectAppearance';
 
 let revision = 0;
 const IMAGE_ID = /^[a-f0-9-]{36}\.png$/;
@@ -40,15 +40,23 @@ function decodeThumbnail(value: unknown): Buffer {
   return image.toPNG();
 }
 
+/** Until the first save, the fork's legacy rail icon and colors stand in. */
+function storedAppearance(workspacePath: string): StoredProjectAppearance {
+  const stored = getWorkspaceState(workspacePath).projectAppearance ?? {};
+  return Object.keys(stored).length ? stored : getLegacyProjectRailAppearance(workspacePath);
+}
+
 export function getProjectAppearance(workspacePath: string): ProjectAppearanceSnapshot {
   requireWorkspace(workspacePath);
-  const stored = getWorkspaceState(workspacePath).projectAppearance ?? {};
+  const stored = storedAppearance(workspacePath);
   const file = imagePath(stored.imageId);
+  const isHex = (value: unknown): value is string => typeof value === 'string' && /^#[a-f0-9]{6}$/i.test(value);
   return {
     revision,
     appearance: {
       ...(typeof stored.initials === 'string' && stored.initials ? { initials: stored.initials } : {}),
-      ...(typeof stored.color === 'string' && /^#[a-f0-9]{6}$/i.test(stored.color) ? { color: stored.color } : {}),
+      ...(isHex(stored.color) ? { color: stored.color } : {}),
+      ...(isHex(stored.textColor) ? { textColor: stored.textColor } : {}),
       ...(file ? { imageUrl: encodeNimAssetUrl(file) } : {}),
     },
   };
@@ -57,25 +65,31 @@ export function getProjectAppearance(workspacePath: string): ProjectAppearanceSn
 export function updateProjectAppearance(workspacePath: string, input: unknown): ProjectAppearanceSnapshot {
   requireWorkspace(workspacePath);
   if (!input || typeof input !== 'object' || Array.isArray(input)
-    || Object.keys(input).some(key => !['initials', 'color', 'image'].includes(key))) {
+    || Object.keys(input).some(key => !['initials', 'color', 'textColor', 'image'].includes(key))) {
     throw new Error('Invalid project appearance.');
   }
   const patch = input as ProjectAppearanceUpdate;
   if (patch.initials != null && (typeof patch.initials !== 'string' || patch.initials.length > 64
-    || initialsLength(patch.initials.trim()) > 3 || /[\p{Cc}\p{Zl}\p{Zp}]/u.test(patch.initials))) {
+    || (initialsLength(patch.initials.trim()) > 3 && !projectSymbol(patch.initials.trim()))
+    || /[\p{Cc}\p{Zl}\p{Zp}]/u.test(patch.initials))) {
     throw new Error('Use up to three characters for the initials.');
   }
-  if (patch.color != null && (typeof patch.color !== 'string' || !/^#[a-f0-9]{6}$/i.test(patch.color))) {
-    throw new Error('Choose a valid color.');
+  for (const color of [patch.color, patch.textColor]) {
+    if (color != null && (typeof color !== 'string' || !/^#[a-f0-9]{6}$/i.test(color))) {
+      throw new Error('Choose a valid color.');
+    }
   }
   const thumbnail = patch.image == null ? undefined : decodeThumbnail(patch.image);
-  const previous = getWorkspaceState(workspacePath).projectAppearance ?? {};
-  const next: StoredProjectAppearance = { ...previous };
+  const previous = storedAppearance(workspacePath);
+  const next: StoredProjectAppearance = { ...previous, legacyRailImported: true };
   if (patch.initials !== undefined) {
     if (patch.initials?.trim()) next.initials = patch.initials.trim(); else delete next.initials;
   }
   if (patch.color !== undefined) {
     if (patch.color) next.color = patch.color.toLowerCase(); else delete next.color;
+  }
+  if (patch.textColor !== undefined) {
+    if (patch.textColor) next.textColor = patch.textColor.toLowerCase(); else delete next.textColor;
   }
   let newFile: string | undefined;
   if (patch.image !== undefined) {

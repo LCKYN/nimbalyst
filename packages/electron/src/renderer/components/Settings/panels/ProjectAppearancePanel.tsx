@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { projectAppearanceAtom, saveProjectAppearanceAtom } from '../../../store/atoms/projectAppearance';
-import { generateWorkspaceAccentColor, initialsLength, projectIconForeground, projectInitials, type ProjectAppearanceUpdate } from '../../../../shared/projectAppearance';
+import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
+import { PROJECT_EMOJI_CHOICES, PROJECT_SYMBOL_CHOICES, generateWorkspaceAccentColor, initialsLength, projectIconForeground, projectInitials, projectSymbol, type ProjectAppearanceUpdate } from '../../../../shared/projectAppearance';
 import { ProjectIcon } from '../../ProjectIcon';
 import { getFileName } from '../../../utils/pathUtils';
 import './ProjectAppearancePanel.css';
@@ -35,8 +36,11 @@ export function ProjectAppearancePanel({ workspacePath }: { workspacePath: strin
   const appearance = {
     initials: patch.initials === undefined ? saved.initials : patch.initials || undefined,
     color: patch.color === undefined ? saved.color : patch.color || undefined,
+    textColor: patch.textColor === undefined ? saved.textColor : patch.textColor || undefined,
     imageUrl: patch.image === undefined ? saved.imageUrl : patch.image || undefined,
+    detectedImageUrl: saved.detectedImageUrl,
   };
+  const foreground = appearance.textColor || projectIconForeground(appearance.color);
   const change = (update: ProjectAppearanceUpdate) => {
     setPatch(current => ({ ...current, ...update })); setStatus(''); setError('');
   };
@@ -46,30 +50,47 @@ export function ProjectAppearancePanel({ workspacePath }: { workspacePath: strin
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
-  const invalidInitials = initialsLength(appearance.initials?.trim() || '') > 3;
+  const invalidInitials = initialsLength(appearance.initials?.trim() || '') > 3 && !projectSymbol(appearance.initials?.trim());
   return (
     <section className="project-appearance-panel" data-testid="project-appearance-panel" data-project-path={workspacePath}>
       <h2>Appearance</h2>
       <p>Choose how {name} appears in the project rail. These settings apply only on this computer.</p>
       <div className="project-appearance-preview-row">
         <div className="project-appearance-preview" data-testid="project-appearance-preview"
-          style={{ background: appearance.color || generateWorkspaceAccentColor(workspacePath), color: projectIconForeground(appearance.color) }}>
+          style={{ background: appearance.color || generateWorkspaceAccentColor(workspacePath), color: foreground }}>
           <ProjectIcon name={name} appearance={appearance} />
         </div>
         <div><strong>{name}</strong><div className="project-appearance-path" title={workspacePath}>{workspacePath}</div></div>
       </div>
       <fieldset disabled={busy || !snapshot}>
-        <label htmlFor="project-initials">Initials</label>
+        <label htmlFor="project-initials">Initials or emoji</label>
         <input id="project-initials" data-testid="project-appearance-initials" type="text" maxLength={64}
           value={appearance.initials || ''} placeholder={projectInitials(name)} aria-invalid={invalidInitials}
           aria-describedby="project-initials-help" onChange={e => change({ initials: e.target.value || null })} />
         <p id="project-initials-help">Up to three characters or an emoji. Leave blank to use {projectInitials(name)}.</p>
-        <label htmlFor="project-color">Color</label>
+        <div className="project-appearance-emoji-grid" data-testid="project-appearance-emoji-grid">
+          {PROJECT_EMOJI_CHOICES.map(emoji => (
+            <button key={emoji} type="button" aria-label={`Use ${emoji}`} aria-pressed={appearance.initials === emoji}
+              onClick={() => change({ initials: emoji })}>{emoji}</button>
+          ))}
+          {PROJECT_SYMBOL_CHOICES.map(symbol => (
+            <button key={symbol} type="button" aria-label={`Use ${symbol}`} aria-pressed={appearance.initials === `icon:${symbol}`}
+              onClick={() => change({ initials: `icon:${symbol}` })}><MaterialSymbol icon={symbol} size={18} /></button>
+          ))}
+        </div>
+        <label htmlFor="project-color">Background color</label>
         <div className="project-appearance-controls">
           <input id="project-color" data-testid="project-appearance-color" type="color" value={appearance.color || generateWorkspaceAccentColor(workspacePath, 'hex')}
             onChange={e => change({ color: e.target.value })} />
           <span>{appearance.color || 'Automatic'}</span>
           <button type="button" disabled={!appearance.color} onClick={() => change({ color: null })}>Use automatic color</button>
+        </div>
+        <label htmlFor="project-text-color">Text color</label>
+        <div className="project-appearance-controls">
+          <input id="project-text-color" data-testid="project-appearance-text-color" type="color" value={foreground}
+            onChange={e => change({ textColor: e.target.value })} />
+          <span>{appearance.textColor || 'Automatic'}</span>
+          <button type="button" disabled={!appearance.textColor} onClick={() => change({ textColor: null })}>Use automatic text color</button>
         </div>
         <label htmlFor="project-image">Image</label>
         <input id="project-image" ref={fileInput} data-testid="project-appearance-file" type="file" accept="image/png,image/jpeg,image/webp"
@@ -84,11 +105,11 @@ export function ProjectAppearancePanel({ workspacePath }: { workspacePath: strin
           <button type="button" onClick={() => fileInput.current?.click()}>Choose image…</button>
           {appearance.imageUrl && <button type="button" onClick={() => change({ image: null })}>Remove image</button>}
         </div>
-        <p>PNG, JPEG, or WebP, up to 5 MB. Images replace the initials.</p>
+        <p>PNG, JPEG, or WebP, up to 5 MB. Images replace the initials. Without one, a favicon or logo found in the project is used when no initials are set.</p>
         <div className="project-appearance-actions">
           <button type="button" className="project-appearance-save" data-testid="project-appearance-save"
             disabled={invalidInitials || !Object.keys(patch).length} onClick={() => persist(patch)}>Save changes</button>
-          <button type="button" onClick={() => persist({ initials: null, color: null, image: null })}>Reset to default</button>
+          <button type="button" onClick={() => persist({ initials: null, color: null, textColor: null, image: null })}>Reset to default</button>
           <span role="status">{busy ? 'Saving…' : status}</span>
         </div>
       </fieldset>

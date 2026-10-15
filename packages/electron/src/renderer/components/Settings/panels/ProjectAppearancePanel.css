@@ -18,3 +18,6 @@
 .project-appearance-panel button.project-appearance-save { background: var(--nim-primary); color: var(--nim-on-primary); }
 .project-appearance-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding-top: 20px; border-top: 1px solid var(--nim-border); font-size: 13px; }
 .project-appearance-panel p.project-appearance-error { color: var(--nim-error); margin-top: 16px; user-select: text; }
+.project-appearance-emoji-grid { display: grid; grid-template-columns: repeat(8, 32px); gap: 4px; margin: -8px 0 20px; }
+.project-appearance-panel .project-appearance-emoji-grid button { width: 32px; height: 32px; padding: 0; font-size: 18px; line-height: 1; }
+.project-appearance-panel .project-appearance-emoji-grid button[aria-pressed=true] { border-color: var(--nim-primary); background: var(--nim-bg-hover); }

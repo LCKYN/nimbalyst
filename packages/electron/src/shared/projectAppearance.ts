@@ -3,16 +3,24 @@
 export interface ProjectAppearance {
   initials?: string;
   color?: string;
+  /** Initials foreground; unset picks black or white against `color`. */
+  textColor?: string;
   imageUrl?: string;
+  /** A logo found in the project (favicon etc.), shown only when no initials or image are set. */
+  detectedImageUrl?: string;
 }
 export interface StoredProjectAppearance {
   initials?: string;
   color?: string;
+  textColor?: string;
   imageId?: string;
+  /** Set on first save, so the legacy rail icon/colors stop applying even after a reset. */
+  legacyRailImported?: true;
 }
 export interface ProjectAppearanceUpdate {
   initials?: string | null;
   color?: string | null;
+  textColor?: string | null;
   /** A normalized PNG thumbnail; null removes it, undefined leaves it alone. */
   image?: string | null;
 }
@@ -20,6 +28,19 @@ export interface ProjectAppearanceSnapshot {
   appearance: ProjectAppearance;
   /** Monotonic within the main-process lifetime, including reset operations. */
   revision: number;
+}
+export const PROJECT_EMOJI_CHOICES = [
+  '😀', '🚀', '🔥', '⭐', '💡', '🧪', '🛠️', '📦',
+  '🎨', '📝', '🤖', '🧠', '💼', '🏠', '🌱', '🐛',
+];
+/** Material Symbols names, stored in the initials slot as `icon:<name>`. */
+export const PROJECT_SYMBOL_CHOICES = [
+  'code', 'terminal', 'database', 'cloud', 'api', 'web', 'smartphone', 'dns',
+  'rocket_launch', 'bolt', 'science', 'psychology', 'shield', 'work', 'school', 'storefront',
+  'description', 'folder', 'analytics', 'payments', 'group', 'chat', 'sports_esports', 'favorite',
+];
+export function projectSymbol(initials?: string): string | undefined {
+  return initials?.match(/^icon:([a-z0-9_]+)$/)?.[1];
 }
 export function projectInitials(name: string): string {
   const trimmed = name.trim();

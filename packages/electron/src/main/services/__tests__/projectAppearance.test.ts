@@ -6,7 +6,7 @@ import path from 'node:path';
 const state = vi.hoisted(() => ({ backing: {} as Record<string, any>, dir: '', writes: 0 }));
 vi.mock('electron-store', () => ({ default: class {
   path = 'mock';
-  get(_key: string, fallback: unknown) { return fallback; }
+  get(key: string, fallback: unknown) { return structuredClone(state.backing[key] ?? fallback); }
   get store() { return structuredClone(state.backing); }
   set(key: string, value: unknown) { state.writes++; state.backing[key] = structuredClone(value); }
 } }));
@@ -31,6 +31,17 @@ describe('project appearance persistence', () => {
     expect(getProjectAppearance(b).appearance).toEqual({});
     expect(getWorkspaceState(a).sidebarWidth).toBe(333);
   });
+  it('shows the legacy rail icon and colors until the first save, which copies them and leaves the legacy keys intact', () => {
+    const legacy = { projectRailIcons: { [a]: 'icon:school' }, projectRailColors: { [a]: { fg: '#ef4444', bg: '#eab308' } } };
+    Object.assign(state.backing, structuredClone(legacy));
+    expect(getProjectAppearance(a).appearance).toEqual({ initials: 'icon:school', color: '#eab308', textColor: '#ef4444' });
+    updateProjectAppearance(a, { textColor: '#FF0000' });
+    expect(getProjectAppearance(a).appearance).toEqual({ initials: 'icon:school', color: '#eab308', textColor: '#ff0000' });
+    updateProjectAppearance(a, { initials: 'icon:bolt' });
+    updateProjectAppearance(a, { initials: null, color: null, textColor: null, image: null });
+    expect(getProjectAppearance(a).appearance).toEqual({});
+    expect(state.backing).toMatchObject(legacy);
+  });
   it('merges changed fields and resets overrides without deleting other settings', () => {
     updateProjectAppearance(a, { initials: 'FR' });
     updateProjectAppearance(a, { color: '#123456' });
@@ -38,7 +49,7 @@ describe('project appearance persistence', () => {
     updateProjectAppearance(a, { initials: null, color: null, image: null });
     expect(getProjectAppearance(a).appearance).toEqual({});
   });
-  it.each([['', {}], ['relative', {}], [a, { color: 'url(bad)' }], [a, { initials: 'LONG' }], [a, { image: 'file:///secret' }], [a, { imageId: '../escape' }]])('rejects invalid input without writing (%s)', (ws, patch) => {
+  it.each([['', {}], ['relative', {}], [a, { color: 'url(bad)' }], [a, { textColor: 'red' }], [a, { initials: 'LONG' }], [a, { initials: 'icon:Bad-Name' }],[a, { image: 'file:///secret' }], [a, { imageId: '../escape' }]])('rejects invalid input without writing (%s)', (ws, patch) => {
     expect(() => updateProjectAppearance(ws as string, patch)).toThrow();
     expect(state.writes).toBe(0);
   });
