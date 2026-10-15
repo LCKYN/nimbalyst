@@ -14,6 +14,10 @@ import { logger } from '../utils/logger';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { resolveProjectPath, isWorktreePath } from '../utils/workspaceDetection';
 import { getDialogDefaultPath, rememberDialogSelection } from '../utils/dialogPaths';
+import {
+  getDefaultBackendModuleLifecycleDeps,
+  restartAwaitingTrustBackendModules,
+} from '../extensions/backendModuleLifecycle';
 
 /**
  * Broadcast permission changes to all renderer processes.
@@ -41,6 +45,12 @@ function broadcastPermissionChange(workspacePath: string): void {
 
   void ClaudeCodeProvider.applyPermissionChange().catch((error) => {
     logger.main.error('[PermissionHandlers] Failed to apply permission change to running sessions:', error);
+  });
+
+  // Backend modules of a workspace opened untrusted are parked on
+  // `awaiting-trust` and never retried by the open path.
+  void restartAwaitingTrustBackendModules(getDefaultBackendModuleLifecycleDeps()).catch((error) => {
+    logger.main.error('[PermissionHandlers] Failed to restart backend modules after permission change:', error);
   });
 }
 
