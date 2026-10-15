@@ -342,6 +342,10 @@ interface AppStoreSchema {
   // with the project the user picks from the launch screen — additional
   // projects must be added explicitly.
   restorePreviousProjectsOnLaunch?: boolean;
+  // Legacy per-project rail icon (emoji or `icon:<symbol>`) and colors,
+  // superseded by workspace projectAppearance. Read-only; kept for fallback.
+  projectRailIcons?: Record<string, string>;
+  projectRailColors?: Record<string, { fg?: string; bg?: string }>;
 }
 
 /**
@@ -3100,6 +3104,13 @@ export function updateMarketplaceInstall(extensionId: string, updates: Partial<M
     installs[extensionId] = { ...installs[extensionId], ...updates };
     getAppStore().set('marketplaceInstalls', installs);
   }
+}
+
+/** Rail icon and colors picked before project appearance existed, mapped onto its fields. */
+export function getLegacyProjectRailAppearance(workspacePath: string): StoredProjectAppearance {
+  const icon = getAppStore().get('projectRailIcons', {})[workspacePath];
+  const { fg, bg } = getAppStore().get('projectRailColors', {})[workspacePath] ?? {};
+  return { ...(icon ? { initials: icon } : {}), ...(bg ? { color: bg } : {}), ...(fg ? { textColor: fg } : {}) };
 }
 
 // Multi-Project Rail Settings

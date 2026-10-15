@@ -95,8 +95,8 @@ test('Back and Forward preserve the edited project and saving leaves the active 
   await customize('LibraryKit');
   await history(3);
   await expect(page.getByTestId('project-appearance-panel')).toHaveAttribute('data-project-path', fileRocket);
-  await page.getByLabel('Initials', { exact: true }).fill('FR');
-  await page.getByLabel('Color', { exact: true }).fill('#ffdd00');
+  await page.getByLabel('Initials or emoji', { exact: true }).fill('FR');
+  await page.getByLabel('Background color', { exact: true }).fill('#ffdd00');
   await save();
   await expect(page.getByRole('button', { name: 'Switch to project LibraryKit', exact: true })).toHaveAttribute('aria-current', 'true');
   const appearances = await page.evaluate(async ({ fileRocket, libraryKit }) => ({
@@ -128,7 +128,7 @@ test('custom colors keep the rail selection and hover treatment in light and dar
       { hex: '#ffdd00', rgb: 'rgb(255, 221, 0)', foreground: 'rgb(0, 0, 0)' },
     ]) {
       await customize('FileRocket');
-      await page.getByLabel('Color', { exact: true }).fill(choice.hex);
+      await page.getByLabel('Background color', { exact: true }).fill(choice.hex);
       await save();
       await page.mouse.move(1000, 50);
       await expect.poll(async () => {
@@ -256,8 +256,8 @@ test('a full restart preserves the icon and reset updates another window', async
   const image = page.getByTestId('project-appearance-preview').locator('img');
   await expect(image).toHaveAttribute('src', savedImageUrl);
   await expect.poll(() => image.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(128);
-  await expect(page.getByLabel('Initials', { exact: true })).toHaveValue('FR');
-  await expect(page.getByLabel('Color', { exact: true })).toHaveValue('#ffdd00');
+  await expect(page.getByLabel('Initials or emoji', { exact: true })).toHaveValue('FR');
+  await expect(page.getByLabel('Background color', { exact: true })).toHaveValue('#ffdd00');
 
   const secondWindow = app.waitForEvent('window');
   // Opening an already-open project focuses its existing window. Open a new

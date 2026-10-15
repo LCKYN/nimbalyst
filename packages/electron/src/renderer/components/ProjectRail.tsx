@@ -157,7 +157,11 @@ function ProjectRailIcon({
       data-testid="project-rail-item"
       data-project-path={project.path}
       data-drop-position={dropPosition}
-      style={{ '--rail-item-accent': accentColor, '--rail-item-foreground': projectIconForeground(appearance.color) } as React.CSSProperties}
+      style={{
+        '--rail-item-accent': accentColor,
+        '--rail-item-foreground': appearance.textColor || projectIconForeground(appearance.color),
+        ...(appearance.textColor ? { '--rail-item-text': appearance.textColor } : {}),
+      } as React.CSSProperties}
       {...getTooltipRefProps()}
     >
       <button
