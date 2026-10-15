@@ -171,7 +171,7 @@ export function registerWorkspaceHandlers() {
             let isBinary = forceBinary;
             if (!forceBinary) {
                 const ext = extname(filePath).toLowerCase();
-                const binaryExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.zip', '.tar', '.gz', '.woff', '.woff2', '.ttf', '.eot'];
+                const binaryExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.zip', '.tar', '.gz', '.woff', '.woff2', '.ttf', '.eot'];
                 isBinary = binaryExtensions.includes(ext);
             }
 
