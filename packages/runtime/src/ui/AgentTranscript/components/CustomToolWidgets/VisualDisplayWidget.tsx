@@ -516,56 +516,52 @@ function renderScatterChart(config: ChartConfig, colors: string[], isDark: boole
   );
 }
 
+type ReadFileFn = (path: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  'png': 'image/png',
+  'jpg': 'image/jpeg',
+  'jpeg': 'image/jpeg',
+  'gif': 'image/gif',
+  'webp': 'image/webp',
+  'svg': 'image/svg+xml',
+  'bmp': 'image/bmp'
+};
+
 /**
- * Component for displaying a single image with loading state
+ * Resolve a local image path to an <img>-loadable src. Prefers `readFile`
+ * (base64 over IPC, which can read any path) because `nim-asset://` only
+ * serves workspace/worktree/attachment folders and 403s everything else.
  */
-const ImageDisplay: React.FC<{
-  image: ImageContent;
-  description?: string;
-  readFile?: (path: string) => Promise<{ success: boolean; content?: string; error?: string }>;
-  className?: string;
-}> = ({ image, description, readFile, className }) => {
-  const [imageData, setImageData] = useState<string | null>(null);
+function useLocalImageSrc(path: string, readFile?: ReadFileFn) {
+  const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadImage = async () => {
-      // Try to load the image via file protocol (for local files)
-      // In Electron, we can use file:// protocol for local images
+    let cancelled = false;
+    setSrc(null);
+    setLoading(true);
+    setError(null);
+
+    const loadImage = async (): Promise<{ src?: string; error?: string }> => {
       try {
-        // First try using readFile if available (for base64 loading)
         if (readFile) {
-          const result = await readFile(image.path);
+          const result = await readFile(path);
           if (result.success && result.content) {
-            // Check if content is already base64 or needs conversion
             if (result.content.startsWith('data:')) {
-              setImageData(result.content);
-            } else {
-              // Determine MIME type from extension
-              const ext = image.path.split('.').pop()?.toLowerCase();
-              const mimeTypes: Record<string, string> = {
-                'png': 'image/png',
-                'jpg': 'image/jpeg',
-                'jpeg': 'image/jpeg',
-                'gif': 'image/gif',
-                'webp': 'image/webp',
-                'svg': 'image/svg+xml',
-                'bmp': 'image/bmp'
-              };
-              const mimeType = mimeTypes[ext || ''] || 'image/png';
-              setImageData(`data:${mimeType};base64,${result.content}`);
+              return { src: result.content };
             }
-            setLoading(false);
-            return;
-          } else if (result.error) {
-            console.error('[VisualDisplayWidget] Failed to read image file:', {
-              path: image.path,
-              error: result.error
-            });
-            setError(`Failed to load image: ${result.error}`);
-            setLoading(false);
-            return;
+            const ext = path.split('.').pop()?.toLowerCase() || '';
+            // read-file-content returns SVG as text (editors read it as source)
+            if (ext === 'svg' && result.content.trimStart().startsWith('<')) {
+              return { src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result.content)}` };
+            }
+            return { src: `data:${IMAGE_MIME_TYPES[ext] || 'image/png'};base64,${result.content}` };
+          }
+          if (result.error) {
+            console.error('[VisualDisplayWidget] Failed to read image file:', { path, error: result.error });
+            return { error: `Failed to load image: ${result.error}` };
           }
         }
 
@@ -573,22 +569,27 @@ const ImageDisplay: React.FC<{
         // `localAssetUrl` returns `nim-asset://` in Electron (the main window
         // runs with `webSecurity: true` and cannot load `file://`) and
         // `file://` for non-Electron consumers.
-        setImageData(localAssetUrl(image.path));
-        setLoading(false);
+        return { src: localAssetUrl(path) };
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        console.error('[VisualDisplayWidget] Image load exception:', {
-          path: image.path,
-          error: errorMessage
-        });
-        setError(`Failed to load image: ${errorMessage}`);
-        setLoading(false);
+        console.error('[VisualDisplayWidget] Image load exception:', { path, error: errorMessage });
+        return { error: `Failed to load image: ${errorMessage}` };
       }
     };
 
-    loadImage();
-  }, [image.path, readFile]);
+    loadImage().then((result) => {
+      if (cancelled) return;
+      setSrc(result.src ?? null);
+      setError(result.error ?? null);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [path, readFile]);
 
+  return { src, loading, error, setError };
+}
+
+function renderImageStatus(loading: boolean, error: string | null, path: string): React.ReactNode {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-4 bg-nim-secondary rounded-md border border-nim">
@@ -601,10 +602,27 @@ const ImageDisplay: React.FC<{
     return (
       <div className="flex flex-col items-center gap-2 p-4 bg-nim-secondary rounded-md border border-nim">
         <span className="text-nim-error text-sm">{error}</span>
-        <span className="font-mono text-xs text-nim-faint break-all">{image.path}</span>
+        <span className="font-mono text-xs text-nim-faint break-all">{path}</span>
       </div>
     );
   }
+
+  return null;
+}
+
+/**
+ * Component for displaying a single image with loading state
+ */
+const ImageDisplay: React.FC<{
+  image: ImageContent;
+  description?: string;
+  readFile?: ReadFileFn;
+  className?: string;
+}> = ({ image, description, readFile, className }) => {
+  const { src: imageData, loading, error, setError } = useLocalImageSrc(image.path, readFile);
+
+  const status = renderImageStatus(loading, error, image.path);
+  if (status) return status;
 
   const isGif = image.path.toLowerCase().endsWith('.gif');
 
@@ -707,8 +725,12 @@ const Lightbox: React.FC<{
   selectedIndex: number;
   onClose: () => void;
   onNavigate: (index: number) => void;
-  readFile?: (path: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+  readFile?: ReadFileFn;
 }> = ({ images, selectedIndex, onClose, onNavigate, readFile }) => {
+  const path = images[selectedIndex].image!.path;
+  const { src, loading, error } = useLocalImageSrc(path, readFile);
+  const status = renderImageStatus(loading, error, path);
+
   return (
     <FullscreenModal
       isOpen={true}
@@ -716,51 +738,55 @@ const Lightbox: React.FC<{
       ariaLabel="Image lightbox"
       contentClassName="h-[92dvh] w-[96vw] max-w-[1400px] overflow-hidden rounded-lg border border-nim bg-nim"
     >
-      <ZoomableImageSurface
-        src={localAssetUrl(images[selectedIndex].image!.path)}
-        alt={images[selectedIndex].description}
-        copyFilePath={images[selectedIndex].image!.path}
-        toolbarLabel={(
-          <div className="min-w-0 truncate font-mono text-sm text-nim" title={images[selectedIndex].description}>
-            {images[selectedIndex].description}
-          </div>
-        )}
-        toolbarExtras={(
-          <>
-            {images.length > 1 ? (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  className="rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] px-2 py-1 text-xs text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-                  onClick={() => onNavigate((selectedIndex - 1 + images.length) % images.length)}
-                  aria-label="Previous image"
-                >
-                  Prev
-                </button>
-                <div className="min-w-[3.5rem] text-center font-mono text-xs text-[var(--nim-text-muted)]">
-                  {selectedIndex + 1} / {images.length}
+      {status ? (
+        <div className="flex h-full items-center justify-center p-4">{status}</div>
+      ) : (
+        <ZoomableImageSurface
+          src={src || ''}
+          alt={images[selectedIndex].description}
+          copyFilePath={images[selectedIndex].image!.path}
+          toolbarLabel={(
+            <div className="min-w-0 truncate font-mono text-sm text-nim" title={images[selectedIndex].description}>
+              {images[selectedIndex].description}
+            </div>
+          )}
+          toolbarExtras={(
+            <>
+              {images.length > 1 ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] px-2 py-1 text-xs text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                    onClick={() => onNavigate((selectedIndex - 1 + images.length) % images.length)}
+                    aria-label="Previous image"
+                  >
+                    Prev
+                  </button>
+                  <div className="min-w-[3.5rem] text-center font-mono text-xs text-[var(--nim-text-muted)]">
+                    {selectedIndex + 1} / {images.length}
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] px-2 py-1 text-xs text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                    onClick={() => onNavigate((selectedIndex + 1) % images.length)}
+                    aria-label="Next image"
+                  >
+                    Next
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] px-2 py-1 text-xs text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-                  onClick={() => onNavigate((selectedIndex + 1) % images.length)}
-                  aria-label="Next image"
-                >
-                  Next
-                </button>
-              </div>
-            ) : null}
-            <button
-              type="button"
-              className="rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] px-2 py-1 text-xs text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={onClose}
-              aria-label="Close"
-            >
-              Close
-            </button>
-          </>
-        )}
-      />
+              ) : null}
+              <button
+                type="button"
+                className="rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] px-2 py-1 text-xs text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={onClose}
+                aria-label="Close"
+              >
+                Close
+              </button>
+            </>
+          )}
+        />
+      )}
     </FullscreenModal>
   );
 };
