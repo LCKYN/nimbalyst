@@ -26,8 +26,7 @@ export type CreateActionMode =
   | 'collab'
   | 'org'
   | 'pr-review'
-  | 'settings'
-  | 'usage-report';
+  | 'settings';
 
 /** The noun a mode's tree is made of. */
 export type CreateKind = 'file' | 'sharedDoc' | 'session' | 'trackerItem';

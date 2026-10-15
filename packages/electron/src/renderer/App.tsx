@@ -56,7 +56,6 @@ import { errorNotificationService } from './services/ErrorNotificationService';
 // NOTE: ProjectSelectionDialog now managed by DialogProvider
 // NOTE: Project-window UnifiedOnboarding is managed by DialogProvider.
 import { WorkspaceManagerOnboarding } from './components/WorkspaceManager/WorkspaceManagerOnboarding';
-import { AIUsageReport } from './components/AIUsageReport';
 import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
 import { DeveloperDashboard } from './components/DeveloperDashboard/DeveloperDashboard';
 import {
@@ -363,7 +362,7 @@ export default function App() {
   // if (import.meta.env.DEV) console.log('[App] render');
 
    // IMPORTANT: This state must be declared before the useEffect that uses it
-  // and before any conditional early returns (workspace-manager, usage-report, etc.)
+  // and before any conditional early returns (workspace-manager, etc.)
   const [extensionsReady, setExtensionsReady] = useState(false);
 
   // Initialize dialog system (must run early, before any dialogs are opened)
@@ -580,16 +579,6 @@ export default function App() {
         safeMode={urlParams.get('safeMode') === '1'}
       />
     );
-  }
-
-  if (windowMode === 'usage-report') {
-    // Set window title for AI Usage Report
-    React.useEffect(() => {
-      if (window.electronAPI) {
-        window.electronAPI.setTitle('AI Usage Report - Nimbalyst');
-      }
-    }, []);
-    return <AIUsageReport onClose={() => window.close()} />;
   }
 
   if (windowMode === 'database-browser') {
@@ -1445,7 +1434,6 @@ export default function App() {
       org: 'Organization',
       'pr-review': 'PR Review',
       settings: 'Settings',
-      'usage-report': 'AI Usage',
     };
     return labels[activeMode];
   }, [activeMode]);
@@ -3143,19 +3131,6 @@ export default function App() {
                 )}
               </Activity>
             </div>
-
-            {/* AI Usage Mode - mounted only while active. Unlike the modes
-                around it this holds no editor or draft state worth preserving,
-                and each mount re-queries usage from the database, so keeping it
-                resident would run that query in every window at startup. */}
-            {activeMode === 'usage-report' && !isFullscreenPanelActive && (
-              <div
-                data-layout="usage-report-mode-wrapper"
-                className="flex flex-1 flex-col overflow-hidden min-h-0"
-              >
-                <AIUsageReport />
-              </div>
-            )}
 
             {/* Collab Mode - always mounted, visibility controlled by display */}
             <div

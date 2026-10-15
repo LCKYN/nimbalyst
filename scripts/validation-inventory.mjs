@@ -57,7 +57,7 @@ export const tasks = {
     ...preparedTypecheck,
   ],
   'typecheck-ready': preparedTypecheck,
-  scripts: [['node', '--test', '--test-reporter=dot', ...scriptTests], ['node', 'scripts/check-ui-invariants.mjs'], ['node', 'scripts/check-native-dialogs.mjs'], ['node', 'scripts/check-session-archive-writes.mjs']],
+  scripts: [['node', '--test', '--test-reporter=dot', ...scriptTests], ['node', 'scripts/check-ui-invariants.mjs'], ['node', 'scripts/check-native-dialogs.mjs'], ['node', 'scripts/check-session-archive-writes.mjs'], ['node', 'scripts/check-extension-ipc-channels.mjs']],
   sandbox: [[packageManager, 'run', 'test:cloudflare-sandbox']],
   'unit-build': [...workspaceDeps, ...bundleBuild],
   unit: [[packageManager, 'run', 'test:prepush']],

@@ -256,6 +256,7 @@ export function getMigrations(schemaDir: string): Migration[] {
     { version: 53, name: 'session_wakeup_attachments', sqlFile: path.join(schemaDir, '0053_session_wakeup_attachments.sql') },
     { version: 54, name: 'session_wakeup_origin', sqlFile: path.join(schemaDir, '0054_session_wakeup_origin.sql') },
     { version: 55, name: 'tool_usage_token_estimates', sqlFile: path.join(schemaDir, '0055_tool_usage_token_estimates.sql') },
+    { version: 56, name: 'message_input_times_index', sqlFile: path.join(schemaDir, '0056_message_input_times_index.sql') },
   ];
 }
 
