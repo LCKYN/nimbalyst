@@ -86,3 +86,15 @@ export function formatResetTime(resetsAt: string | null): string {
   }
   return `${diffMinutes}m`;
 }
+
+/**
+ * Local wall-clock time of the reset: "12:20" today, "Sat 12:20" on a later day.
+ */
+export function formatResetClock(resetsAt: string | null, now: Date = new Date()): string | null {
+  if (!resetsAt) return null;
+  const resetDate = new Date(resetsAt);
+  if (Number.isNaN(resetDate.getTime()) || resetDate <= now) return null;
+  const time = resetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (resetDate.toDateString() === now.toDateString()) return time;
+  return `${resetDate.toLocaleDateString([], { weekday: 'short' })} ${time}`;
+}
