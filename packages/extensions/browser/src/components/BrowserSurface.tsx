@@ -102,6 +102,17 @@ export function BrowserSurface({ sessionId, visible }: BrowserSurfaceProps): JSX
       const width = Math.max(0, Math.round(rect.width));
       const height = Math.max(0, Math.round(rect.height));
       if (width === 0 || height === 0) return null;
+      // #1597: a placeholder parked off-window (hidden editors used by agent
+      // tools sit at -9999,-9999) is laid out and sized like a visible one.
+      // Nothing of it is on screen, so there is nothing to attach.
+      if (
+        x + width <= 0 ||
+        y + height <= 0 ||
+        x >= window.innerWidth ||
+        y >= window.innerHeight
+      ) {
+        return null;
+      }
       // If a host menu/popover/tooltip is open over us, hide the view so the
       // overlay isn't clipped by the native layer.
       if (overlayCoversSurface({ left: x, top: y, right: x + width, bottom: y + height })) {
