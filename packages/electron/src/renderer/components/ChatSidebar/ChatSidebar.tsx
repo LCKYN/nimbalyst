@@ -87,8 +87,10 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
   const panelRef = useRef<HTMLDivElement>(null);
   const pendingFocusRef = useRef(false);
   const pendingPromptRef = useRef<string | null>(null);
-  const isInitializingRef = useRef(false);
   const initializedWorkspaceRef = useRef<string | null>(null);
+  // The project this sidebar's selection belongs to. Hosts reuse the component
+  // across in-place project switches, so per-project state resets on change.
+  const selectionWorkspaceRef = useRef(workspacePath);
   // A host that loads a specific session (e.g. the PR pane following the
   // selected PR) wins over mount-time auto-init, which lands ~100ms later.
   const explicitSelectionRef = useRef(false);
@@ -211,8 +213,13 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
   }, [isActive, workspacePath]);
 
   // Initialize session - select most recent or create new if none exist
-  // CRITICAL: Only runs once on mount to avoid creating duplicate sessions
+  // CRITICAL: Only runs once per project to avoid creating duplicate sessions
   useEffect(() => {
+    if (selectionWorkspaceRef.current !== workspacePath) {
+      selectionWorkspaceRef.current = workspacePath;
+      explicitSelectionRef.current = false;
+      setInternalSessionId(null);
+    }
     if (!autoInitializeSession) {
       setIsLoading(false);
       return;
@@ -225,20 +232,19 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
       return;
     }
     initializedWorkspaceRef.current = workspacePath;
+    // Set by cleanup: a project switch (or unmount) supersedes this run, so it
+    // must not select anything after its awaits.
+    let cancelled = false;
+    let finished = false;
 
     const initSession = async () => {
-      // Prevent concurrent initialization
-      if (isInitializingRef.current) {
-        return;
-      }
-      isInitializingRef.current = true;
-
       try {
         setIsLoading(true);
 
         // Wait for session list to load (it's initialized in parallel above)
         // We need to give the session list time to populate
         await new Promise(resolve => setTimeout(resolve, 100));
+        if (cancelled) return;
 
         // The host picked a session while we waited — don't overwrite it.
         if (explicitSelectionRef.current) {
@@ -250,6 +256,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
         const sessions = await window.electronAPI.invoke('sessions:list', workspacePath, {
           includeArchived: false,
         });
+        if (cancelled) return;
 
         if (sessions.success && Array.isArray(sessions.sessions)) {
           // Filter for chat sessions (no worktrees, no workstream parents)
@@ -284,6 +291,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
             workspaceId: workspacePath,
           }
         );
+        if (cancelled) return;
         if (result?.success) {
           selectSession(newSessionId);
           // Refresh the session list to include the new session
@@ -292,12 +300,18 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
       } catch (err) {
         console.error('[ChatSidebar] Failed to init session:', err);
       } finally {
-        setIsLoading(false);
-        isInitializingRef.current = false;
+        finished = true;
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     initSession();
+    return () => {
+      cancelled = true;
+      // An unfinished run must be redone by the next effect run, which would
+      // otherwise hit the "already initialised" return and select nothing.
+      if (!finished) initializedWorkspaceRef.current = null;
+    };
   }, [
     autoInitializeSession,
     defaultModel,

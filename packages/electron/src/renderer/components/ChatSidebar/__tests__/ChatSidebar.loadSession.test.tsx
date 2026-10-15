@@ -92,6 +92,33 @@ describe('ChatSidebar loadSession vs auto-init', () => {
     });
   });
 
+  it('re-selects for the new project on a switch, and a slow superseded project cannot win', async () => {
+    let resolveB!: (value: unknown) => void;
+    (window.electronAPI.invoke as any).mockImplementation(async (channel: string, workspace: string) => {
+      if (channel !== 'sessions:list') return { success: true };
+      const sessions = [{ id: `${workspace}-recent`, worktreeId: null, childCount: 0 }];
+      if (workspace === '/b2') return new Promise(resolve => { resolveB = () => resolve({ success: true, sessions }); });
+      return { success: true, sessions };
+    });
+    const ref = createRef<ChatSidebarRef>();
+    const shownSession = () => view.queryByTestId('session-transcript')?.getAttribute('data-session-id');
+    const view = render(<ChatSidebar ref={ref} workspacePath="/a" />);
+    await waitFor(() => expect(shownSession()).toBe('/a-recent'));
+    act(() => { ref.current?.loadSession('a-session'); });
+
+    // An earlier explicit pick in /a must not pin the chat after switching to /b.
+    view.rerender(<ChatSidebar ref={ref} workspacePath="/b" />);
+    await waitFor(() => expect(shownSession()).toBe('/b-recent'));
+
+    // Fast /b2 -> /c: /b2's list is still pending when /c takes over.
+    view.rerender(<ChatSidebar ref={ref} workspacePath="/b2" />);
+    await waitFor(() => expect(resolveB).toBeTypeOf('function'));
+    view.rerender(<ChatSidebar ref={ref} workspacePath="/c" />);
+    await waitFor(() => expect(shownSession()).toBe('/c-recent'));
+    await act(async () => { resolveB(undefined); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(shownSession()).toBe('/c-recent');
+  });
+
   it('keeps unmatched GitHub selections empty and follows late matches across PRs and issues', async () => {
     const panel = (selectionKey: string | null, ids: string[] = []) => (
       <GithubPanelShell workspacePath="/workspace" isActive selectionKey={selectionKey}

@@ -2355,8 +2355,10 @@ let lastInitWorkspacePath: string | null = null;
 let initializedWorkspacePath: string | null = null;
 
 export async function initSessionList(workspacePath: string): Promise<void> {
-  // If already initialized for this workspace, return immediately
-  if (initializedWorkspacePath === workspacePath) {
+  // If already initialized for this workspace, return immediately. The list must
+  // still hold it: a fast A->B->A switch leaves `initializedWorkspacePath` at A
+  // while B is loading.
+  if (initializedWorkspacePath === workspacePath && store.get(sessionListWorkspaceAtom) === workspacePath) {
     return;
   }
 
@@ -2370,13 +2372,15 @@ export async function initSessionList(workspacePath: string): Promise<void> {
   store.set(sessionListWorkspaceAtom, workspacePath);
 
   // Trigger initial load and track the promise
-  initInProgress = store.set(refreshSessionListAtom);
+  const thisInit = store.set(refreshSessionListAtom);
+  initInProgress = thisInit;
   try {
-    await initInProgress;
-    // Mark as initialized only after successful completion
-    initializedWorkspacePath = workspacePath;
+    await thisInit;
+    // Mark as initialized only after successful completion, and only if a later
+    // switch hasn't superseded this workspace.
+    if (store.get(sessionListWorkspaceAtom) === workspacePath) initializedWorkspacePath = workspacePath;
   } finally {
-    initInProgress = null;
+    if (initInProgress === thisInit) initInProgress = null;
   }
 }
 
