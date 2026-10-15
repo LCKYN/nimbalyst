@@ -76,7 +76,9 @@ export const COLLAB_BUNDLE_EAGER_GZIP_BUDGET_BYTES = {
   // 2026-10-04: 88,122 bytes after Pages became per project (the session keeps
   // other projects' pages in a separate link-only index and refuses writes to
   // them). Raised with ~4% headroom.
-  'docs-ui': 92_000,
+  // 2026-10-16: 92,065 bytes on the fork after merging upstream v0.81.6.
+  // Raised with ~3% headroom.
+  'docs-ui': 95_000,
   // Sep 5 privacy-aware document transport graph measured 35,049 bytes.
   // Keep a narrow allowance for the supported response/refresh contract.
   'feedback-ui': 35_500,
