@@ -186,7 +186,7 @@ Twelve built-in provider lanes, plus any agent an extension contributes. Every l
 - Git operations panel with a Changes list where users select files and commit directly or ask AI to write the message
 - AI-assisted commit message generation
 - Interactive git commit proposal widget with individual-hunk selection to commit only the intended lines of a shared file
-- Commit history view with ahead/behind tracking and links to the AI sessions that produced commits
+- Commit history view with a branch/merge graph, ahead/behind tracking, and links to the AI sessions that produced commits
 - Per-repository status, branches, file lists, and commit controls for multi-folder projects; Commit with AI proposes separate commits per repository; the title-bar branch, Git panel and new-worktree dialog follow the file open in the editor
 - Auto-commit mode (toggle)
 - Merge/rebase conflict dialogs
@@ -531,7 +531,7 @@ Companion app; pairs with a desktop over encrypted sync. Voice mode is not inclu
 
 ## Window & Application
 
-- Customize each project’s initials, color, or image in Project Settings → Appearance or from the project rail’s context menu. Overrides stay on this computer, survive closing and reopening projects, and can be reset to the automatic defaults.
+- Customize each project’s initials, emoji or symbol, background and text colors, or image in Project Settings → Appearance or from the project rail’s context menu. Without an image or initials, a favicon or logo found in the project is used. Overrides stay on this computer, survive closing and reopening projects, and can be reset to the automatic defaults.
 
 - Multi-window support with per-project state persistence
 - Multi-project rail with an optional "Allow unlimited projects" setting. The default is eight projects per window; enabling unlimited projects can use more memory and CPU. Turning it off keeps current and restored projects open.
@@ -570,7 +570,7 @@ Companion app; pairs with a desktop over encrypted sync. Voice mode is not inclu
 ## Analytics
 
 - PostHog integration (opt-in, anonymous)
-- AI usage report scoped by workspace and date range: spend (provider-reported, or estimated from list prices where a provider reports none), tokens including cached input, spend over time, spend by model and by project, and an activity heatmap; a Sessions tab ranks sessions by cost, grouped by workstream, phase or tag, shows what each session's cost is made of (input, output, cache read, cache write), and expands to a main-agent vs sub-agent and per-model split plus its five most expensive turns, flagging turns where an idle break likely expired the prompt cache (per-turn costs for Claude Code and legacy-transport Codex sessions only)
+- AI usage report, provided by the separately installed AI Usage extension and opened from Window → AI Usage Report (the menu item does nothing without it), scoped by workspace and date range: spend (provider-reported, or estimated from list prices where a provider reports none), tokens including cached input, spend over time, spend by model and by project, and an activity heatmap; a Sessions tab ranks sessions by cost, grouped by workstream, phase or tag, shows what each session's cost is made of (input, output, cache read, cache write), and expands to a main-agent vs sub-agent and per-model split plus its five most expensive turns, flagging turns where an idle break likely expired the prompt cache (per-turn costs for Claude Code and legacy-transport Codex sessions only)
 - Claude model-specific weekly usage percentages and reset times, including Fable
 - Per-project usage breakdown
 - Per-tool usage tracking (local counters for built-in and MCP/extension tools) surfaced as a Tools section in the AI usage report (tools flagged for frequent failures or oversized results, a sortable table of calls, failure rate and estimated tokens per tool from call and result sizes, built-in vs MCP split, over-time, per-provider) and as a targeting signal for contextual tips; backfill from past claude-code and codex sessions
