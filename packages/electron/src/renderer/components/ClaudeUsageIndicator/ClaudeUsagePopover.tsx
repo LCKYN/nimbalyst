@@ -14,6 +14,7 @@ import {
   claudeUsageSessionColorAtom,
   claudeUsageWeeklyColorAtom,
   formatResetTime,
+  formatResetClock,
 } from '../../store/atoms/claudeUsageAtoms';
 import { toggleGutterItemHiddenAtom } from '../../store/atoms/appSettings';
 import { useFloatingMenu, FloatingPortal } from '../../hooks/useFloatingMenu';
@@ -68,6 +69,7 @@ const UsageSection: React.FC<UsageSectionProps> = ({
   const colors = colorClasses[color] || colorClasses.muted;
   const timeElapsedPercent = calculateTimeElapsedPercent(resetsAt, windowDurationMs);
   const isOverPacing = utilization > timeElapsedPercent;
+  const resetClock = formatResetClock(resetsAt);
 
   return (
     <div className="claude-usage-section mb-4 last:mb-0">
@@ -96,7 +98,10 @@ const UsageSection: React.FC<UsageSectionProps> = ({
       </div>
       <div className="flex items-center gap-1 text-[11px] text-nim-muted">
         <MaterialSymbol icon="schedule" size={12} className="opacity-70" />
-        <span>Resets in {formatResetTime(resetsAt)}</span>
+        <span>
+          Resets in {formatResetTime(resetsAt)}
+          {resetClock && ` (${resetClock})`}
+        </span>
       </div>
     </div>
   );
