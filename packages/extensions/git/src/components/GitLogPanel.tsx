@@ -21,7 +21,9 @@ import { useOperationLog, getSuggestionForError } from '../hooks/useOperationLog
 import { usePanelState, readSelectedHash } from '../hooks/usePanelState';
 import { useSessionsForCommits } from '../hooks/useSessionsForCommits';
 import { filterCommits } from '../commitFilters';
+import { layoutCommitGraph } from '../graphLayout';
 import { repoLabels } from '../repoPaths';
+import { CommitGraphCell } from './CommitGraphCell';
 
 interface GitCommit {
   hash: string;
@@ -29,6 +31,7 @@ interface GitCommit {
   author: string;
   date: string;
   refs?: string;
+  parents: string[];
 }
 
 interface GitStatusResult {
@@ -228,6 +231,10 @@ export function GitLogPanel({ host }: PanelHostProps) {
   const commits = useMemo(
     () => filterCommits(unfilteredCommits, searchFilter),
     [unfilteredCommits, searchFilter],
+  );
+  const graphRows = useMemo(
+    () => layoutCommitGraph(commits.map(commit => ({ hash: commit.hash, parents: commit.parents }))),
+    [commits],
   );
   // Keyed off the fetched page, not the search-filtered view, so typing in the
   // search box re-filters locally instead of refiring the lookup.
@@ -1042,9 +1049,8 @@ export function GitLogPanel({ host }: PanelHostProps) {
                 <tbody ref={tbodyRef}>
                   {commits.map((commit, index) => {
                     const isUnpushed = index < (status?.ahead ?? 0);
-                    const isFirst = index === 0;
-                    const isLast = index === commits.length - 1;
                     const isSelected = index === selectedIndex;
+                    const graphRow = graphRows[index];
                     return (
                       <tr
                         key={commit.hash}
@@ -1055,18 +1061,7 @@ export function GitLogPanel({ host }: PanelHostProps) {
                         onContextMenu={(e) => handleRowContextMenu(commit, e)}
                       >
                         <td className="git-log-td git-log-td--graph">
-                          <div className="git-log-graph-cell">
-                            {!isFirst && <div className="git-log-graph-line git-log-graph-line--top" />}
-                            <svg width="10" height="10" className="git-log-graph-dot" viewBox="0 0 10 10">
-                              <circle
-                                cx="5" cy="5" r="3.5"
-                                fill={isUnpushed ? 'transparent' : 'var(--nim-text-faint)'}
-                                stroke={isUnpushed ? 'var(--nim-primary)' : 'var(--nim-text-faint)'}
-                                strokeWidth="1.5"
-                              />
-                            </svg>
-                            {!isLast && <div className="git-log-graph-line git-log-graph-line--bottom" />}
-                          </div>
+                          {graphRow && <CommitGraphCell row={graphRow} highlighted={isUnpushed} />}
                         </td>
                         <td className="git-log-td git-log-td--hash">
                           <code>{commit.hash.slice(0, 7)}</code>

@@ -50,6 +50,7 @@ import { resolveSpellCheckerLanguages } from '../utils/spellcheckLanguages';
 import {
   startExtensionBackendModules,
   stopExtensionBackendModules,
+  restartAwaitingTrustBackendModules,
   getDefaultBackendModuleLifecycleDeps,
 } from '../extensions/backendModuleLifecycle';
 import { ALPHA_FEATURES } from '../../shared/alphaFeatures';
@@ -625,6 +626,11 @@ export class SettingsControlService {
     }
     const before = getWorkspaceState(workspacePath).agentPermissions?.permissionMode;
     setWorkspaceTrusted(workspacePath, trusted, mode);
+    if (trusted) {
+      void restartAwaitingTrustBackendModules(getDefaultBackendModuleLifecycleDeps()).catch((err) =>
+        logger.main.error('[SettingsControlService] backend-module restart after trust failed:', err)
+      );
+    }
     const after = (trusted ? mode : null) as AgentPermissionMode;
     this.audit('workspace_set_trust', sessionId, {
       workspacePath,

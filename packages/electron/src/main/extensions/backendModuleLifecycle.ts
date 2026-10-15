@@ -253,6 +253,26 @@ export async function startWorkspaceBackendModules(
 }
 
 /**
+ * Retry every workspace with a module parked on `awaiting-trust`. Called after
+ * a trust change: nothing else re-starts those modules, since the workspace was
+ * already opened. startModule re-checks trust, so still-untrusted workspaces
+ * just park again. Uses the handles' own paths, so worktree/subfolder keying
+ * doesn't matter.
+ */
+export async function restartAwaitingTrustBackendModules(
+  deps: BackendModuleLifecycleDeps
+): Promise<void> {
+  const workspaces = new Set(
+    deps.listModuleHandles()
+      .filter(handle => handle.state.status === 'awaiting-trust')
+      .map(handle => handle.workspacePath)
+  );
+  for (const workspacePath of workspaces) {
+    await startWorkspaceBackendModules(workspacePath, deps);
+  }
+}
+
+/**
  * Start the backend modules of every enabled extension across all open
  * workspaces. Called once after windows/workspaces are ready at startup.
  */
