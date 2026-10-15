@@ -9,7 +9,7 @@
  * stays as a fallback).
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 import { copyToClipboard } from '@nimbalyst/runtime/utils/clipboard';
 import { getShowInFileBrowserLabel } from '@nimbalyst/runtime';
@@ -17,6 +17,7 @@ import {
   useFloating,
   autoUpdate,
   FloatingPortal,
+  FloatingFocusManager,
   useDismiss,
   useHover,
   useInteractions,
@@ -25,26 +26,8 @@ import {
   flip,
   shift,
   size,
-  useMergeRefs,
   type VirtualElement,
 } from '@floating-ui/react';
-import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type Modifier,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { clearWindowControls, getWindowControlsZones, windowControlsClearance } from '@nimbalyst/runtime/ui/floating/windowControlsClearance';
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
 import { OrgSwitcher } from './OrgSwitcher';
@@ -56,7 +39,7 @@ import {
   addOpenProjectAtom,
   closeOpenProjectAtom,
   moveOpenProjectAtom,
-  reorderOpenProjectsAtom,
+  sortOpenProjectsAtom,
   type OpenProject,
 } from '../store/atoms/openProjects';
 import {
@@ -64,54 +47,16 @@ import {
   projectActivitySummaryAtom,
 } from '../store/atoms/sessionActivity';
 import { projectAwaitingInputCountAtom } from '../store/atoms/sessions';
-import { generateWorkspaceAccentColor } from './WorkspaceSummaryHeader';
+import { generateWorkspaceAccentColor, projectIconForeground } from '../../shared/projectAppearance';
+import { projectAppearanceAtom } from '../store/atoms/projectAppearance';
+import { openSettingsCommandAtom } from '../store/atoms/settingsNavigation';
+import { ProjectIcon } from './ProjectIcon';
 import { requestConfirmation } from '../dialogs/requestConfirmation';
 import { errorNotificationService } from '../services/ErrorNotificationService';
+import { useProjectRailDrag } from './hooks/useProjectRailDrag';
 import './ProjectRail.css';
 
 const REVEAL_LABEL = getShowInFileBrowserLabel();
-
-// The rail is a single column; keep a dragged icon on it.
-const restrictToVerticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 });
-
-const PROJECT_ICON_CHOICES = [
-  '😀', '🚀', '🔥', '⭐', '💡', '🧪', '🛠️', '📦',
-  '🎨', '📝', '🤖', '🧠', '💼', '🏠', '🌱', '🐛',
-];
-
-// Material Symbols names (the full font is bundled), stored as `icon:<name>`.
-const PROJECT_SYMBOL_CHOICES = [
-  'code', 'terminal', 'database', 'cloud', 'api', 'web', 'smartphone', 'dns',
-  'rocket_launch', 'bolt', 'science', 'psychology', 'shield', 'work', 'school', 'storefront',
-  'description', 'folder', 'analytics', 'payments', 'group', 'chat', 'sports_esports', 'favorite',
-];
-const SYMBOL_PREFIX = 'icon:';
-
-// Lighter, base, and darker shades of the same hues, one row each.
-const PROJECT_COLOR_ROWS = [
-  ['#e5e7eb', '#9ca3af', '#fca5a5', '#fdba74', '#fde047', '#86efac', '#5eead4', '#93c5fd', '#c4b5fd', '#f9a8d4'],
-  ['#ffffff', '#111827', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899'],
-  ['#6b7280', '#374151', '#b91c1c', '#c2410c', '#a16207', '#15803d', '#0f766e', '#1d4ed8', '#6d28d9', '#be185d'],
-];
-const COLOR_SLOTS = [
-  { slot: 'fg', label: 'Icon & text' },
-  { slot: 'bg', label: 'Background' },
-] as const;
-// A typed lowercase word is a Material Symbols name; anything else is an emoji.
-const toStoredIcon = (input: string) => {
-  const trimmed = input.trim();
-  return /^[a-z0-9_]+$/.test(trimmed) ? `${SYMBOL_PREFIX}${trimmed}` : trimmed;
-};
-
-function projectInitials(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return '??';
-  const words = trimmed.split(/[-_\s]+/).filter(Boolean);
-  if (words.length >= 2) {
-    return (words[0][0] + words[1][0]).toUpperCase();
-  }
-  return trimmed.slice(0, 2).toUpperCase();
-}
 
 interface ProjectRailIconProps {
   project: OpenProject;
@@ -119,11 +64,14 @@ interface ProjectRailIconProps {
   awaitingCount: number;
   processingCount: number;
   unreadCount: number;
-  /** Bumped after the user changes the icon so it is fetched again. */
-  iconVersion: number;
   onActivate: (path: string) => void;
   onClose: (project: OpenProject) => void;
   onContextMenu: (project: OpenProject, x: number, y: number) => void;
+  isDragging: boolean;
+  menuOpen: boolean;
+  dropPosition?: 'before' | 'after';
+  onDragStart: (event: React.DragEvent, path: string) => void;
+  onDragEnd: () => void;
 }
 
 function ProjectRailIcon({
@@ -132,10 +80,14 @@ function ProjectRailIcon({
   awaitingCount,
   processingCount,
   unreadCount,
-  iconVersion,
   onActivate,
   onClose,
   onContextMenu,
+  isDragging,
+  menuOpen,
+  dropPosition,
+  onDragStart,
+  onDragEnd,
 }: ProjectRailIconProps) {
   // Hover tooltip via floating-ui. Renders through FloatingPortal so the
   // tooltip escapes the rail container's `overflow: hidden` clip — the
@@ -148,19 +100,10 @@ function ProjectRailIcon({
     placement: 'right',
     middleware: [offset(12), flip({ padding: 8 }), shift({ padding: 8 }), windowControlsClearance()],
   });
-  const tooltipHover = useHover(tooltipContext, { delay: { open: 200, close: 0 }, move: false });
+  const tooltipHover = useHover(tooltipContext, { enabled: !menuOpen && !isDragging, delay: { open: 200, close: 0 }, move: false });
+  React.useEffect(() => { if (menuOpen) setTooltipOpen(false); }, [menuOpen]);
   const { getReferenceProps: getTooltipRefProps, getFloatingProps: getTooltipFloatingProps } =
     useInteractions([tooltipHover]);
-
-  // Drag to reorder. The wrapper is both the sortable node and the keyboard
-  // activator, so Enter/Space on the inner buttons still click them instead
-  // of starting a keyboard drag.
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
-    useSortable({ id: project.path });
-  const wrapperRef = useMergeRefs([tooltipRefs.setReference, setNodeRef, setActivatorNodeRef]);
-  // Routed through getReferenceProps so the drag listeners and the tooltip's
-  // hover handlers (both use onPointerDown) are chained, not overwritten.
-  const wrapperHandlers = getTooltipRefProps(listeners);
 
   const handleClick = useCallback(() => {
     onActivate(project.path);
@@ -178,17 +121,19 @@ function ProjectRailIcon({
     (event: React.MouseEvent) => {
       event.preventDefault();
       event.stopPropagation();
+      event.currentTarget.querySelector<HTMLButtonElement>('.project-rail-item-main')?.focus();
       onContextMenu(project, event.clientX, event.clientY);
     },
     [onContextMenu, project]
   );
 
+  const appearance = useAtomValue(projectAppearanceAtom(project.path)).snapshot?.appearance ?? {};
   const className = `project-rail-item${isActive ? ' is-active' : ''}${isDragging ? ' is-dragging' : ''}`;
 
   // Per-project accent color, derived deterministically from the workspace
   // path so the rail icon matches the colored bar shown in the workspace
   // summary header (and in SessionHistory entries) for the same project.
-  const accentColor = useMemo(() => generateWorkspaceAccentColor(project.path), [project.path]);
+  const accentColor = appearance.color || generateWorkspaceAccentColor(project.path);
 
   // Inactive projects show a badge when something needs attention. Active
   // projects already have the user's eyes on them so we suppress the
@@ -201,59 +146,39 @@ function ProjectRailIcon({
     ? `${awaitingCount} waiting for your response`
     : processingCount > 0 ? `${processingCount} streaming session(s)` : `${unreadCount} finished, unread`;
 
-  // A user-picked emoji, else a project logo (favicon etc.) as a data URL,
-  // else initials.
-  const [iconSrc, setIconSrc] = useState<string | null>(null);
-  // User-picked icon/text (`fg`) and tile (`bg`) colors; unset falls back to the accent.
-  const [colors, setColors] = useState<{ fg?: string; bg?: string }>({});
-  useEffect(() => {
-    if (!window.electronAPI?.invoke) return;
-    let cancelled = false;
-    window.electronAPI.invoke('workspace:get-icon', { workspacePath: project.path })
-      .then((src: string | null) => { if (!cancelled) setIconSrc(src); })
-      .catch(() => {});
-    window.electronAPI.invoke('workspace:get-colors', { workspacePath: project.path })
-      .then((next: { fg?: string; bg?: string } | null) => { if (!cancelled) setColors(next ?? {}); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [project.path, iconVersion]);
-
   // Wrapper is a non-interactive container so the activate button and the
   // close button can sit as siblings. Nesting a button inside a button is
   // invalid HTML and confuses screen readers / keyboard navigation.
   return (
     <div
-      ref={wrapperRef}
+      ref={tooltipRefs.setReference}
       className={className}
       onContextMenu={handleContextMenu}
       data-testid="project-rail-item"
       data-project-path={project.path}
-      style={{
-        ['--rail-item-accent' as any]: accentColor,
-        ...(colors.fg ? { ['--rail-item-fg' as any]: colors.fg } : {}),
-        ...(colors.bg ? { ['--rail-item-bg' as any]: colors.bg } : {}),
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }}
-      {...attributes}
-      {...wrapperHandlers}
+      data-drop-position={dropPosition}
+      style={{ '--rail-item-accent': accentColor, '--rail-item-foreground': projectIconForeground(appearance.color) } as React.CSSProperties}
+      {...getTooltipRefProps()}
     >
       <button
         type="button"
         className="project-rail-item-main"
         onClick={handleClick}
+        draggable
+        onDragStart={event => { setTooltipOpen(false); onDragStart(event, project.path); }}
+        onDragEnd={onDragEnd}
+        onKeyDown={event => {
+          if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const rect = event.currentTarget.getBoundingClientRect();
+          onContextMenu(project, rect.right, rect.top);
+        }}
+        aria-haspopup="menu"
         aria-label={`Switch to project ${project.name}`}
         aria-current={isActive ? 'true' : undefined}
       >
-        {iconSrc?.startsWith('data:') ? (
-          <img className="project-rail-item-icon" src={iconSrc} alt="" onError={() => setIconSrc(null)} />
-        ) : iconSrc?.startsWith(SYMBOL_PREFIX) ? (
-          <MaterialSymbol icon={iconSrc.slice(SYMBOL_PREFIX.length)} size={22} />
-        ) : iconSrc ? (
-          <span className="project-rail-item-emoji">{iconSrc}</span>
-        ) : (
-          projectInitials(project.name)
-        )}
+        <ProjectIcon name={project.name} appearance={appearance} />
         {showBadge && (
           <span className={`project-rail-item-badge ${badgeKind}`} aria-label={badgeAriaLabel}>
             {badgeKind === 'is-finished' ? (
@@ -272,7 +197,7 @@ function ProjectRailIcon({
       >
         ×
       </button>
-      {tooltipOpen && !isDragging && (
+      {tooltipOpen && !isDragging && !menuOpen && (
         <FloatingPortal>
           <div
             ref={tooltipRefs.setFloating}
@@ -290,6 +215,7 @@ function ProjectRailIcon({
 }
 
 export function ProjectRail() {
+  const openSettings = useSetAtom(openSettingsCommandAtom);
   const store = useStore();
   const isMultiProjectMode = useAtomValue(multiProjectModeAtom);
   const openProjects = useAtomValue(openProjectsAtom);
@@ -298,11 +224,12 @@ export function ProjectRail() {
   const addProject = useSetAtom(addOpenProjectAtom);
   const closeProject = useSetAtom(closeOpenProjectAtom);
   const moveProject = useSetAtom(moveOpenProjectAtom);
-  const reorderProjects = useSetAtom(reorderOpenProjectsAtom);
+  const sortProjects = useSetAtom(sortOpenProjectsAtom);
   const activity = useAtomValue(globalSessionActivityAtom);
   const activitySummary = useAtomValue(projectActivitySummaryAtom);
   const awaitingCounts = useAtomValue(projectAwaitingInputCountAtom);
   const projectListRef = React.useRef<HTMLDivElement | null>(null);
+  const drag = useProjectRailDrag(projectListRef, moveProject);
 
   React.useLayoutEffect(() => {
     const list = projectListRef.current;
@@ -325,37 +252,10 @@ export function ProjectRail() {
     const observer = new ResizeObserver(revealActiveProject);
     observer.observe(list);
     return () => observer.disconnect();
-  }, [activePath, openProjects, isMultiProjectMode]);
-
-  // The distance constraint lets a plain click through to switch projects or
-  // hit the close button; only a real drag reorders.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-  const projectPaths = useMemo(() => openProjects.map((p) => p.path), [openProjects]);
-
-  // Releasing a drag over the icon still fires a click on it. Swallow that
-  // one click so dropping a project does not also switch to it.
-  const suppressClickRef = React.useRef(false);
-  const suppressNextClick = useCallback(() => {
-    suppressClickRef.current = true;
-    setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 0);
-  }, []);
-  const handleDragEnd = useCallback(
-    ({ active, over }: DragEndEvent) => {
-      suppressNextClick();
-      if (!over || over.id === active.id) return;
-      reorderProjects({ fromPath: String(active.id), toPath: String(over.id) });
-    },
-    [reorderProjects, suppressNextClick]
-  );
+  }, [activePath, openProjects.length, isMultiProjectMode]);
 
   const handleActivate = useCallback(
     (path: string) => {
-      if (suppressClickRef.current) return;
       if (path === activePath) return;
       // The atom subscriber in initOpenProjects() forwards the change to
       // the main process via `workspace:set-active`, so there is no direct
@@ -474,6 +374,13 @@ export function ProjectRail() {
   // cursor position so it works for any rail icon without per-icon refs.
   const [menu, setMenu] = useState<{ project: OpenProject; x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  const menuIndex = openProjects.findIndex(project => project.path === menu?.project.path);
+  const moveMenuProject = (direction: -1 | 1) => {
+    if (menuIndex < 0) return;
+    const beforePath = direction === -1 ? openProjects[menuIndex - 1]?.path : openProjects[menuIndex + 2]?.path;
+    moveProject({ path: menu!.project.path, beforePath: beforePath ?? null });
+    closeMenu();
+  };
 
   // "Add project" dropdown — opens recents + folder picker action when the
   // user clicks the `+` button.
@@ -593,64 +500,34 @@ export function ProjectRail() {
     }
   }, [closeMenu]);
 
-  const [iconVersions, setIconVersions] = useState<Record<string, number>>({});
-  const [customIcon, setCustomIcon] = useState('');
-  const handleSetIcon = useCallback(async (project: OpenProject, icon: string | null) => {
-    closeMenu();
-    setCustomIcon('');
-    try {
-      await window.electronAPI?.invoke?.('workspace:set-icon', { workspacePath: project.path, icon });
-      setIconVersions((prev) => ({ ...prev, [project.path]: (prev[project.path] ?? 0) + 1 }));
-    } catch (err) {
-      console.error('[ProjectRail] set-icon failed:', err);
-    }
-  }, [closeMenu]);
-
-  const colorTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Colors keep the menu open so several can be tried in a row.
-  const handleSetColor = useCallback(async (project: OpenProject, slot: 'fg' | 'bg', color: string | null) => {
-    try {
-      await window.electronAPI?.invoke?.('workspace:set-color', { workspacePath: project.path, slot, color });
-      setIconVersions((prev) => ({ ...prev, [project.path]: (prev[project.path] ?? 0) + 1 }));
-    } catch (err) {
-      console.error('[ProjectRail] set-color failed:', err);
-    }
-  }, []);
-
   if (!isMultiProjectMode) return null;
 
   return (
     <nav className="project-rail" data-testid="project-rail" aria-label="Open projects">
       {/* Epic H1: org switcher sits above the project switcher. */}
       <OrgSwitcher />
-      <div ref={projectListRef} className="project-rail-projects" data-testid="project-rail-projects">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          modifiers={[restrictToVerticalAxis]}
-          onDragEnd={handleDragEnd}
-          onDragCancel={suppressNextClick}
-        >
-          <SortableContext items={projectPaths} strategy={verticalListSortingStrategy}>
-            {openProjects.map((project) => {
-              const activity = activitySummary.get(project.path);
-              return (
-                <ProjectRailIcon
-                  key={project.path}
-                  project={project}
-                  isActive={project.path === activePath}
-                  awaitingCount={awaitingCounts.get(project.path) ?? 0}
-                  processingCount={activity?.processing ?? 0}
-                  unreadCount={activity?.unread ?? 0}
-                  iconVersion={iconVersions[project.path] ?? 0}
-                  onActivate={handleActivate}
-                  onClose={handleClose}
-                  onContextMenu={handleContextMenu}
-                />
-              );
-            })}
-          </SortableContext>
-        </DndContext>
+      <div ref={projectListRef} className="project-rail-projects" data-testid="project-rail-projects" {...drag.listProps}>
+        {openProjects.map((project) => {
+          const activity = activitySummary.get(project.path);
+          return (
+            <ProjectRailIcon
+              key={project.path}
+              project={project}
+              isActive={project.path === activePath}
+              awaitingCount={awaitingCounts.get(project.path) ?? 0}
+              processingCount={activity?.processing ?? 0}
+              unreadCount={activity?.unread ?? 0}
+              onActivate={handleActivate}
+              onClose={handleClose}
+              onContextMenu={handleContextMenu}
+              isDragging={drag.draggedPath === project.path}
+              menuOpen={menu !== null}
+              dropPosition={drag.beforePath === project.path ? 'before' : drag.beforePath === null && project === openProjects.at(-1) ? 'after' : undefined}
+              onDragStart={(event, path) => { closeMenu(); drag.onDragStart(event, path); }}
+              onDragEnd={drag.onDragEnd}
+            />
+          );
+        })}
       </div>
       {openProjects.length > 0 && <div className="project-rail-divider" aria-hidden="true" />}
       <button
@@ -724,13 +601,50 @@ export function ProjectRail() {
 
       {menu && (
         <FloatingPortal>
+          <FloatingFocusManager context={context} modal={false}>
           <div
             ref={refs.setFloating}
             className="project-rail-context-menu"
             style={floatingStyles}
             data-testid="project-rail-context-menu"
-            {...getFloatingProps()}
+            {...getFloatingProps({
+              onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+                if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+                const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+                  : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+                buttons[next]?.focus();
+              },
+            })}
           >
+            <button type="button" role="menuitem" className="project-rail-context-menu-item"
+              disabled={menuIndex <= 0} onClick={() => moveMenuProject(-1)}>
+              Move up
+            </button>
+            <button type="button" role="menuitem" className="project-rail-context-menu-item"
+              disabled={menuIndex < 0 || menuIndex === openProjects.length - 1} onClick={() => moveMenuProject(1)}>
+              Move down
+            </button>
+            <button type="button" role="menuitem" className="project-rail-context-menu-item"
+              disabled={openProjects.length < 2} onClick={() => { sortProjects(); closeMenu(); }}>
+              Sort by name
+            </button>
+            <div className="project-rail-context-menu-divider" />
+            <button
+              type="button"
+              role="menuitem"
+              className="project-rail-context-menu-item"
+              onClick={() => {
+                openSettings({ category: 'project-appearance', scope: 'project', timestamp: Date.now(),
+                  destination: { scope: 'project', category: 'project-appearance', target: { kind: 'workspace', workspacePath: menu.project.path } } });
+                closeMenu();
+              }}
+            >
+              Customize appearance…
+            </button>
             <button
               type="button"
               className="project-rail-context-menu-item"
@@ -740,6 +654,7 @@ export function ProjectRail() {
             </button>
             <button
               type="button"
+              role="menuitem"
               className="project-rail-context-menu-item"
               onClick={() => handleRevealInFinder(menu.project)}
             >
@@ -747,6 +662,7 @@ export function ProjectRail() {
             </button>
             <button
               type="button"
+              role="menuitem"
               className="project-rail-context-menu-item"
               onClick={() => {
                 closeMenu();
@@ -756,123 +672,10 @@ export function ProjectRail() {
             >
               Copy path
             </button>
-            {/* Keyboard alternative to drag-to-reorder. */}
-            {([['Move up', -1], ['Move down', 1]] as const).map(([label, step]) => {
-              const index = openProjects.findIndex((p) => p.path === menu.project.path);
-              const target = index + step;
-              if (target < 0 || target >= openProjects.length) return null;
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  className="project-rail-context-menu-item"
-                  onClick={() => {
-                    closeMenu();
-                    moveProject({ path: menu.project.path, toIndex: target });
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
-            <div className="project-rail-context-menu-divider" />
-            <div className="project-rail-context-menu-heading">Icon</div>
-            <div className="project-rail-icon-picker" data-testid="project-rail-icon-picker">
-              {PROJECT_ICON_CHOICES.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  className="project-rail-icon-choice"
-                  onClick={() => handleSetIcon(menu.project, emoji)}
-                  aria-label={`Use ${emoji} as project icon`}
-                >
-                  {emoji}
-                </button>
-              ))}
-              {PROJECT_SYMBOL_CHOICES.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  className="project-rail-icon-choice"
-                  onClick={() => handleSetIcon(menu.project, `${SYMBOL_PREFIX}${name}`)}
-                  aria-label={`Use ${name} icon as project icon`}
-                  title={name}
-                >
-                  <MaterialSymbol icon={name} size={18} />
-                </button>
-              ))}
-            </div>
-            <form
-              className="project-rail-icon-custom"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (customIcon.trim()) handleSetIcon(menu.project, toStoredIcon(customIcon));
-              }}
-            >
-              <input
-                value={customIcon}
-                onChange={(event) => setCustomIcon(event.target.value)}
-                maxLength={48}
-                placeholder="Emoji or icon name, then Enter"
-                aria-label="Custom project icon"
-              />
-            </form>
-            <button
-              type="button"
-              className="project-rail-context-menu-item"
-              onClick={() => handleSetIcon(menu.project, null)}
-            >
-              Reset icon
-            </button>
-            <div className="project-rail-context-menu-divider" />
-            <div className="project-rail-context-menu-heading">Color</div>
-            {COLOR_SLOTS.map(({ slot, label }) => (
-              <div key={slot} className="project-rail-color-row" data-testid={`project-rail-color-${slot}`}>
-                <span className="project-rail-color-label">{label}</span>
-                {PROJECT_COLOR_ROWS.map((row, rowIndex) => (
-                  <div key={rowIndex} className="project-rail-color-swatches">
-                    {row.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        className="project-rail-color-swatch"
-                        style={{ backgroundColor: color }}
-                        onClick={() => handleSetColor(menu.project, slot, color)}
-                        aria-label={`${label} ${color}`}
-                      />
-                    ))}
-                    {rowIndex === 1 && (
-                      <>
-                        <input
-                          type="color"
-                          className="project-rail-color-custom"
-                          defaultValue="#ffffff"
-                          onChange={(event) => {
-                            const color = event.target.value;
-                            if (colorTimer.current) clearTimeout(colorTimer.current);
-                            colorTimer.current = setTimeout(() => handleSetColor(menu.project, slot, color), 250);
-                          }}
-                          aria-label={`Custom ${label.toLowerCase()} color`}
-                          title="Custom color"
-                        />
-                        <button
-                          type="button"
-                          className="project-rail-color-reset"
-                          onClick={() => handleSetColor(menu.project, slot, null)}
-                          aria-label={`Reset ${label.toLowerCase()} color`}
-                          title="Reset"
-                        >
-                          <MaterialSymbol icon="format_color_reset" size={14} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))}
             <div className="project-rail-context-menu-divider" />
             <button
               type="button"
+              role="menuitem"
               className="project-rail-context-menu-item"
               onClick={() => {
                 closeMenu();
@@ -882,6 +685,7 @@ export function ProjectRail() {
               Close project
             </button>
           </div>
+          </FloatingFocusManager>
         </FloatingPortal>
       )}
     </nav>

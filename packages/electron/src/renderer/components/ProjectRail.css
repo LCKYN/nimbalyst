@@ -45,16 +45,6 @@
   justify-content: center;
 }
 
-.project-rail-item.is-dragging {
-  z-index: 1;
-  opacity: 0.7;
-  cursor: grabbing;
-}
-
-.project-rail-item.is-dragging .project-rail-item-main {
-  cursor: grabbing;
-}
-
 .project-rail-item-main {
   position: relative;
   width: 100%;
@@ -63,8 +53,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--rail-item-bg, var(--nim-bg-tertiary, #2a2a2a));
-  color: var(--rail-item-fg, var(--rail-item-accent, var(--nim-primary, #3b82f6)));
+  background-color: var(--nim-bg-tertiary, #2a2a2a);
+  color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -77,19 +67,21 @@
 
 .project-rail-item-main:hover {
   border-radius: 14px;
-  background-color: var(--rail-item-bg, var(--rail-item-accent, var(--nim-primary, #3b82f6)));
-  color: var(--rail-item-fg, #ffffff);
+  background-color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
+  color: var(--rail-item-foreground, #ffffff);
 }
 
 .project-rail-item.is-active .project-rail-item-main {
   border-radius: 14px;
-  background-color: var(--rail-item-bg, var(--rail-item-accent, var(--nim-primary, #3b82f6)));
-  color: var(--rail-item-fg, #ffffff);
+  background-color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
+  color: var(--rail-item-foreground, #ffffff);
   border-color: transparent;
 }
 
-.project-rail-item.is-drag-over .project-rail-item-main {
-  border-color: var(--nim-primary, #3b82f6);
+/* Opaque images hide the fill change. Mark selection outside the image with
+ * a neutral gap and a theme-contrasting ring, independent of its accent color. */
+.project-rail-item.is-active .project-rail-item-main:has(> .project-icon-image) {
+  box-shadow: 0 0 0 2px var(--nim-bg-secondary), 0 0 0 4px var(--nim-text);
 }
 
 .project-rail-item.is-active::before {
@@ -134,113 +126,6 @@
 .project-rail-item-badge.is-finished {
   background-color: var(--nim-success);
   color: #111827;
-}
-
-.project-rail-item-emoji {
-  font-size: 20px;
-  line-height: 1;
-}
-
-.project-rail-icon-picker {
-  display: grid;
-  grid-template-columns: repeat(8, 26px);
-  gap: 2px;
-  padding: 2px 8px 4px;
-}
-
-.project-rail-icon-choice {
-  width: 26px;
-  height: 26px;
-  border: none;
-  border-radius: 4px;
-  background: none;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.project-rail-icon-choice:hover {
-  background-color: var(--nim-bg-hover);
-}
-
-.project-rail-icon-custom {
-  padding: 2px 8px 4px;
-}
-
-.project-rail-icon-custom input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 4px 8px;
-  font-size: 13px;
-  color: var(--nim-text);
-  background-color: var(--nim-bg);
-  border: 1px solid var(--nim-border);
-  border-radius: 4px;
-}
-
-.project-rail-color-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 2px 8px 6px;
-}
-
-.project-rail-color-label {
-  font-size: 12px;
-  color: var(--nim-text-muted);
-}
-
-.project-rail-color-swatches {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.project-rail-color-swatch {
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid var(--nim-border);
-  cursor: pointer;
-}
-
-.project-rail-color-swatch:hover {
-  transform: scale(1.15);
-}
-
-.project-rail-color-custom {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-}
-
-.project-rail-color-reset {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: none;
-  color: var(--nim-text-muted);
-  cursor: pointer;
-}
-
-.project-rail-color-reset:hover {
-  background-color: var(--nim-bg-hover);
-}
-
-.project-rail-item-icon {
-  width: 24px;
-  height: 24px;
-  object-fit: contain;
-  pointer-events: none;
 }
 
 .project-rail-item-close {
@@ -425,6 +310,37 @@
   text-overflow: ellipsis;
 }
 
+.project-rail-item.is-dragging {
+  opacity: 0.45;
+}
+
+.project-rail-item[data-drop-position]::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--nim-primary);
+  pointer-events: none;
+}
+
+.project-rail-item[data-drop-position="before"]::after { top: -5px; }
+.project-rail-item[data-drop-position="after"]::after { bottom: -5px; }
+
+.project-rail-context-menu-item:disabled {
+  color: var(--nim-text-disabled);
+  cursor: default;
+  background: none;
+}
+
+.project-rail-context-menu-item:focus-visible {
+  outline: 2px solid var(--nim-border-focus);
+  outline-offset: -2px;
+}
+
 .project-rail-add-menu > * {
   flex-shrink: 0;
 }
+
+.project-icon-image { width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }

@@ -43,12 +43,17 @@ export function AgentFeaturesPanel() {
 
   const autoCommitEnabled = useAtomValue(autoCommitEnabledAtom);
   const setAutoCommitEnabled = useSetAtom(setAutoCommitEnabledAtom);
+  const usageLimitAutoResumeEnabled = useAtomValue(settingAtom('ai.usageLimitAutoResumeEnabled'));
 
   const [showMcpSessionStatus, setShowMcpSessionStatus] = useAtom(
     settingAtom('ai.showMcpSessionStatus'),
   ) as [boolean, (value: boolean) => void];
   const [showRunLaterButton, setShowRunLaterButton] = useAtom(
     settingAtom('ai.showRunLaterButton'),
+  ) as [boolean, (value: boolean) => void];
+
+  const [promptSuggestionsEnabled, setPromptSuggestionsEnabled] = useAtom(
+    settingAtom('ai.promptSuggestionsEnabled'),
   ) as [boolean, (value: boolean) => void];
 
   const [aiDebugSettings] = useAtom(aiDebugSettingsAtom);
@@ -255,6 +260,19 @@ export function AgentFeaturesPanel() {
         />
 
         <SettingsToggle
+          checked={usageLimitAutoResumeEnabled}
+          onChange={(checked) => {
+            // Through main, not the atom: turning it off also cancels pending resumes.
+            window.electronAPI.invoke('wakeup:set-usage-limit-auto-resume', checked).catch((error: unknown) => {
+              console.error('[AgentFeaturesPanel] Failed to set usage-limit auto-resume:', error);
+            });
+          }}
+          name="Resume after usage limits reset"
+          description="When a Claude usage limit stops a session, continue it automatically once the limit resets."
+          testId="usage-limit-auto-resume-toggle"
+        />
+
+        <SettingsToggle
           checked={externalSessionFollowEnabled}
           onChange={setExternalSessionFollowEnabled}
           name="Follow external agent sessions"
@@ -276,6 +294,14 @@ export function AgentFeaturesPanel() {
           name="Show Run Later Button"
           description="Show a button beside Send that schedules the prompt to run at a later time. Prompts already scheduled stay visible when this is off."
           testId="show-run-later-button-toggle"
+        />
+
+        <SettingsToggle
+          checked={promptSuggestionsEnabled}
+          onChange={(checked) => setPromptSuggestionsEnabled(checked)}
+          name="Suggest next prompt"
+          description="After a Claude Code turn you started, show a predicted next prompt in the input. Press Tab to fill it in, then Enter to send. Each suggestion is one extra model call that reuses the conversation cache."
+          testId="prompt-suggestions-toggle"
         />
 
         <div className="agent-preferred-language flex items-start justify-between gap-4 py-3">

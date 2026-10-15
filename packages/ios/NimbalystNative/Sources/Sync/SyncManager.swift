@@ -86,10 +86,13 @@ public final class SyncManager: ObservableObject {
     /// SyncErrorCoalescer -- alternating draft and read-receipt failures against
     /// one dead socket are a single interruption.
     private var errorCoalescer = SyncErrorCoalescer()
+    private var errorAnalytics = SyncErrorAnalyticsThrottle()
 
     /// The only way `syncError` is set. Every failure path goes through here so
-    /// the coalescing rule cannot be bypassed by a new call site.
+    /// the coalescing rule cannot be bypassed by a new call site. Each report is
+    /// also kept for "Copy diagnostics" and, throttled, sent to analytics.
     func report(_ error: SyncError) {
+        errorAnalytics.observe(error)
         guard let published = errorCoalescer.accept(error) else { return }
         syncError = published
     }
@@ -430,6 +433,12 @@ public final class SyncManager: ObservableObject {
         didSet { indexClient.onReconnectNeeded = onReconnectNeeded }
     }
 
+    /// The session room retries on its own, so it reads the token per attempt
+    /// instead of reusing the one from the last index connect.
+    public var freshToken: (@MainActor () async -> String?)? {
+        didSet { sessionClient.freshToken = freshToken }
+    }
+
     func waitForConnection() async -> Bool { await indexClient.waitForReady() }
 
     /// Retire transport before awaiting auth, so creation cannot use a stale
@@ -721,7 +730,9 @@ public final class SyncManager: ObservableObject {
         case "createWorktreeResponseBroadcast":
             handleCreateWorktreeResponse(data)
         case "voiceToolResponseBroadcast":
-            handleVoiceToolResponse(data)
+            if let requestId = voiceTools.receive(data) { requests.resolve(requestId: requestId) }
+        case "sessionContextBroadcast":
+            liveContext.apply(data)
         case "error":
             handleIndexError(data)
         default:
@@ -825,10 +836,8 @@ public final class SyncManager: ObservableObject {
         return await voiceTools.call(toolName: "nimbalyst_live_v1", argsJson: json, projectId: scope.projectId, scope: scope)
     }
 
-    private func handleVoiceToolResponse(_ data: Data) {
-        guard let requestId = voiceTools.receive(data) else { return }
-        requests.resolve(requestId: requestId)
-    }
+    /// Mid-turn context usage relayed, never stored, by the server.
+    private lazy var liveContext = LiveSessionContextApplier(crypto: crypto, database: database)
 
     // MARK: - Settings Sync
 
@@ -1030,6 +1039,9 @@ public final class SyncManager: ObservableObject {
         // Log decryption results
         if !failedIds.isEmpty {
             logger.error("Decryption failed for \(failedIds.count)/\(totalCount) messages in session \(sessionId). Failed sequences: \(failedSeqs.prefix(10))")
+            // Unreadable history rows go to "Copy diagnostics" only, never the banner.
+            DiagnosticsLog.shared.record(area: "sync.decrypt", summary: "Some synced messages could not be decrypted",
+                                         detail: "\(failedIds.count) of \(totalCount) in one session")
         }
 
         do {

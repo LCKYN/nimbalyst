@@ -76,7 +76,7 @@ export const multiProjectModeAtom = atom<boolean>(false);
 export const restorePreviousProjectsAtom = atom<boolean>(true);
 
 /**
- * Ordered list of open projects in the rail. First entry is leftmost.
+ * Ordered list of open projects in the rail, from top to bottom.
  *
  * New additions respect the configured limit. Restored projects are preserved.
  */
@@ -127,22 +127,28 @@ export const addOpenProjectAtom = atom(
   }
 );
 
-/**
- * Move a rail project to `toIndex` (clamped). The new order is persisted by
- * the `openProjectsAtom` subscriber like any other change.
- */
+/** Move by identity so a project closed during a drag cannot move another one. */
 export const moveOpenProjectAtom = atom(
   null,
-  (get, set, { path, toIndex }: { path: string; toIndex: number }) => {
+  (get, set, { path, beforePath }: { path: string; beforePath: string | null }) => {
     const current = get(openProjectsAtom);
-    const from = current.findIndex((p) => p.path === path);
-    const to = Math.max(0, Math.min(toIndex, current.length - 1));
-    if (from === -1 || from === to) return;
-    const next = [...current];
-    next.splice(to, 0, ...next.splice(from, 1));
-    set(openProjectsAtom, next);
-  }
+    const project = current.find(project => project.path === path);
+    if (!project || path === beforePath) return;
+    if (beforePath !== null && !current.some(project => project.path === beforePath)) return;
+    const next = current.filter(project => project.path !== path);
+    const index = beforePath === null ? next.length : next.findIndex(project => project.path === beforePath);
+    next.splice(index, 0, project);
+    if (next.some((project, index) => project !== current[index])) set(openProjectsAtom, next);
+  },
 );
+
+/** Arrange once; subsequent additions and manual moves retain their own order. */
+export const sortOpenProjectsAtom = atom(null, (get, set) => {
+  const current = get(openProjectsAtom);
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+  const next = [...current].sort((a, b) => collator.compare(a.name, b.name));
+  if (next.some((project, index) => project !== current[index])) set(openProjectsAtom, next);
+});
 
 /**
  * Remove a project from the rail. If the closed project was active, the
@@ -173,28 +179,6 @@ export const closeOpenProjectAtom = atom(
     // keeping that logic outside this module avoids a cycle with the atom
     // files that already import `activeWorkspacePathAtom`.
     set(clearWorkspaceActivityAtom, pathToClose);
-  }
-);
-
-/**
- * Move a project to where another one sits in the rail (drag-and-drop).
- * Same semantics as dnd-kit's `arrayMove`: dragging down lands after the
- * target, dragging up lands before it. No-op when either path is not in the
- * rail or both are the same. The active project is unchanged.
- */
-export const reorderOpenProjectsAtom = atom(
-  null,
-  (get, set, { fromPath, toPath }: { fromPath: string; toPath: string }) => {
-    if (fromPath === toPath) return;
-    const current = get(openProjectsAtom);
-    const from = current.findIndex((p) => p.path === fromPath);
-    const to = current.findIndex((p) => p.path === toPath);
-    if (from === -1 || to === -1) return;
-
-    const next = [...current];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    set(openProjectsAtom, next);
   }
 );
 
@@ -292,7 +276,6 @@ export function resolveInitialOpenProjectsState({
 }
 
 let initialized = false;
-let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let unsubscribers: Array<() => void> = [];
 
 /**
@@ -359,6 +342,9 @@ export async function initOpenProjects(): Promise<void> {
         );
       }
 
+      // Keep the restored display order in this window's reload snapshot too.
+      await window.electronAPI.invoke('app:set-open-projects', initialPaths);
+
       if (initialActivePath && initialPaths.includes(initialActivePath)) {
         store.set(activeWorkspacePathAtom, initialActivePath);
       } else if (projects.length > 0) {
@@ -369,7 +355,7 @@ export async function initOpenProjects(): Promise<void> {
     console.error('[openProjects] Failed to load multi-project state:', err);
   }
 
-  // Subscribe for debounced writes back to disk.
+  // List edits commit only on drop or a menu action, so persist immediately.
   unsubscribers.push(
     store.sub(multiProjectModeAtom, () => {
       const mode = store.get(multiProjectModeAtom);
@@ -383,7 +369,7 @@ export async function initOpenProjects(): Promise<void> {
         console.error('[openProjects] Failed to persist restorePreviousProjects:', err);
       });
     }),
-    store.sub(openProjectsAtom, () => schedulePersistOpenProjects()),
+    store.sub(openProjectsAtom, () => persistOpenProjects()),
     store.sub(activeWorkspacePathAtom, () => {
       schedulePersistActivePath();
       notifyMainSetActive();
@@ -444,21 +430,11 @@ function notifyMainSetActive(): void {
   });
 }
 
-function schedulePersistOpenProjects(): void {
-  if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => {
-    persistTimer = null;
-    const projects = store.get(openProjectsAtom);
-    const paths = projects.map((p) => p.path);
-    window.electronAPI?.invoke?.('app:set-open-projects', paths).catch((err: unknown) => {
-      console.error('[openProjects] Failed to persist openProjects:', err);
-    });
-    // The window state rebuilds the rail from registration order on a
-    // renderer reload; hand it the current order so a drag survives that.
-    window.electronAPI?.invoke?.('workspace:set-rail-order', { paths }).catch((err: unknown) => {
-      console.error('[openProjects] Failed to sync rail order:', err);
-    });
-  }, 300);
+function persistOpenProjects(): void {
+  const paths = store.get(openProjectsAtom).map(project => project.path);
+  window.electronAPI?.invoke?.('app:set-open-projects', paths).catch((err: unknown) => {
+    console.error('[openProjects] Failed to persist openProjects:', err);
+  });
 }
 
 function schedulePersistActivePath(): void {
@@ -476,9 +452,5 @@ function schedulePersistActivePath(): void {
 export function teardownOpenProjects(): void {
   unsubscribers.forEach((unsub) => unsub());
   unsubscribers = [];
-  if (persistTimer) {
-    clearTimeout(persistTimer);
-    persistTimer = null;
-  }
   initialized = false;
 }

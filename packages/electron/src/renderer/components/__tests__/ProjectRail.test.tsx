@@ -1,9 +1,13 @@
 import React from 'react';
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { afterEach, expect, it, vi } from 'vitest';
+import { openSettingsCommandAtom } from '../../store/atoms/settingsNavigation';
+import { projectAppearanceAtom } from '../../store/atoms/projectAppearance';
 import { ProjectRail } from '../ProjectRail';
 import { activeWorkspacePathAtom, multiProjectModeAtom, openProjectsAtom } from '../../store/atoms/openProjects';
+import { markSessionStreamingAtom } from '../../store/atoms/sessionActivity';
+import { sessionHasPendingInteractivePromptAtom } from '../../store/atoms/sessions';
 
 vi.mock('@nimbalyst/runtime', () => ({ getShowInFileBrowserLabel: () => 'Show in Finder' }));
 vi.mock('../OrgSwitcher', () => ({ OrgSwitcher: () => null }));
@@ -57,66 +61,94 @@ it('reveals restored and newly selected projects, handles resize, and leaves man
   expect(disconnect).toHaveBeenCalled();
 });
 
-it('reorders projects from the right-click menu', () => {
-  const store = createStore();
-  store.set(multiProjectModeAtom, true);
-  store.set(openProjectsAtom, ['a', 'b', 'c'].map((n) => ({ path: `/p/${n}`, name: n, openedAt: 0 })));
-  const view = render(<Provider store={store}><ProjectRail /></Provider>);
-  const order = () => store.get(openProjectsAtom).map((p) => p.name).join('');
-  const tile = (name: string) => view.getByRole('button', { name: `Switch to project ${name}` }).parentElement!;
 
-  fireEvent.contextMenu(tile('a'));
-  expect(view.queryByRole('button', { name: 'Move up' })).toBeNull();
-  fireEvent.click(view.getByRole('button', { name: 'Move down' }));
-  expect(order()).toBe('bac');
+it('moves and sorts from the keyboard menu without activating the targeted project', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const store = createStore();
+  const projects = ['Zebra', 'Alpha', 'Beta'].map(name => ({ path: `/p/${name}`, name, openedAt: 0 }));
+  store.set(multiProjectModeAtom, true);
+  store.set(openProjectsAtom, projects);
+  store.set(activeWorkspacePathAtom, projects[0].path);
+  const view = render(<Provider store={store}><ProjectRail /></Provider>);
+  const alpha = view.getByRole('button', { name: 'Switch to project Alpha' });
+  alpha.focus();
+  fireEvent.keyDown(alpha, { key: 'F10', shiftKey: true });
+  const up = await view.findByRole('menuitem', { name: 'Move up' });
+  await waitFor(() => expect(document.activeElement).toBe(up));
+  fireEvent.click(up);
+  expect(store.get(openProjectsAtom).map(p => p.name)).toEqual(['Alpha', 'Zebra', 'Beta']);
+  expect(store.get(activeWorkspacePathAtom)).toBe(projects[0].path);
+  await waitFor(() => expect(document.activeElement).toBe(alpha));
+  fireEvent.keyDown(alpha, { key: 'ContextMenu' });
+  expect((await view.findByRole('menuitem', { name: 'Move up' }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(view.getByRole('menuitem', { name: 'Move down' }));
+  expect(store.get(openProjectsAtom).map(p => p.name)).toEqual(['Zebra', 'Alpha', 'Beta']);
+  fireEvent.contextMenu(alpha, { clientX: 40, clientY: 100 });
+  const down = await view.findByRole('menuitem', { name: 'Move down' });
+  down.focus();
+  fireEvent.keyDown(down, { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(view.getByRole('menuitem', { name: 'Sort by name' }));
+  fireEvent.click(view.getByRole('menuitem', { name: 'Sort by name' }));
+  expect(store.get(openProjectsAtom).map(p => p.name)).toEqual(['Alpha', 'Beta', 'Zebra']);
+  expect(store.get(activeWorkspacePathAtom)).toBe(projects[0].path);
 });
 
-it('replaces initials with a picked emoji and restores them on reset', async () => {
+it('commits a native drag only on drop, and ignores external drops and cancellation', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   const store = createStore();
+  const projects = ['A', 'B', 'C'].map(name => ({ path: `/p/${name}`, name, openedAt: 0 }));
   store.set(multiProjectModeAtom, true);
-  store.set(openProjectsAtom, [{ path: '/p/app', name: 'poc-app', openedAt: 0 }]);
-  let saved: string | null = null;
-  const colors: Record<string, string> = {};
-  const invoke = vi.fn(async (channel: string, data?: { icon?: string | null; slot?: string; color?: string | null }) => {
-    if (channel === 'workspace:set-icon') saved = data?.icon ?? null;
-    if (channel === 'workspace:get-icon') return saved;
-    if (channel === 'workspace:set-color') {
-      if (data?.color) colors[data.slot!] = data.color;
-      else delete colors[data!.slot!];
-    }
-    if (channel === 'workspace:get-colors') return { ...colors };
-    return null;
+  store.set(openProjectsAtom, projects);
+  store.set(activeWorkspacePathAtom, projects[0].path);
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function(this: HTMLElement) {
+    const index = projects.findIndex(p => p.path === this.dataset.projectPath);
+    return { top: index * 48, bottom: index * 48 + 40, height: 40, left: 0, right: 56 } as DOMRect;
   });
-  vi.stubGlobal('electronAPI', { invoke });
   const view = render(<Provider store={store}><ProjectRail /></Provider>);
-  const tile = view.getByRole('button', { name: 'Switch to project poc-app' });
-  await act(async () => {});
-  expect(tile.textContent).toBe('PA');
+  const list = view.getByTestId('project-rail-projects');
+  const source = view.getByRole('button', { name: 'Switch to project C' });
+  const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' };
+  fireEvent(list, Object.assign(new MouseEvent('drop', { bubbles: true, clientY: 0 }), { dataTransfer }));
+  expect(store.get(openProjectsAtom)).toBe(projects);
+  fireEvent.dragStart(source, { dataTransfer });
+  fireEvent.dragOver(list, { clientY: 0, dataTransfer });
+  expect(store.get(openProjectsAtom)).toBe(projects);
+  fireEvent.dragEnd(source);
+  expect(store.get(openProjectsAtom)).toBe(projects);
+  fireEvent.dragStart(source, { dataTransfer });
+  fireEvent(list, Object.assign(new MouseEvent('drop', { bubbles: true, clientY: 0 }), { dataTransfer }));
+  expect(store.get(openProjectsAtom).map(p => p.name)).toEqual(['C', 'A', 'B']);
+  expect(store.get(activeWorkspacePathAtom)).toBe(projects[0].path);
+});
 
-  fireEvent.contextMenu(tile);
-  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Use 🚀 as project icon' })); });
-  expect(invoke).toHaveBeenCalledWith('workspace:set-icon', { workspacePath: '/p/app', icon: '🚀' });
-  expect(tile.textContent).toBe('🚀');
+it('customizes an inactive project without switching or editing the active project', () => {
+  const store = createStore();
+  const projects = [{ path: '/p/active', name: 'Active', openedAt: 0 }, { path: '/p/FileRocket', name: 'FileRocket', openedAt: 1 }];
+  store.set(multiProjectModeAtom, true);
+  store.set(openProjectsAtom, projects);
+  store.set(activeWorkspacePathAtom, projects[0].path);
+  for (const project of projects) store.set(projectAppearanceAtom(project.path), { snapshot: { revision: 0, appearance: {} } });
+  const view = render(<Provider store={store}><ProjectRail /></Provider>);
+  fireEvent.contextMenu(view.getByRole('button', { name: 'Switch to project FileRocket' }));
+  fireEvent.click(view.getByText('Customize appearance…'));
+  expect(store.get(openSettingsCommandAtom)?.destination).toEqual({ scope: 'project', category: 'project-appearance', target: { kind: 'workspace', workspacePath: projects[1].path } });
+  expect(store.get(activeWorkspacePathAtom)).toBe(projects[0].path);
+});
 
-  // A typed lowercase word is stored as a Material Symbols icon, not text.
-  fireEvent.contextMenu(tile);
-  fireEvent.change(view.getByRole('textbox', { name: 'Custom project icon' }), { target: { value: 'database' } });
-  await act(async () => { fireEvent.submit(view.getByRole('textbox', { name: 'Custom project icon' })); });
-  expect(invoke).toHaveBeenCalledWith('workspace:set-icon', { workspacePath: '/p/app', icon: 'icon:database' });
-  expect(tile.querySelector('.material-symbols-outlined')?.textContent).toBe('database');
-
-  fireEvent.contextMenu(tile);
-  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Reset icon' })); });
-  expect(tile.textContent).toBe('PA');
-
-  // Colors override the tile's accent and stay put until reset.
-  const item = tile.parentElement!;
-  fireEvent.contextMenu(tile);
-  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Background #22c55e' })); });
-  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Icon & text #111827' })); });
-  expect(item.style.getPropertyValue('--rail-item-bg')).toBe('#22c55e');
-  expect(item.style.getPropertyValue('--rail-item-fg')).toBe('#111827');
-  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Reset background color' })); });
-  expect(item.style.getPropertyValue('--rail-item-bg')).toBe('');
-  expect(item.style.getPropertyValue('--rail-item-fg')).toBe('#111827');
+it('badges an inactive project waiting for input and copies its path from the menu', async () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const copyToClipboard = vi.fn(async () => {});
+  vi.stubGlobal('electronAPI', { copyToClipboard });
+  const store = createStore();
+  const projects = ['Active', 'Other'].map(name => ({ path: `/p/${name}`, name, openedAt: 0 }));
+  store.set(multiProjectModeAtom, true);
+  store.set(openProjectsAtom, projects);
+  store.set(activeWorkspacePathAtom, projects[0].path);
+  store.set(markSessionStreamingAtom, { sessionId: 's1', workspacePath: projects[1].path });
+  store.set(sessionHasPendingInteractivePromptAtom('s1'), true);
+  const view = render(<Provider store={store}><ProjectRail /></Provider>);
+  expect(view.getByLabelText('1 waiting for your response').textContent).toBe('1');
+  fireEvent.contextMenu(view.getByRole('button', { name: 'Switch to project Other' }));
+  fireEvent.click(view.getByRole('menuitem', { name: 'Copy path' }));
+  await waitFor(() => expect(copyToClipboard).toHaveBeenCalledWith('/p/Other'));
 });

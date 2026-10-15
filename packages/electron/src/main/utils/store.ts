@@ -1,3 +1,4 @@
+import type { StoredProjectAppearance } from '../../shared/projectAppearance';
 import { normalizeAIProviderOverrides } from './normalizeAIProviderOverrides';
 export { normalizeAIProviderOverrides } from './normalizeAIProviderOverrides';
 import { getProviderCredentials, subscribeProviderCredentialChanges } from '../services/credentials/providerCredentials';
@@ -341,12 +342,6 @@ interface AppStoreSchema {
   // with the project the user picks from the launch screen — additional
   // projects must be added explicitly.
   restorePreviousProjectsOnLaunch?: boolean;
-  // User-picked emoji per project path, shown on the rail instead of the
-  // detected logo or initials.
-  projectRailIcons?: Record<string, string>;
-  // User-picked tile colors per project path: `fg` for the icon or initials,
-  // `bg` for the tile. Missing slots fall back to the project's accent color.
-  projectRailColors?: Record<string, { fg?: string; bg?: string }>;
 }
 
 /**
@@ -671,6 +666,7 @@ export interface WorkspaceState {
   // within the org when the workspace was added to one that already existed;
   // absent means the org's primary project.
   localOrgBinding?: { orgId: string; teamProjectId?: string };
+  projectAppearance?: StoredProjectAppearance;
   // Hidden gutter buttons (navigation sidebar)
   hiddenGutterButtons?: string[];
   // Tracker automation override for this project (undefined fields inherit from global)
@@ -971,6 +967,7 @@ function createDefaultWorkspaceState(workspacePath: string): WorkspaceState {
     agenticCodingWindowState: undefined,
     activeMode: undefined,
     sidebarWidth: 240,
+    projectAppearance: {},
     recentDocuments: [],
     tabs: { ...DEFAULT_TAB_MANAGER_STATE },
     agenticTabs: undefined,
@@ -3141,36 +3138,6 @@ export function getRestorePreviousProjectsOnLaunch(): boolean {
 
 export function setRestorePreviousProjectsOnLaunch(enabled: boolean): void {
   getAppStore().set('restorePreviousProjectsOnLaunch', enabled);
-}
-
-export function getProjectRailIcon(workspacePath: string): string | null {
-  return getAppStore().get('projectRailIcons', {})[workspacePath] ?? null;
-}
-
-/** Empty or null clears the override. */
-export function setProjectRailIcon(workspacePath: string, icon: string | null): void {
-  const icons = { ...getAppStore().get('projectRailIcons', {}) };
-  if (icon) icons[workspacePath] = icon;
-  else delete icons[workspacePath];
-  getAppStore().set('projectRailIcons', icons);
-}
-
-export type ProjectRailColorSlot = 'fg' | 'bg';
-export type ProjectRailColors = Partial<Record<ProjectRailColorSlot, string>>;
-
-export function getProjectRailColors(workspacePath: string): ProjectRailColors {
-  return getAppStore().get('projectRailColors', {})[workspacePath] ?? {};
-}
-
-/** Null clears that slot; a project with no colors left is dropped. */
-export function setProjectRailColor(workspacePath: string, slot: ProjectRailColorSlot, color: string | null): void {
-  const all = { ...getAppStore().get('projectRailColors', {}) };
-  const next: ProjectRailColors = { ...all[workspacePath] };
-  if (color) next[slot] = color;
-  else delete next[slot];
-  if (Object.keys(next).length > 0) all[workspacePath] = next;
-  else delete all[workspacePath];
-  getAppStore().set('projectRailColors', all);
 }
 
 export function runMigrations(currentVersion: string): void {

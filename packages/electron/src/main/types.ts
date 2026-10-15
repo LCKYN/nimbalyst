@@ -38,12 +38,8 @@ export interface WindowState {
      * and document caches stay alive even when the project is hidden.
      */
     additionalWorkspacePaths?: string[];
-    /**
-     * Rail order the user dragged the projects into. Applied on top of
-     * `[workspacePath, ...additionalWorkspacePaths]` by `get-initial-state`
-     * so a renderer reload keeps the custom order.
-     */
-    railOrder?: string[];
+    /** Visible rail order for renderer reloads; independent of primary/active paths. */
+    projectRailOrder?: string[];
     documentEdited: boolean;
 
     // Tab management (optional for backward compatibility)
@@ -87,4 +83,6 @@ export interface FileTreeItem {
     path: string;
     children?: FileTreeItem[];
     truncated?: number; // Number of items hidden when directory was too large
+    /** The tree walk stopped at its depth limit here; `children` was not read. */
+    childrenTruncated?: boolean;
 }

@@ -220,6 +220,11 @@ export const SETTINGS_REGISTRY = {
     { store: 'ai-settings', path: 'autoCommitEnabled' },
     false,
   ),
+  'ai.usageLimitAutoResumeEnabled': setting(
+    z.boolean(),
+    { store: 'ai-settings', path: 'usageLimitAutoResumeEnabled' },
+    false,
+  ),
   'ai.showMcpSessionStatus': setting(
     z.boolean(),
     { store: 'ai-settings', path: 'showMcpSessionStatus' },
@@ -230,6 +235,11 @@ export const SETTINGS_REGISTRY = {
   'ai.showRunLaterButton': setting(
     z.boolean(),
     { store: 'ai-settings', path: 'showRunLaterButton' },
+    true,
+  ),
+  'ai.promptSuggestionsEnabled': setting(
+    z.boolean(),
+    { store: 'ai-settings', path: 'promptSuggestionsEnabled' },
     true,
   ),
   'ai.trackerAutomation': setting(

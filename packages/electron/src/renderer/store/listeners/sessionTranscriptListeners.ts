@@ -74,12 +74,13 @@ export function initSessionTranscriptListeners(): () => void {
       isCodexAuthRequired?: boolean;
       errorKind?: 'usage_limit' | 'network' | 'error';
       resetsAt?: number;
+      isUsageLimit?: boolean;
     }) => {
-      const { sessionId, message, isAuthError, isBedrockToolError, isServerError, isCodexAuthRequired, errorKind, resetsAt } = data;
+      const { sessionId, message, isAuthError, isBedrockToolError, isServerError, isCodexAuthRequired, errorKind, resetsAt, isUsageLimit } = data;
       if (!sessionId) return;
 
       // Set the error in the atom - SessionTranscript will read it and display
-      store.set(sessionErrorAtom(sessionId), { message, isAuthError, isBedrockToolError, isServerError, isCodexAuthRequired });
+      store.set(sessionErrorAtom(sessionId), { message, isAuthError, isBedrockToolError, isServerError, isCodexAuthRequired, isUsageLimit });
       store.set(sessionErrorNoticeAtom(sessionId), { kind: errorKind ?? 'error', message, resetsAt });
 
       // Signal stream completion so awaiters (e.g. superLoopBlockedFeedback) unblock

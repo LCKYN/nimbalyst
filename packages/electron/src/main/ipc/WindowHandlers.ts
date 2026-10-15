@@ -1,7 +1,7 @@
 import { BrowserWindow, shell, nativeImage, app, powerMonitor } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { windowStates, windows, getWindowId } from '../window/WindowManager';
-import { syncRepresentedFilename } from '../window/windowState';
+import { syncRepresentedFilename, getWindowProjectPaths } from '../window/windowState';
 import { basename, join } from 'path';
 import { writeFileSync, existsSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
@@ -11,7 +11,6 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { hasFocusedWindow } from '../services/analytics/dailyActiveHeartbeat';
 import { getPackageRoot } from '../utils/appPaths';
 import { resolveImageExtension } from '../utils/imageFormat';
-import { applyRailOrder } from '../utils/railOrder';
 import { resolveWorkspaceAttachmentStagingDirectory } from '../services/attachments/attachmentStagingRoot';
 import { registerConsoleLinkHandlers, routeConsoleLink } from '../services/consoleLinks/consoleLinkHandlers';
 
@@ -43,11 +42,7 @@ export function registerWindowHandlers() {
         if (!state) return null;
 
         if (state.mode === 'workspace' && state.workspacePath) {
-            const openProjectPaths = applyRailOrder(
-                [state.workspacePath, ...(state.additionalWorkspacePaths ?? [])]
-                    .filter((path, index, paths) => typeof path === 'string' && path.length > 0 && paths.indexOf(path) === index),
-                state.railOrder,
-            );
+            const openProjectPaths = getWindowProjectPaths(state);
             const activeWorkspacePath =
                 state.activeWorkspacePath && openProjectPaths.includes(state.activeWorkspacePath)
                     ? state.activeWorkspacePath
