@@ -2,7 +2,8 @@
 import { createStore } from 'jotai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sessionLaunchCountAtom } from '../sessionLaunchCounts';
-import { refreshSessionListAtom, sessionListWorkspaceAtom, sessionRegistryAtom } from '../sessions';
+import { store as sharedStore } from '@nimbalyst/runtime/store';
+import { initSessionList, refreshSessionListAtom, sessionListWorkspaceAtom, sessionRegistryAtom } from '../sessions';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -44,5 +45,25 @@ describe('session launch count hydration', () => {
     await old;
     expect(store.get(sessionLaunchCountAtom('current'))).toBe(1);
     expect(store.get(sessionLaunchCountAtom('stale'))).toBe(0);
+  });
+
+  it('initSessionList reloads the first project on a fast A->B->A switch', async () => {
+    let resolveB: (() => void) | undefined;
+    const invoke = vi.fn().mockImplementation(async (_channel: string, workspace: string) => {
+      const result = { success: true, sessions: [{ id: `${workspace}-session`, createdAt: 1, updatedAt: 1 }] };
+      if (workspace === '/switch-b' && !resolveB) return new Promise(resolve => { resolveB = () => resolve(result); });
+      return result;
+    });
+    vi.stubGlobal('window', { electronAPI: { invoke } });
+    await initSessionList('/switch-a');
+    const loadB = initSessionList('/switch-b');
+    const backToA = initSessionList('/switch-a');
+    resolveB!();
+    await Promise.all([loadB, backToA]);
+    expect(sharedStore.get(sessionListWorkspaceAtom)).toBe('/switch-a');
+    expect([...sharedStore.get(sessionRegistryAtom).keys()]).toEqual(['/switch-a-session']);
+    // B was superseded, so it must not count as initialised: switching to it loads again.
+    await initSessionList('/switch-b');
+    expect(invoke).toHaveBeenCalledTimes(4);
   });
 });
