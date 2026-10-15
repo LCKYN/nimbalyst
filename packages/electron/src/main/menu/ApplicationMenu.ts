@@ -37,7 +37,6 @@ import {
 } from '../window/TeamManagementWindow';
 import { buildMessagesMenu } from './messagesMenu';
 import { resolveCreateAction, type CreateActionMode } from '../../shared/createActions';
-import { createAIUsageReportWindow } from '../window/AIUsageReportWindow';
 import { createDatabaseBrowserWindow } from '../window/DatabaseBrowserWindow';
 import { createDeveloperDashboardWindow } from '../window/DeveloperDashboardWindow';
 import { runDiffErgonomicsHarness } from '../file/DiffErgonomicsFixture';
@@ -1187,7 +1186,12 @@ export async function createApplicationMenu() {
                             menu: 'window',
                             action: 'ai_usage_report',
                         });
-                        createAIUsageReportWindow();
+                        // The report is the AI Usage extension's panel (github.com/LCKYN/nimbalyst-ai-usage);
+                        // without it installed the renderer drops the request.
+                        const focused = getFocusedWindow();
+                        if (focused && !isAboutWindow(focused)) {
+                            focused.webContents.send('open-extension-panel', 'com.nimbalyst.ai-usage.report');
+                        }
                     }
                 },
                 // {

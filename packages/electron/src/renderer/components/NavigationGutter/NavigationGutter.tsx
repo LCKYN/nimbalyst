@@ -393,14 +393,6 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         contentMode: 'pr-review', testId: 'pr-review-mode-button',
       }),
     }] : []),
-    {
-      id: 'ai-usage-report', section: 'modes', icon: 'query_stats', label: 'AI Usage', hideable: true,
-      render: () => renderModeButton({
-        icon: 'query_stats',
-        label: 'AI Usage',
-        contentMode: 'usage-report', testId: 'ai-usage-report-button',
-      }),
-    },
     ...(pagesAvailable ? [{
       id: 'collab', section: 'modes' as GutterSection, icon: 'public', label: 'Wiki', hideable: true,
       render: () => renderModeButton({

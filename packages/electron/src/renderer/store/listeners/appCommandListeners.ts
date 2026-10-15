@@ -9,6 +9,7 @@
  * - file-new-browser-tab -> newBrowserTabRequestAtom
  * - toggle-ai-chat-panel -> toggleAIChatPanelRequestAtom
  * - toggle-expanded-tab -> toggleExpandedTabRequestAtom
+ * - open-extension-panel -> activeExtensionPanelAtom (ignored if no extension registers the panel)
  *
  * Call initAppCommandListeners() once at app startup.
  */
@@ -43,6 +44,8 @@ import {
   type InstallProgressStage,
 } from '../atoms/appCommands';
 import { openSettingsCommandAtom } from '../atoms/settingsNavigation';
+import { activeExtensionPanelAtom } from '../atoms/extensionPanels';
+import { getPanelById } from '../../extensions/panels/PanelRegistry';
 import type {
   SettingsCategory,
   SettingsDestination,
@@ -162,6 +165,13 @@ export function initAppCommandListeners(): () => void {
     store.set(setContentModeRequestAtom, { version: setContentModeCounter, mode });
   });
   if (typeof u8 === 'function') cleanups.push(u8);
+
+  // Same effect as clicking the panel's rail button. A disabled extension has
+  // no registered panel, so the request is dropped.
+  const uOpenPanel = window.electronAPI?.on?.('open-extension-panel', (panelId: string) => {
+    if (getPanelById(panelId)) store.set(activeExtensionPanelAtom, panelId);
+  });
+  if (typeof uOpenPanel === 'function') cleanups.push(uOpenPanel);
 
   const u8b = window.electronAPI?.on?.(
     'open-settings-command',
