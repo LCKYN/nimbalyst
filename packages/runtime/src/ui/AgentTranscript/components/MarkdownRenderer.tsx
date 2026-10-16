@@ -24,6 +24,7 @@ import {
 } from '../../../utils/appActionLinks';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
+import { MermaidDiagram } from '../../../editor/plugins/MermaidPlugin/MermaidDiagram';
 
 // Inject MarkdownRenderer styles once (for syntax highlighting, scrollbar, and overflow wrapper)
 const injectMarkdownRendererStyles = () => {
@@ -734,6 +735,17 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               lineHeight: isSingleLine ? '1.4' : '1.5',
               margin: isSingleLine ? 0 : '0.5rem 0'
             };
+
+            // ```mermaid fences render as a diagram; the copy button still copies the source.
+            if (isFencedBlock && language === 'mermaid') {
+              return (
+                <CodeBlockContainer codeString={codeString}>
+                  <div className="transcript-mermaid my-2 border border-[var(--nim-border)] rounded-md bg-[var(--nim-bg)] overflow-hidden">
+                    <MermaidDiagram content={codeString} id={(codeBlockPersistKey(node) ?? 'transcript').replace(/\W/g, '_')} renderKey={0} />
+                  </div>
+                </CodeBlockContainer>
+              );
+            }
 
             // Code block with language - use syntax highlighting
             if (language) {
