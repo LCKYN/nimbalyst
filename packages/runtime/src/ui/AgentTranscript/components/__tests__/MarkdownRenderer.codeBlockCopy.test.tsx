@@ -7,6 +7,11 @@ const { render, screen, fireEvent, waitFor, act } = rtl;
 
 const { copyToClipboard } = vi.hoisted(() => ({ copyToClipboard: vi.fn() }));
 vi.mock('../../../../utils/clipboard', () => ({ copyToClipboard }));
+vi.mock('../../../../editor/plugins/MermaidPlugin/MermaidDiagram', () => ({
+  MermaidDiagram: ({ content, id }: { content: string; id: string }) => (
+    <div data-testid="mermaid-diagram" data-id={id}>{content}</div>
+  ),
+}));
 
 describe('MarkdownRenderer code block copy button', () => {
   it('copies and resets confirmation under StrictMode', async () => {
@@ -53,6 +58,16 @@ describe('MarkdownRenderer code block copy button', () => {
     expect(button.getAttribute('aria-label')).toBe('Copy code');
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it('renders mermaid fences as a diagram with a selector-safe id, and copies the source', async () => {
+    copyToClipboard.mockResolvedValueOnce(undefined);
+    render(<MarkdownRenderer messageId="m:1" content={'```mermaid\nflowchart LR\n  A --> B\n```'} />);
+
+    // Mermaid looks the id up as a CSS selector, so colons from the persist key must not leak in.
+    expect(screen.getByTestId('mermaid-diagram').getAttribute('data-id')).toMatch(/^\w+$/);
+    await act(async () => { fireEvent.click(screen.getByTestId('code-block-copy-button')); });
+    expect(copyToClipboard).toHaveBeenLastCalledWith('flowchart LR\n  A --> B');
   });
 
   it('does not add a copy button to inline code spans, and keeps them inline', () => {
