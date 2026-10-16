@@ -122,9 +122,21 @@ export const ZoomableImageSurface: React.FC<ZoomableImageSurfaceProps> = ({
     setCustomScale(clamp(nextScale, minScale, maxScale));
   };
 
+  // Toolbar zoom keeps the viewport centre in place instead of drifting to the
+  // top-left corner.
+  const zoomAtCenter = (nextScale: number) => {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    if (!rect) {
+      setScale(nextScale);
+      return;
+    }
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    zoomAround(nextScale, captureAnchor(x, y), x, y);
+  };
+
   const handleZoomStep = (multiplier: number) => {
-    const baseScale = zoomMode === 'fit' ? fitScale : customScale;
-    setScale(baseScale * multiplier);
+    zoomAtCenter(effectiveScale * multiplier);
   };
 
   const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -186,17 +198,21 @@ export const ZoomableImageSurface: React.FC<ZoomableImageSurfaceProps> = ({
     viewport.scrollTop += imgRect.top + anchor.imageY * effectiveScale - anchor.clientY;
   }, [anchorVersion, effectiveScale]);
 
-  // Trackpad pinch arrives as ctrl+wheel; Safari also emits gesture* events
-  // that would zoom the whole page. Both need non-passive native listeners.
+  // Trackpad pinch arrives as ctrl+wheel and Cmd+wheel is the mouse equivalent;
+  // Safari also emits gesture* events that would zoom the whole page. All need
+  // non-passive native listeners.
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
 
     const handleWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey) return;
+      if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       const anchor = captureAnchor(event.clientX, event.clientY);
-      zoomAroundRef.current(scaleRef.current * Math.exp(-event.deltaY * 0.01), anchor, event.clientX, event.clientY);
+      // ponytail: clamping keeps a mouse notch (deltaY ~100) at ~0.6x while
+      // pinch deltas (~1-10) pass through untouched.
+      const delta = clamp(event.deltaY, -50, 50);
+      zoomAroundRef.current(scaleRef.current * Math.exp(-delta * 0.01), anchor, event.clientX, event.clientY);
     };
     const preventGesture = (event: Event) => event.preventDefault();
 
@@ -322,7 +338,7 @@ export const ZoomableImageSurface: React.FC<ZoomableImageSurfaceProps> = ({
             <button
               type="button"
               className="rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] px-2 py-1 text-xs text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={() => setScale(1)}
+              onClick={() => zoomAtCenter(1)}
             >
               100%
             </button>
