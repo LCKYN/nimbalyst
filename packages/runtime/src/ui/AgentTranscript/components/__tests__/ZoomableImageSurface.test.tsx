@@ -111,6 +111,13 @@ describe('ZoomableImageSurface', () => {
     await waitFor(() => {
       expect(screen.getByTestId('zoomable-image-zoom').textContent).toBe(`${Math.round(Math.exp(0.5) * 100)}%`);
     });
+
+    // Cmd+wheel from a mouse zooms too, without zooming the window (prevented),
+    // and a full notch is clamped to the same step as deltaY 50.
+    expect(fireEvent.wheel(viewport, { deltaY: -100, metaKey: true, clientX: 200, clientY: 150 })).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByTestId('zoomable-image-zoom').textContent).toBe(`${Math.round(Math.exp(1) * 100)}%`);
+    });
   });
 
   it('copies the current image from the toolbar', async () => {
