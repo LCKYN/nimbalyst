@@ -53,7 +53,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--nim-bg-tertiary, #2a2a2a);
+  /* Accent tint at rest; full accent on hover/active. */
+  background-color: color-mix(
+    in srgb,
+    var(--rail-item-accent, var(--nim-primary, #3b82f6)) 22%,
+    var(--nim-bg-tertiary, #2a2a2a)
+  );
   color: var(--rail-item-text, var(--rail-item-accent, var(--nim-primary, #3b82f6)));
   font-size: 14px;
   font-weight: 600;
