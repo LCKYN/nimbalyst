@@ -160,7 +160,6 @@ function ProjectRailIcon({
       style={{
         '--rail-item-accent': accentColor,
         '--rail-item-foreground': appearance.textColor || projectIconForeground(appearance.color),
-        ...(appearance.textColor ? { '--rail-item-text': appearance.textColor } : {}),
       } as React.CSSProperties}
       {...getTooltipRefProps()}
     >

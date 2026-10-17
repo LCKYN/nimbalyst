@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { projectAppearanceAtom, saveProjectAppearanceAtom } from '../../../store/atoms/projectAppearance';
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
-import { PROJECT_EMOJI_CHOICES, PROJECT_SYMBOL_CHOICES, generateWorkspaceAccentColor, initialsLength, projectIconForeground, projectInitials, projectSymbol, type ProjectAppearanceUpdate } from '../../../../shared/projectAppearance';
+import { PROJECT_COLOR_CHOICES, PROJECT_EMOJI_CHOICES, PROJECT_SYMBOL_CHOICES, generateWorkspaceAccentColor, initialsLength, projectIconForeground, projectInitials, projectSymbol, type ProjectAppearanceUpdate } from '../../../../shared/projectAppearance';
 import { ProjectIcon } from '../../ProjectIcon';
 import { getFileName } from '../../../utils/pathUtils';
 import './ProjectAppearancePanel.css';
@@ -84,6 +84,12 @@ export function ProjectAppearancePanel({ workspacePath }: { workspacePath: strin
             onChange={e => change({ color: e.target.value })} />
           <span>{appearance.color || 'Automatic'}</span>
           <button type="button" disabled={!appearance.color} onClick={() => change({ color: null })}>Use automatic color</button>
+        </div>
+        <div className="project-appearance-color-grid" data-testid="project-appearance-color-grid">
+          {PROJECT_COLOR_CHOICES.map(color => (
+            <button key={color} type="button" aria-label={`Use color ${color}`} aria-pressed={appearance.color === color}
+              style={{ background: color }} onClick={() => change({ color })} />
+          ))}
         </div>
         <label htmlFor="project-text-color">Text color</label>
         <div className="project-appearance-controls">

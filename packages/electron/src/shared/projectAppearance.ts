@@ -58,14 +58,21 @@ export function generateWorkspaceAccentColor(path: string, format: 'hsl' | 'hex'
   const hue = Math.abs(hash) % 360;
   if (format === 'hsl') return `hsl(${hue}, 65%, 55%)`;
   // Color inputs require hex. Convert the same 65% saturation, 55% lightness.
-  const amplitude = 0.65 * Math.min(0.55, 1 - 0.55);
+  return accentHex(hue, 0.55);
+}
+/** hsl(hue, 65%, lightness) as hex. */
+function accentHex(hue: number, lightness: number): string {
+  const amplitude = 0.65 * Math.min(lightness, 1 - lightness);
   const channels = [0, 8, 4].map(offset => {
     const k = (offset + hue / 30) % 12;
-    const channel = 0.55 - amplitude * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    const channel = lightness - amplitude * Math.max(-1, Math.min(k - 3, 9 - k, 1));
     return Math.round(255 * channel).toString(16).padStart(2, '0');
   });
   return `#${channels.join('')}`;
 }
+/** 12 hues x 3 shades, light to dark. The middle row matches the automatic colors. */
+export const PROJECT_COLOR_CHOICES = [0.7, 0.55, 0.4].flatMap(lightness =>
+  Array.from({ length: 12 }, (_, i) => accentHex(i * 30, lightness)));
 export function initialsLength(text: string): number {
   return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)).length;
 }
