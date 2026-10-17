@@ -460,6 +460,8 @@ export interface AdvancedSettings {
   // Document history settings
   historyMaxAgeDays: number; // Max age in days before snapshots are cleaned up (default: 30)
   historyMaxSnapshots: number; // Max snapshots per file (default: 250)
+  // Max child sessions one parent may have running at once (default: 10)
+  maxParallelChildSessions: number;
   // Preferred terminal shell on Windows. 'auto' follows the detection priority.
   preferredTerminalShell: PreferredTerminalShell;
 }
@@ -486,6 +488,7 @@ const defaultAdvancedSettings: AdvancedSettings = {
   customPathDirs: '',
   historyMaxAgeDays: 30,
   historyMaxSnapshots: 250,
+  maxParallelChildSessions: 10,
   preferredTerminalShell: 'auto',
 };
 
@@ -567,6 +570,9 @@ function scheduleAdvancedPersist(
           break;
         case 'historyMaxSnapshots':
           await window.electronAPI.invoke('app-settings:set', 'historyMaxSnapshots', settingsToPersist.historyMaxSnapshots);
+          break;
+        case 'maxParallelChildSessions':
+          await window.electronAPI.invoke('app-settings:set', 'maxParallelChildSessions', settingsToPersist.maxParallelChildSessions);
           break;
         case 'preferredTerminalShell':
           await window.electronAPI.invoke('app-settings:set', 'preferredTerminalShell', settingsToPersist.preferredTerminalShell);
@@ -744,7 +750,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
   }
 
   try {
-    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs, spellcheckEnabled, showDirectChatProviders, historyMaxAgeDays, historyMaxSnapshots, preferredTerminalShell] =
+    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs, spellcheckEnabled, showDirectChatProviders, historyMaxAgeDays, historyMaxSnapshots, preferredTerminalShell, maxParallelChildSessions] =
       await Promise.all([
         window.electronAPI.invoke('release-channel:get'),
         window.electronAPI.invoke('analytics:is-enabled'),
@@ -760,6 +766,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
         window.electronAPI.invoke('app-settings:get', 'historyMaxAgeDays'),
         window.electronAPI.invoke('app-settings:get', 'historyMaxSnapshots'),
         window.electronAPI.invoke('app-settings:get', 'preferredTerminalShell'),
+        window.electronAPI.invoke('app-settings:get', 'maxParallelChildSessions'),
       ]);
 
     // Calculate viewed count (completed + dismissed)
@@ -783,6 +790,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
       customPathDirs: customPathDirs ?? '',
       historyMaxAgeDays: historyMaxAgeDays ?? 30,
       historyMaxSnapshots: historyMaxSnapshots ?? 250,
+      maxParallelChildSessions: maxParallelChildSessions ?? 10,
       preferredTerminalShell: preferredTerminalShell ?? 'auto',
     };
   } catch (error) {

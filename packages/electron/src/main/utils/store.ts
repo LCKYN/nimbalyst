@@ -312,6 +312,8 @@ interface AppStoreSchema {
   // Document history settings
   historyMaxAgeDays?: number; // Max age in days before snapshots are cleaned up (default: 30)
   historyMaxSnapshots?: number; // Max snapshots per file (default: 250)
+  // Max child sessions one parent may have running at once (default: 10)
+  maxParallelChildSessions?: number;
   // Preferred interactive terminal shell on Windows. 'auto' uses detection priority.
   preferredTerminalShell?: PreferredTerminalShell;
   // Last known app version (for migrations)
