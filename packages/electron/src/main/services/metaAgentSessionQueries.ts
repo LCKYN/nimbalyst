@@ -9,11 +9,18 @@
  */
 
 import { database as databaseWorker } from '../database/PGLiteDatabaseWorker';
+import { getAppSetting } from '../utils/store';
 
-/** Controllable "max parallel" limit: children currently running. */
-const MAX_IN_FLIGHT = 4;
+/** Default for the user-controllable "max parallel" limit: children currently running. */
+const DEFAULT_MAX_IN_FLIGHT = 10;
 /** Non-controllable ceiling on children ever created by one parent. */
 const LIFETIME_BACKSTOP = 50;
+
+/** The user's Settings > Advanced value; anything but a positive integer falls back to the default. */
+function getMaxInFlight(): number {
+  const raw = getAppSetting<number>('maxParallelChildSessions');
+  return Number.isInteger(raw) && (raw as number) >= 1 ? (raw as number) : DEFAULT_MAX_IN_FLIGHT;
+}
 
 export async function getSessionStatusRow(sessionId: string, workspaceId: string): Promise<any | null> {
   const { rows } = await databaseWorker.query<any>(
@@ -42,7 +49,7 @@ export async function getSpawnedSessionRows(metaSessionId: string, workspaceId: 
 /**
  * Two independent gates on how many children a parent can spawn.
  *
- * `MAX_IN_FLIGHT` counts children currently active (running /
+ * The max-in-flight limit counts children currently active (running /
  * waiting_for_input) or with a durable pending/executing prompt. Deferred
  * launches remain charged while queue-drive waits for a window or provider.
  * A finished child with no queued work frees a slot for another launch.
@@ -76,9 +83,10 @@ export async function assertChildSpawnCapacity(workspaceId: string, metaSessionI
 
   const inFlightCount = Number(rows[0]?.in_flight ?? '0') + pendingIds.length;
   const totalCount = Number(rows[0]?.total ?? '0') + pendingIds.length;
-  if (inFlightCount >= MAX_IN_FLIGHT) {
+  const maxInFlight = getMaxInFlight();
+  if (inFlightCount >= maxInFlight) {
     throw new Error(
-      `Too many child sessions running at once (${inFlightCount}/${MAX_IN_FLIGHT} in flight). ` +
+      `Too many child sessions running at once (${inFlightCount}/${maxInFlight} in flight). ` +
       `Wait for a spawned session to finish before spawning more.`
     );
   }

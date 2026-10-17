@@ -146,6 +146,7 @@ export function AdvancedPanel() {
     showDirectChatProviders,
     historyMaxAgeDays,
     historyMaxSnapshots,
+    maxParallelChildSessions,
     preferredTerminalShell,
   } = settings;
   const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
@@ -588,6 +589,22 @@ export function AdvancedPanel() {
             { value: 250, label: '250 (Default)' },
             { value: 500, label: '500' },
             { value: 1000, label: '1,000' },
+          ]}
+        />
+
+        <DropdownRow
+          value={maxParallelChildSessions}
+          onChange={(val) => updateSettings({ maxParallelChildSessions: parseInt(val, 10) })}
+          name="Max Parallel Child Sessions"
+          description="How many sessions one orchestrator session can have running at once."
+          options={[
+            { value: 2, label: '2' },
+            { value: 4, label: '4' },
+            { value: 6, label: '6' },
+            { value: 8, label: '8' },
+            { value: 10, label: '10 (Default)' },
+            { value: 15, label: '15' },
+            { value: 20, label: '20' },
           ]}
         />
 

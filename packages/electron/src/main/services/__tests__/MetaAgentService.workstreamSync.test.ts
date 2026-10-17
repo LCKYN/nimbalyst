@@ -46,7 +46,7 @@ vi.mock('../SyncManager', () => ({
 }));
 
 vi.mock('../../utils/ipcRegistry', () => ({ safeHandle: vi.fn() }));
-vi.mock('../../utils/store', () => ({ getDefaultAIModel: () => null }));
+vi.mock('../../utils/store', () => ({ getDefaultAIModel: () => null, getAppSetting: () => undefined }));
 vi.mock('../../utils/timestampUtils', () => ({ toMillis: (v: unknown) => v }));
 vi.mock('../WorktreeStore', () => ({ createWorktreeStore: vi.fn() }));
 vi.mock('../GitWorktreeService', () => ({ GitWorktreeService: class {} }));
