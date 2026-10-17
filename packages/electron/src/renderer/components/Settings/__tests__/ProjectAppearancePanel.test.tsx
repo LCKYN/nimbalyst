@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProjectAppearancePanel } from '../panels/ProjectAppearancePanel';
 import { projectAppearanceAtom } from '../../../store/atoms/projectAppearance';
+import { PROJECT_COLOR_CHOICES, generateWorkspaceAccentColor } from '../../../../shared/projectAppearance';
 const workspacePath = '/projects/FileRocket';
 beforeEach(() => { (window as any).electronAPI = { invoke: vi.fn(), on: vi.fn() }; });
 afterEach(() => { cleanup(); projectAppearanceAtom.remove(workspacePath); });
@@ -64,4 +65,17 @@ it('saves a symbol icon even though its stored name is longer than three charact
   expect(view.queryByRole('alert')).toBeNull();
   fireEvent.click(view.getByText('Save changes'));
   await waitFor(() => expect(invoke).toHaveBeenCalledWith('project-appearance:update', workspacePath, { initials: 'icon:school' }));
+});
+it('offers 12 hues in 3 shades and saves a picked preset as the background', async () => {
+  // Middle row is the automatic palette: '/p3' hashes to hue 90, a preset hue.
+  expect(PROJECT_COLOR_CHOICES).toHaveLength(36);
+  expect(PROJECT_COLOR_CHOICES.slice(12, 24)).toContain(generateWorkspaceAccentColor('/p3', 'hex'));
+  const invoke = vi.fn().mockResolvedValue({ revision: 1, appearance: {} });
+  window.electronAPI.invoke = invoke;
+  const view = mount();
+  const dark = PROJECT_COLOR_CHOICES[24];
+  fireEvent.click(view.getByLabelText(`Use color ${dark}`));
+  expect(view.getByLabelText(`Use color ${dark}`).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(view.getByText('Save changes'));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith('project-appearance:update', workspacePath, { color: dark }));
 });

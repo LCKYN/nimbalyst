@@ -21,3 +21,6 @@
 .project-appearance-emoji-grid { display: grid; grid-template-columns: repeat(8, 32px); gap: 4px; margin: -8px 0 20px; }
 .project-appearance-panel .project-appearance-emoji-grid button { width: 32px; height: 32px; padding: 0; font-size: 18px; line-height: 1; }
 .project-appearance-panel .project-appearance-emoji-grid button[aria-pressed=true] { border-color: var(--nim-primary); background: var(--nim-bg-hover); }
+.project-appearance-color-grid { display: grid; grid-template-columns: repeat(12, 24px); gap: 4px; margin: 4px 0 8px; }
+.project-appearance-panel .project-appearance-color-grid button { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--nim-border); }
+.project-appearance-panel .project-appearance-color-grid button[aria-pressed=true] { outline: 2px solid var(--nim-text); outline-offset: 1px; }

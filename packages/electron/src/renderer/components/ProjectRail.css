@@ -53,13 +53,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Accent tint at rest; full accent on hover/active. */
-  background-color: color-mix(
-    in srgb,
-    var(--rail-item-accent, var(--nim-primary, #3b82f6)) 22%,
-    var(--nim-bg-tertiary, #2a2a2a)
-  );
-  color: var(--rail-item-text, var(--rail-item-accent, var(--nim-primary, #3b82f6)));
+  background-color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
+  color: var(--rail-item-foreground, #ffffff);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -70,17 +65,9 @@
     border-color 150ms ease, color 150ms ease, transform 150ms ease;
 }
 
-.project-rail-item-main:hover {
-  border-radius: 14px;
-  background-color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
-  color: var(--rail-item-foreground, #ffffff);
-}
-
+.project-rail-item-main:hover,
 .project-rail-item.is-active .project-rail-item-main {
   border-radius: 14px;
-  background-color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
-  color: var(--rail-item-foreground, #ffffff);
-  border-color: transparent;
 }
 
 /* Opaque images hide the fill change. Mark selection outside the image with
