@@ -89,6 +89,7 @@ vi.mock('../../utils/ipcRegistry', () => ({ safeHandle: vi.fn() }));
 // reads so the real path-identity logic can run unmocked.
 vi.mock('../../utils/store', () => ({
   getDefaultAIModel: () => null,
+  getAppSetting: () => undefined,
   getAgentPermissions: () => ({}),
   getAttachedFolders: () => [],
   getRecentItems: () => [],

@@ -14,6 +14,11 @@ import { QueueDriveService } from '../ai/QueueDriveService';
 import { LEGACY_SESSION_TYPES_SQL } from '../../database/legacySessionTypes';
 
 vi.mock('../../database/PGLiteDatabaseWorker', () => ({ database: { query: vi.fn() } }));
+// These cases were written against the old fixed in-flight cap of 4.
+vi.mock('../../utils/store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/store')>();
+  return { ...actual, getAppSetting: (key: string) => (key === 'maxParallelChildSessions' ? 4 : actual.getAppSetting(key)) };
+});
 
 // Isolated in-memory PostgreSQL fixture; never opens the user's live database.
 const PG_SCHEMA = `CREATE TABLE worktrees (id TEXT PRIMARY KEY, name TEXT, branch TEXT, path TEXT, workspace_id TEXT, is_archived BOOLEAN DEFAULT FALSE);

@@ -76,7 +76,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../SyncManager', () => ({ getSyncProvider: () => ({ pushChange: vi.fn() }) }));
 vi.mock('../../utils/ipcRegistry', () => ({ safeHandle: vi.fn() }));
-vi.mock('../../utils/store', () => ({ getDefaultAIModel: () => null }));
+vi.mock('../../utils/store', () => ({ getDefaultAIModel: () => null, getAppSetting: () => undefined }));
 vi.mock('../../utils/timestampUtils', () => ({ toMillis: (v: unknown) => v }));
 vi.mock('../WorktreeStore', () => ({ createWorktreeStore: vi.fn() }));
 vi.mock('../GitWorktreeService', () => ({ GitWorktreeService: class {} }));
@@ -426,9 +426,9 @@ describe('MetaAgentService spawn gates', () => {
     const service = MetaAgentService.getInstance();
     (service as any).aiService = { queuePromptForSession: vi.fn() };
     vi.mocked(AISessionsRepository.get).mockResolvedValue(CLAUDE_PARENT as any);
-    // 4 children currently running/waiting (>= MAX_IN_FLIGHT). total is well
+    // 10 children currently running/waiting (>= the default cap). total is well
     // under the lifetime backstop, proving this gate fires on parallelism alone.
-    vi.mocked(databaseWorker.query).mockResolvedValue({ rows: [{ in_flight: '4', total: '4' }] } as any);
+    vi.mocked(databaseWorker.query).mockResolvedValue({ rows: [{ in_flight: '10', total: '10' }] } as any);
 
     await expect(
       (service as any).createChildSessionInternal('parent-claude-session', '/workspace/path', {})
