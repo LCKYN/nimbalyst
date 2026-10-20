@@ -35,10 +35,12 @@ vi.mock('../../../store/atoms/appSettings', async () => {
   };
 });
 
+const transcriptRenders: Array<[string, string]> = [];
 vi.mock('../../UnifiedAI/SessionTranscript', () => ({
-  SessionTranscript: ({ sessionId }: { sessionId: string }) => (
-    <div data-testid="session-transcript" data-session-id={sessionId} />
-  ),
+  SessionTranscript: ({ sessionId, workspacePath }: { sessionId: string; workspacePath: string }) => {
+    transcriptRenders.push([sessionId, workspacePath]);
+    return <div data-testid="session-transcript" data-session-id={sessionId} />;
+  },
 }));
 
 vi.mock('../../AIChat/SessionDropdown', () => ({
@@ -107,8 +109,11 @@ describe('ChatSidebar loadSession vs auto-init', () => {
     act(() => { ref.current?.loadSession('a-session'); });
 
     // An earlier explicit pick in /a must not pin the chat after switching to /b.
+    transcriptRenders.length = 0;
     view.rerender(<ChatSidebar ref={ref} workspacePath="/b" />);
     await waitFor(() => expect(shownSession()).toBe('/b-recent'));
+    // Not even for one render may /a's session be loaded under /b.
+    expect(transcriptRenders).not.toContainEqual(['a-session', '/b']);
 
     // Fast /b2 -> /c: /b2's list is still pending when /c takes over.
     view.rerender(<ChatSidebar ref={ref} workspacePath="/b2" />);

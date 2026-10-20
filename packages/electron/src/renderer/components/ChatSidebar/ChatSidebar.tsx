@@ -96,7 +96,12 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
   const explicitSelectionRef = useRef(false);
   const [internalSessionId, setInternalSessionId] = useState<string | null>(null);
   const isSessionControlled = controlledSessionId !== undefined;
-  const sessionId = isSessionControlled ? controlledSessionId : internalSessionId;
+  // Until the reset effect below runs, internalSessionId still belongs to the
+  // previous project; rendering the transcript with it would load that session
+  // under the new project and fail.
+  const sessionId = isSessionControlled
+    ? controlledSessionId
+    : selectionWorkspaceRef.current === workspacePath ? internalSessionId : null;
   const [isLoading, setIsLoading] = useState(autoInitializeSession);
 
   const selectSession = useCallback((nextSessionId: string | null) => {

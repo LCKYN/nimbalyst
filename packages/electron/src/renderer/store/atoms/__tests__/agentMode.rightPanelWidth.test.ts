@@ -11,6 +11,8 @@ import {
   sessionHistoryWidthAtom,
   setSessionHistoryWidthAtom,
 } from '../agentMode';
+import { selectedWorkstreamAtom, sessionRegistryAtom, setSelectedWorkstreamAtom } from '../sessions';
+import type { SessionMeta } from '../sessions';
 
 describe('session history width', () => {
   it('is shared across projects and persisted globally', async () => {
@@ -38,6 +40,43 @@ describe('session history width', () => {
     store.set(activeWorkspacePathAtom, '/a');
     expect(store.get(sessionHistoryWidthAtom)).toBe(360);
     await vi.waitFor(() => expect(appSettings.get(SESSION_HISTORY_WIDTH_KEY)).toBe(360));
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('selection across rail projects', () => {
+  const sessionWorkspace: Record<string, string> = { a1: '/a', b1: '/b' };
+  const stub = (saved: Record<string, string>) => {
+    const invoke = vi.fn(async (channel: string, arg: string) => {
+      if (channel === 'workspace:get-state') {
+        return { agenticCodingWindowState: { selectedWorkstream: { type: 'session', id: saved[arg] } } };
+      }
+      if (channel === 'sessions:get') {
+        return { success: true, session: sessionWorkspace[arg] ? { workspacePath: sessionWorkspace[arg] } : null };
+      }
+      return undefined;
+    });
+    vi.stubGlobal('window', { electronAPI: { invoke } });
+    return invoke;
+  };
+
+  it('drops a saved selection that belongs to another project, and keeps its own', async () => {
+    const invoke = stub({ '/a': 'a1', '/b': 'a1' });
+    await initAgentModeLayout('/a');
+    await initAgentModeLayout('/b');
+    expect(store.get(selectedWorkstreamAtom('/a'))?.id).toBe('a1');
+    expect(store.get(selectedWorkstreamAtom('/b'))).toBeNull();
+    expect(invoke).toHaveBeenCalledWith('workspace:update-state', '/b', {
+      agenticCodingWindowState: { selectedWorkstream: null },
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('refuses to select another project\'s session', () => {
+    stub({});
+    store.set(sessionRegistryAtom, new Map([['b1', { id: 'b1', workspaceId: '/b' } as SessionMeta]]));
+    store.set(setSelectedWorkstreamAtom, { workspacePath: '/c', selection: { type: 'session', id: 'b1' } });
+    expect(store.get(selectedWorkstreamAtom('/c'))).toBeNull();
     vi.unstubAllGlobals();
   });
 });

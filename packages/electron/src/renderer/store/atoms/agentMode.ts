@@ -633,6 +633,19 @@ export const ensureSessionHistoryVisibleAtom = atom(
 // ============================================================
 
 /**
+ * Mirrors main's load-session ownership check. A failed lookup counts as a
+ * match, so a transient IPC error never discards a valid selection.
+ */
+async function isSessionInWorkspace(sessionId: string, workspacePath: string): Promise<boolean> {
+  const result = await window.electronAPI.invoke('sessions:get', sessionId).catch(() => null) as
+    { success?: boolean; session?: { workspacePath?: string; worktreePath?: string } | null } | null;
+  if (!result?.success) return true;
+  const session = result.session;
+  if (!session) return false;
+  return !session.workspacePath || session.workspacePath === workspacePath || session.worktreePath === workspacePath;
+}
+
+/**
  * Initialize agent mode layout from workspace state.
  * Call this when workspace path is known (typically in useEffect).
  * Restores layout settings and selected workstream.
@@ -664,7 +677,19 @@ export async function initAgentModeLayout(
 
     if (agenticState?.selectedWorkstream) {
       const selection = agenticState.selectedWorkstream as { type: WorkstreamType; id: string };
-      store.set(selectedWorkstreamAtom(workspacePath), selection);
+      if (await isSessionInWorkspace(selection.id, workspacePath)) {
+        store.set(selectedWorkstreamAtom(workspacePath), selection);
+      } else {
+        // A deleted session, or one from another project saved here by mistake,
+        // would fail to load on every visit. Forget it instead.
+        console.warn(`[agentMode] Dropping saved selection ${selection.id}: not a session of ${workspacePath}`);
+        if (store.get(selectedWorkstreamAtom(workspacePath))?.id === selection.id) {
+          store.set(selectedWorkstreamAtom(workspacePath), null);
+        }
+        window.electronAPI.invoke('workspace:update-state', workspacePath, {
+          agenticCodingWindowState: { selectedWorkstream: null },
+        }).catch((err: unknown) => console.error('[agentMode] Failed to clear saved selection:', err));
+      }
     }
 
     if (store.get(globalSessionHistoryWidthAtom) === null) {

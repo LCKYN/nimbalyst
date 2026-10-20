@@ -2543,10 +2543,17 @@ export const setSelectedWorkstreamAtom = atom(
     workspacePath: string;
     selection: { type: WorkstreamType; id: string } | null;
   }) => {
+    const session = selection ? get(sessionRegistryAtom).get(selection.id) : undefined;
+    // The registry holds every rail project's sessions. Saving another project's
+    // session as this project's selection makes every later switch here load a
+    // session main rejects ("Session not found").
+    if (session && session.workspaceId !== workspacePath) {
+      console.warn(`[sessions] Ignoring selection of ${selection!.id}: it belongs to ${session.workspaceId}, not ${workspacePath}`);
+      return;
+    }
     const prev = get(selectedWorkstreamAtom(workspacePath));
     set(selectedWorkstreamAtom(workspacePath), selection);
     if (selection) {
-      const session = get(sessionRegistryAtom).get(selection.id);
       if (session) {
         const host = session.remoteHostDeviceId ?? '';
         set(selectedMachineAtom(workspacePath), host);
