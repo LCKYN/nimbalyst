@@ -367,6 +367,10 @@ describe('MessageSegment', () => {
     );
     expect(screen.getByText('screenshot.png')).toBeDefined();
     expect(screen.getByText('1.0 KB')).toBeDefined();
+
+    // The enlarged popup must swallow pinch / Cmd+wheel, or it zooms the whole window.
+    fireEvent.click(screen.getByTitle('Click to preview'));
+    expect(fireEvent.wheel(screen.getByTestId('zoomable-image-viewport'), { deltaY: -100, ctrlKey: true })).toBe(false);
   });
 });
 

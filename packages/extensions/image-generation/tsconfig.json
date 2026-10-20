@@ -17,7 +17,8 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@nimbalyst/runtime/ui/AgentTranscript/components/ZoomableImageSurface": ["../../runtime/src/ui/AgentTranscript/components/ZoomableImageSurface.tsx"]
     }
   },
   "include": ["src"],

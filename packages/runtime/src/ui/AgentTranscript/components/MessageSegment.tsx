@@ -11,6 +11,7 @@ import { classifyContextFailure, isCompactionFailureText } from './contextFailur
 import { RateLimitWidget } from './RateLimitWidget';
 import { ApiServiceErrorWidget, isApiServiceError } from './ApiServiceErrorWidget';
 import { FullscreenModal } from './FullscreenModal';
+import { ZoomableImageSurface } from './ZoomableImageSurface';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import { isCommitRequestMessage, parseCommitRequest, CommitRequestCard } from './CommitRequestCard';
@@ -494,26 +495,29 @@ export const MessageSegment = React.memo(function MessageSegment({
         isOpen={!!enlargedImage}
         onClose={closeImageModal}
         ariaLabel="Image preview"
-        contentClassName="max-w-[90vw] max-h-[90vh] flex flex-col items-center"
+        contentClassName="message-attachment-modal h-[92vh] w-[96vw] max-w-[1400px] overflow-hidden rounded-lg border border-nim bg-nim"
       >
-        <button
-          className="message-attachment-modal-close absolute -top-8 -right-8 w-7 h-7 p-0 border-none bg-[var(--nim-bg-secondary)] rounded-full cursor-pointer flex items-center justify-center text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-          onClick={closeImageModal}
-          aria-label="Close"
-        >
-          <MaterialSymbol icon="close" size={20} />
-        </button>
         {enlargedImage && (
-          <>
-            <img
-              src={attachmentImageSrc(enlargedImage)}
-              alt={enlargedImage.filename}
-              className="message-attachment-modal-image max-w-full max-h-[calc(90vh-60px)] object-contain rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)]"
-            />
-            <div className="message-attachment-modal-caption mt-3 text-[13px] text-[var(--nim-text-muted)] bg-[var(--nim-bg-secondary)] px-3 py-1.5 rounded max-w-full whitespace-nowrap overflow-hidden text-ellipsis">
-              {enlargedImage.filename}
-            </div>
-          </>
+          <ZoomableImageSurface
+            src={attachmentImageSrc(enlargedImage)}
+            alt={enlargedImage.filename}
+            toolbarLabel={(
+              <div className="min-w-0 truncate font-mono text-sm text-nim" title={enlargedImage.filename}>
+                {enlargedImage.filename}
+              </div>
+            )}
+            toolbarExtras={(
+              <button
+                type="button"
+                className="message-attachment-modal-close rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] px-2 py-1 text-xs text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={closeImageModal}
+                aria-label="Close"
+              >
+                Close
+              </button>
+            )}
+          />
+
         )}
       </FullscreenModal>
     );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { ChatAttachment } from '@nimbalyst/runtime';
 import { getFileIcon } from '@nimbalyst/runtime';
+import { ZoomableImageSurface } from '@nimbalyst/runtime/ui/AgentTranscript/components/ZoomableImageSurface';
 import { nimAssetUrl } from '../../utils/assetUrl';
 
 interface ProcessingAttachmentPreviewProps {
@@ -156,26 +157,29 @@ export function AttachmentPreview({ attachment, onRemove, onConvertToText }: Att
           onClick={() => setIsExpanded(false)}
         >
           <div
-            className="attachment-preview-modal relative max-w-[90vw] max-h-[90vh] flex flex-col items-center gap-4"
+            className="attachment-preview-modal h-[92vh] w-[96vw] max-w-[1400px] overflow-hidden rounded-lg border border-nim bg-nim"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              className="attachment-preview-modal-close absolute -top-10 right-0 w-8 h-8 p-0 border-none bg-white/10 text-white cursor-pointer flex items-center justify-center rounded transition-colors duration-150 hover:bg-white/20"
-              onClick={() => setIsExpanded(false)}
-              aria-label="Close"
-            >
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            <img
+            <ZoomableImageSurface
               src={nimAssetUrl(attachment.filepath)}
               alt={attachment.filename}
-              className="attachment-preview-modal-image max-w-[90vw] max-h-[80vh] object-contain rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+              copyFilePath={attachment.filepath}
+              toolbarLabel={(
+                <div className="min-w-0 truncate font-mono text-sm text-nim" title={attachment.filename}>
+                  {attachment.filename}
+                </div>
+              )}
+              toolbarExtras={(
+                <button
+                  type="button"
+                  className="attachment-preview-modal-close rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] px-2 py-1 text-xs text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                  onClick={() => setIsExpanded(false)}
+                  aria-label="Close"
+                >
+                  Close
+                </button>
+              )}
             />
-            <div className="attachment-preview-modal-caption text-white text-sm text-center py-2 px-4 bg-black/50 rounded max-w-[90vw] overflow-hidden text-ellipsis whitespace-nowrap">
-              {attachment.filename}
-            </div>
           </div>
         </div>
       )}

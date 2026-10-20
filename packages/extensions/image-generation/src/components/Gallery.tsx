@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { ZoomableImageSurface } from '@nimbalyst/runtime/ui/AgentTranscript/components/ZoomableImageSurface';
 import type { Generation, GeneratedImage, SessionMessage } from '../types';
 import { STYLE_PRESETS } from '../types';
 
@@ -104,31 +105,31 @@ export function Gallery({ messages, imagesBasePath, onEditPrompt, theme }: Galle
     );
   }
 
-  // Lightbox component for expanded image view
-  const Lightbox = () => {
+  // Lightbox for expanded image view. A render function, not a nested
+  // component, so a Gallery re-render doesn't remount it and reset the zoom.
+  const renderLightbox = () => {
     if (!expandedImage) return null;
 
     const { image, generation } = expandedImage;
 
     return (
-      <div
-        className="fixed inset-0 bg-nim-secondary flex flex-col z-[1000]"
-        onClick={() => setExpandedImage(null)}
-      >
-        {/* Header bar */}
-        <div
-          className="flex items-center justify-between px-4 py-3 bg-nim-tertiary border-b border-nim"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex-1 min-w-0">
-            <div className="text-[13px] text-nim leading-snug overflow-hidden text-ellipsis whitespace-nowrap">
-              {generation.prompt}
+      <div className="fixed inset-0 bg-nim-secondary flex flex-col z-[1000]">
+        <ZoomableImageSurface
+          className="flex-1"
+          src={`file://${imagesBasePath}/${image.file}`}
+          alt={generation.prompt}
+          toolbarLabel={(
+            <div className="min-w-0">
+              <div className="text-[13px] text-nim leading-snug overflow-hidden text-ellipsis whitespace-nowrap">
+                {generation.prompt}
+              </div>
+              <div className="text-[11px] text-nim-muted mt-1">
+                {image.width} x {image.height} &middot; {getStyleLabel(generation.style)}
+              </div>
             </div>
-            <div className="text-[11px] text-nim-muted mt-1">
-              {image.width} x {image.height} &middot; {getStyleLabel(generation.style)}
-            </div>
-          </div>
-          <div className="flex gap-2 ml-4">
+          )}
+          toolbarExtras={(
+            <>
             <button
               onClick={() => {
                 // Download image
@@ -147,22 +148,13 @@ export function Gallery({ messages, imagesBasePath, onEditPrompt, theme }: Galle
             >
               Close
             </button>
-          </div>
-        </div>
-
-        {/* Image container */}
-        <div className="flex-1 flex items-center justify-center p-5 overflow-hidden">
-          <img
-            src={`file://${imagesBasePath}/${image.file}`}
-            alt={generation.prompt}
-            className="max-w-full max-h-full object-contain rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)]"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+            </>
+          )}
+        />
 
         {/* Navigation hint */}
         <div className="px-4 py-2 text-center text-nim-faint text-[11px]">
-          Press Escape or click outside to close
+          Press Escape to close
         </div>
       </div>
     );
@@ -170,7 +162,7 @@ export function Gallery({ messages, imagesBasePath, onEditPrompt, theme }: Galle
 
   return (
     <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-5 relative">
-      <Lightbox />
+      {renderLightbox()}
 
       {/* Chat-style message list */}
       <div className="flex flex-col gap-4">

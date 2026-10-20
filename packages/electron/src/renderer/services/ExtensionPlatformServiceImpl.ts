@@ -38,6 +38,7 @@ import * as lexicalMarkdown from '@lexical/markdown';
 
 // Import runtime UI components that extensions can use
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
+import { ZoomableImageSurface } from '@nimbalyst/runtime/ui/AgentTranscript/components/ZoomableImageSurface';
 import * as CollaborativeCommentUI from '@nimbalyst/runtime/editor/commenting/ui';
 
 // Import screenshot service and document path context from runtime
@@ -180,6 +181,10 @@ ${exportNames.map((name) => `export const ${name} = __mod?.${name};`).join('\n')
     imports['@nimbalyst/runtime/ui/icons/MaterialSymbol'] = createModuleUrl(
       '@nimbalyst/runtime/ui/icons/MaterialSymbol',
       deps['@nimbalyst/runtime/ui/icons/MaterialSymbol']
+    );
+    imports['@nimbalyst/runtime/ui/AgentTranscript/components/ZoomableImageSurface'] = createModuleUrl(
+      '@nimbalyst/runtime/ui/AgentTranscript/components/ZoomableImageSurface',
+      deps['@nimbalyst/runtime/ui/AgentTranscript/components/ZoomableImageSurface']
     );
     imports['@nimbalyst/runtime/editor/commenting/ui'] = createModuleUrl(
       '@nimbalyst/runtime/editor/commenting/ui',
@@ -467,6 +472,7 @@ CHECK:
       '@nimbalyst/editor-context': { useDocumentPath },
       // Runtime UI components
       '@nimbalyst/runtime/ui/icons/MaterialSymbol': { MaterialSymbol },
+      '@nimbalyst/runtime/ui/AgentTranscript/components/ZoomableImageSurface': { ZoomableImageSurface },
       '@nimbalyst/runtime/editor/commenting/ui': CollaborativeCommentUI,
       // Core services for extensions
       '@nimbalyst/screenshot-service': {
