@@ -279,12 +279,20 @@ function relocateRenumberedMigrations(db: SqliteDatabase, migrations: Migration[
       .all() as Array<{ version: number; name: string }>;
     const recorded = new Set(rows.map((r) => r.version));
     const move = db.prepare('UPDATE _migrations SET version = ? WHERE version = ?');
-    for (const row of rows) {
-      const current = versionByName.get(row.name);
-      if (current === undefined || current === row.version || recorded.has(current)) continue;
-      move.run(current, row.version);
-      recorded.delete(row.version);
-      recorded.add(current);
+    // Repeat until nothing moves: a record's new number can still be held by
+    // another record that has yet to move (53->56 waits for 56->59).
+    let moved = true;
+    while (moved) {
+      moved = false;
+      for (const row of rows) {
+        const current = versionByName.get(row.name);
+        if (current === undefined || current === row.version || recorded.has(current)) continue;
+        move.run(current, row.version);
+        recorded.delete(row.version);
+        recorded.add(current);
+        row.version = current;
+        moved = true;
+      }
     }
   }).immediate();
 }

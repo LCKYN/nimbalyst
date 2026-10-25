@@ -238,6 +238,38 @@ describe('runMigrations', () => {
       raw.close();
     }
   });
+  it('moves a chain of renumbered records whose new numbers are still held by each other', () => {
+    stageMigrationFiles(tmp);
+    const raw = new BetterSqlite(path.join(tmp, 'renumbered-chain.sqlite'));
+    try {
+      // Fork installs applied four migrations as 53-56 before upstream took 53-55;
+      // they now ship as 56-59, so 53 can only move once 56 has moved to 59.
+      raw.exec(`CREATE TABLE _migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT '')`);
+      const record = raw.prepare('INSERT INTO _migrations (version, name) VALUES (?, ?)');
+      for (const m of getMigrations(tmp)) {
+        if (m.version <= 52) record.run(m.version, m.name);
+      }
+      record.run(53, 'session_wakeup_attachments');
+      record.run(54, 'session_wakeup_origin');
+      record.run(55, 'tool_usage_token_estimates');
+      record.run(56, 'message_input_times_index');
+
+      const result = runMigrations(raw, tmp);
+
+      expect(result.applied).toEqual([53, 54, 55]);
+      expect(raw.prepare('SELECT version, name FROM _migrations WHERE version >= 53 ORDER BY version').all()).toEqual([
+        { version: 53, name: 'index_hygiene' },
+        { version: 54, name: 'project_file_sync_disk_stamp' },
+        { version: 55, name: 'tracker_recovery_revision' },
+        { version: 56, name: 'session_wakeup_attachments' },
+        { version: 57, name: 'session_wakeup_origin' },
+        { version: 58, name: 'tool_usage_token_estimates' },
+        { version: 59, name: 'message_input_times_index' },
+      ]);
+    } finally {
+      raw.close();
+    }
+  });
 });
 
 describe('runMigrations against the real schema dir', () => {
