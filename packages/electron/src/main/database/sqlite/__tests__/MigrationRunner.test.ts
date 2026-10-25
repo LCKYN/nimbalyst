@@ -17,6 +17,7 @@ import { Worker } from 'node:worker_threads';
 import BetterSqlite from 'better-sqlite3';
 import { getMigrations, runMigrations, type Migration } from '../MigrationRunner';
 import { SQLiteDatabase } from '../SQLiteDatabase';
+import { diskStampUpsertSql, parseDiskStamp } from '../../../services/projectFileSyncDiskCache';
 
 /**
  * Stage a no-op .sql for every migration the runner expects, and return their
@@ -227,12 +228,46 @@ describe('runMigrations', () => {
       record.run(52, 'tool_usage_token_estimates');
 
       const result = runMigrations(raw, tmp);
+      const current = getMigrations(tmp).find((m) => m.name === 'tool_usage_token_estimates')!.version;
 
       expect(result.applied).toEqual([52]);
-      expect(raw.prepare('SELECT version, name FROM _migrations WHERE version IN (52, 55) ORDER BY version').all()).toEqual([
+      expect(raw.prepare('SELECT version, name FROM _migrations WHERE version IN (52, ?) ORDER BY version').all(current)).toEqual([
         { version: 52, name: 'personal_pages_fields' },
-        { version: 55, name: 'tool_usage_token_estimates' },
+        { version: current, name: 'tool_usage_token_estimates' },
       ]);
+    } finally {
+      raw.close();
+    }
+  });
+
+  it('relocates a chain of renumbered records whose targets are still occupied', () => {
+    stageMigrationFiles(tmp);
+    const raw = new BetterSqlite(path.join(tmp, 'chain.sqlite'));
+    try {
+      // Fork installs recorded 53-56 before upstream took 53-55; the fork's four
+      // now ship as 56-59, so 53 must move into 56 only after 56 moves to 59.
+      const forkRecords: Array<[number, string]> = [
+        [53, 'session_wakeup_attachments'],
+        [54, 'session_wakeup_origin'],
+        [55, 'tool_usage_token_estimates'],
+        [56, 'message_input_times_index'],
+      ];
+      const forkNames = new Set(forkRecords.map(([, name]) => name));
+      const upstreamNew = new Set(['index_hygiene', 'project_file_sync_disk_stamp', 'tracker_recovery_revision']);
+      raw.exec(`CREATE TABLE _migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT '')`);
+      const record = raw.prepare('INSERT INTO _migrations (version, name) VALUES (?, ?)');
+      for (const m of getMigrations(tmp)) {
+        if (!forkNames.has(m.name) && !upstreamNew.has(m.name)) record.run(m.version, m.name);
+      }
+      for (const [version, name] of forkRecords) record.run(version, name);
+
+      const result = runMigrations(raw, tmp);
+
+      expect(result.applied).toEqual([53, 54, 55]);
+      const byName = new Map(getMigrations(tmp).map((m) => [m.name, m.version]));
+      const rows = raw.prepare('SELECT version, name FROM _migrations').all() as Array<{ version: number; name: string }>;
+      expect(rows.every((row) => byName.get(row.name) === row.version)).toBe(true);
+      expect(rows).toHaveLength(byName.size);
     } finally {
       raw.close();
     }
@@ -285,6 +320,72 @@ describe('runMigrations against the real schema dir', () => {
           'quarantined_at',
         ]),
       );
+    } finally {
+      await sqlite.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('applies 0055 once across reopens and round-trips tracker_transactions.base_sync_id', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nim-mig-0055-'));
+    const open = async () => {
+      const sqlite = new SQLiteDatabase({ dbDir: tmpDir, schemaDir: path.resolve(__dirname, '..', 'schemas'), slowQueryThresholdMs: 1000, sampleRate: 0 });
+      await sqlite.initialize();
+      return sqlite;
+    };
+    let sqlite = await open();
+    try {
+      await sqlite.query(
+        `INSERT INTO tracker_transactions (client_mutation_id, item_id, workspace_path, state, kind, payload, base_sync_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        ['m1', 'item', '/workspace', 'queued', 'update', '{}', 42],
+      );
+      // A second launch must neither re-run the ALTER (duplicate column) nor lose the value.
+      await sqlite.close();
+      sqlite = await open();
+      const handle = sqlite.getRawHandle()!;
+      expect(handle.prepare(`SELECT COUNT(*) AS n FROM _migrations WHERE version = 55`).get()).toEqual({ n: 1 });
+      const { rows } = await sqlite.query<{ base_sync_id: number | null }>(`SELECT base_sync_id FROM tracker_transactions WHERE client_mutation_id = $1`, ['m1']);
+      expect(rows.map(row => Number(row.base_sync_id))).toEqual([42]);
+    } finally {
+      await sqlite.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('applies 0054: the stamp upsert moves only the disk columns of an existing baseline row', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nim-mig-0054-'));
+    const sqlite = new SQLiteDatabase({
+      dbDir: tmpDir,
+      schemaDir: path.resolve(__dirname, '..', 'schemas'),
+      slowQueryThresholdMs: 1000,
+      sampleRate: 0,
+    });
+    try {
+      await sqlite.initialize();
+      await sqlite.query(
+        `INSERT INTO project_file_sync_baseline (project_id, sync_id, content_hash, last_synced_mtime, updated_at)
+         VALUES ($1, $2, $3, $4, $5)`,
+        ['p', 's1', 'agreed', 100, new Date()],
+      );
+      // Two rows in one statement: one existing, one without a baseline yet.
+      await sqlite.query(diskStampUpsertSql(2), [
+        'p', 's1', 'ignored', 999, new Date(), 'disk-1', 12, 200,
+        'p', 's2', 'base-2', 300, new Date(), 'disk-2', 34, 300,
+      ]);
+      const { rows } = await sqlite.query<Record<string, unknown>>(
+        `SELECT sync_id, content_hash, last_synced_mtime, disk_hash, disk_size, disk_mtime
+         FROM project_file_sync_baseline WHERE project_id = $1 ORDER BY sync_id`,
+        ['p'],
+      );
+      expect(rows.map((r) => [r.sync_id, r.content_hash, Number(r.last_synced_mtime)])).toEqual([
+        ['s1', 'agreed', 100],
+        ['s2', 'base-2', 300],
+      ]);
+      expect(rows.map((r) => parseDiskStamp(r))).toEqual([
+        { hash: 'disk-1', size: 12, mtime: 200 },
+        { hash: 'disk-2', size: 34, mtime: 300 },
+      ]);
     } finally {
       await sqlite.close();
       fs.rmSync(tmpDir, { recursive: true, force: true });

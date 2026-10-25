@@ -136,7 +136,7 @@ import {
   wantsPromptSuggestion,
 } from './claudeCode/promptSuggestionWait';
 import { injectPendingTeammateMessages } from './claudeCode/teammateInjection';
-import { hydrateTaskListItems, persistCurrentTodos, stopStaleRunningTasks } from './claudeCode/sessionMetadataWrites';
+import { hydrateTaskListItems, persistCurrentTasks, persistCurrentTodos, stopStaleRunningTasks } from './claudeCode/sessionMetadataWrites';
 import { applySystemTaskChunk, recordBackgroundEvidence, type TrackedSystemTask } from './claudeCode/systemTaskChunks';
 import {
   raceNextChunkWithStallWatchdog,
@@ -154,6 +154,7 @@ import { blockingUsageLimit, rateLimitMarker, usageLimitSystemMessage } from './
 import { buildTurnQuery, prepareTurnAttachments, resolveTurnPaths } from './claudeCode/turnPrologue';
 import { buildTurnCompleteUsage, finishTurn, handleTurnError, type TurnEpilogueHost } from './claudeCode/turnEpilogue';
 import { fromDbBoolean } from '../../../core/dbBoolean';
+import { agentToolActivity } from '../agentToolActivity';
 import { applyTaskListMutation, sortTaskList, type TaskListItem } from './claudeCode/taskListReconstruct';
 
 
@@ -390,8 +391,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       },
       getAbortSignal: () => this.abortController?.signal,
       interruptWithMessage: (message) => this.interruptWithMessage(message),
-      createCanUseToolHandler: (sessionId, workspacePath, permissionsPath, teammateName) =>
-        this.createCanUseToolHandler(sessionId, workspacePath, permissionsPath, teammateName),
+      createCanUseToolHandler: (sessionId, workspacePath, permissionsPath, teammateName, queryPermissionMode) =>
+        this.createCanUseToolHandler(sessionId, workspacePath, permissionsPath, teammateName, queryPermissionMode),
     });
 
     // Initialize permission service if all dependencies are available
@@ -408,6 +409,18 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         patternChecker: ClaudeCodeDeps.claudeSettingsPatternChecker,
         securityLogger: BaseAgentProvider.securityLogger ?? undefined,
         emit: this.emit.bind(this),
+        // A prompt that another answer settled still needs its card closed in the transcript.
+        // The service does not say who gave the answer, so this records it as the desktop.
+        recordReleasedPermission: (sessionId, requestId, response) => {
+          this.logAgentMessage(
+            sessionId,
+            'claude-code',
+            'output',
+            this.createPermissionResultMessage(requestId, response, 'desktop')
+          ).catch(err => {
+            console.error('[CLAUDE-CODE] Failed to persist permission response:', err);
+          });
+        },
       });
     }
 
@@ -475,6 +488,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       logSecurity: this.logSecurity.bind(this),
       trustChecker: BaseAgentProvider.trustChecker || undefined,
       patternSaver: ClaudeCodeDeps.claudeSettingsPatternSaver || undefined,
+      localAllowRuleChecker: ClaudeCodeDeps.claudeLocalAllowRuleChecker || undefined,
       getCurrentMode: () => this.currentMode,
       setCurrentMode: (mode) => { this.currentMode = mode; },
       getPendingExitPlanModeConfirmations: () => this.pendingExitPlanModeConfirmations,
@@ -520,6 +534,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   public static setImageCompressor(compressor: ((buffer: Buffer, mimeType: string, options?: { targetSizeBytes?: number }) => Promise<{ buffer: Buffer; mimeType: string; wasCompressed: boolean }>) | null): void { ClaudeCodeDeps.setImageCompressor(compressor); }
   public static setClaudeSettingsPatternSaver(saver: ((workspacePath: string, pattern: string) => Promise<void>) | null): void { ClaudeCodeDeps.setClaudeSettingsPatternSaver(saver); }
   public static setClaudeSettingsPatternChecker(checker: ((workspacePath: string, pattern: string) => Promise<boolean>) | null): void { ClaudeCodeDeps.setClaudeSettingsPatternChecker(checker); }
+  public static setClaudeLocalAllowRuleChecker(checker: ((workspacePath: string, pattern: string) => Promise<boolean>) | null): void { ClaudeCodeDeps.setClaudeLocalAllowRuleChecker(checker); }
   public static setTrustChecker(checker: ((workspacePath: string) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null; allowAllUsesClassifier?: boolean }) | null): void { BaseAgentProvider.setTrustChecker(checker); }
   public static setExtensionFileTypesLoader(loader: (() => Set<string>) | null): void { ClaudeCodeDeps.setExtensionFileTypesLoader(loader); }
 
@@ -1223,6 +1238,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
               }
 
               case 'tool_result': {
+                // A failed or denied call may never reach PostToolUse.
+                if (sessionId) agentToolActivity.finished(sessionId, item.toolUseId);
                 const toolCall = state.toolCallsById.get(item.toolUseId);
                 if (toolCall) {
                   const { isDuplicate, isBackgroundAck } = applyToolResultToToolCall(toolCall, item.content, item.isError);
@@ -1665,6 +1682,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // against the torn-down control channel and leaks. NIM-1470.
     const queryForDrainCleanup = this.leadQuery;
     this.leadQuery = null;
+    // Background commands drained with the turn; nothing it started is still running.
+    if (sessionId) agentToolActivity.endTurn(sessionId);
     ClaudeCodeProvider.streamingInstances.delete(this);
     this.abortController = null;
     this.wasInterrupted = false;
@@ -2586,23 +2605,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
   private async emitTaskUpdate(sessionId: string | undefined): Promise<void> {
     if (!sessionId) return;
-
-    try {
-      const { AISessionsRepository } = await import('../../../storage/repositories/AISessionsRepository');
-      const currentSession = await AISessionsRepository.get(sessionId);
-      const currentMetadata = currentSession?.metadata || {};
-
-      await AISessionsRepository.updateMetadata(sessionId, {
-        metadata: {
-          ...currentMetadata,
-          currentTasks: Array.from(this.activeTasks.values()),
-        }
-      });
-
-      this.emit('message:logged', { sessionId, direction: 'output' });
-    } catch (error) {
-      console.error('[CLAUDE-CODE] Failed to update session metadata with tasks:', error);
-    }
+    await persistCurrentTasks(sessionId, this.activeTasks, () => this.emit('message:logged', { sessionId, direction: 'output' }));
   }
 
   /**
@@ -3307,10 +3310,22 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    * 2. The tool needs user approval
    *
    * Our job is to show UI, wait for user response, and save patterns if "Always" is chosen.
+   *
+   * `queryPermissionMode` is the SDK permission mode of the query that owns this
+   * handler when it is fixed for that query (teammates run 'default'). Omitted for
+   * the lead, whose mode is read live from `currentMode` (it can change mid-turn).
    */
-  private createCanUseToolHandler(sessionId?: string, workspacePath?: string, permissionsPath?: string, teammateName?: string) {
+  private createCanUseToolHandler(
+    sessionId?: string,
+    workspacePath?: string,
+    permissionsPath?: string,
+    teammateName?: string,
+    queryPermissionMode?: 'plan' | 'auto' | 'default'
+  ) {
     // Use permissionsPath for trust checks (parent project for worktrees), workspacePath for everything else
     const pathForTrust = permissionsPath || workspacePath;
+    // Only the query that is itself running in auto mode had its calls escalated by the classifier
+    const isAutoModeQuery = () => (queryPermissionMode ?? resolvePermissionMode(this.currentMode)) === 'auto';
 
     let canUseToolCallCount = 0;
 
@@ -3328,7 +3343,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           workspacePath,
           permissionsPath,
           teammateName,
-          warnings
+          warnings,
+          isAutoModeQuery()
         )
       : this.handleToolPermissionFallback(toolName, input, options, sessionId, workspacePath, warnings);
 
@@ -3349,11 +3365,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           input,
           options,
           sessionId,
-          pathForTrust
+          pathForTrust,
+          isAutoModeQuery
         );
         // In Auto mode the SDK classifier escalated this call, so the user
         // decides on the command as a whole rather than part by part.
-        const compoundDecision = !immediateDecision && toolName === 'Bash' && this.currentMode !== 'auto'
+        const compoundDecision = !immediateDecision && toolName === 'Bash' && !isAutoModeQuery()
           ? await authorizeCompoundBashCommand(
               {
                 isPartPreApproved: createCompoundPartPreApprovalCheck(
@@ -3364,7 +3381,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 authorizePart: (partInput, warnings) => promptForTool(toolName, partInput, options, warnings),
                 logSecurity: (message, data) => this.logSecurity(message, data),
               },
-              input
+              input, options
             )
           : null;
         if (immediateDecision) {
@@ -3399,7 +3416,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     input: any,
     options: ToolPermissionOptions,
     sessionId: string | undefined,
-    pathForTrust: string | undefined
+    pathForTrust: string | undefined,
+    isAutoModeQuery: () => boolean
   ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string } | null> {
     return resolveImmediateToolDecisionHelper(
       {
@@ -3412,7 +3430,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         handleExitPlanMode: (resolvedSessionId, resolvedInput, resolvedOptions) =>
           this.handleExitPlanMode(resolvedSessionId, resolvedInput, resolvedOptions),
         setCurrentMode: (mode) => { this.currentMode = mode; },
-        getCurrentMode: () => this.currentMode,
+        // The invoking query's mode, not the lead's: a teammate of an auto-mode lead runs 'default'
+        getCurrentMode: () => isAutoModeQuery() ? 'auto' : this.currentMode === 'auto' ? 'agent' : this.currentMode,
         logSecurity: (message, data) => this.logSecurity(message, data),
       },
       {
@@ -3433,7 +3452,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     workspacePath: string,
     permissionsPath: string | undefined,
     teammateName: string | undefined,
-    warnings?: string[]
+    warnings: string[] | undefined,
+    requiresUserDecision: boolean
   ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> {
     return handleToolPermissionWithServiceHelper(
       {
@@ -3450,7 +3470,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         workspacePath,
         permissionsPath,
         teammateName,
-        warnings
+        warnings,
+        // In auto mode canUseTool only runs for calls the classifier or a hook escalated (#1740)
+        requiresUserDecision,
       }
     );
   }

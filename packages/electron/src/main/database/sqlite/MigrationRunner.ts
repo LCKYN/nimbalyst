@@ -253,10 +253,15 @@ export function getMigrations(schemaDir: string): Migration[] {
     { version: 50, name: 'personal_pages_one_tree', sqlFile: path.join(schemaDir, '0050_personal_pages_one_tree.sql') },
     { version: 51, name: 'personal_pages_parents_and_order', sqlFile: path.join(schemaDir, '0051_personal_pages_parents_and_order.sql') },
     { version: 52, name: 'personal_pages_fields', sqlFile: path.join(schemaDir, '0052_personal_pages_fields.sql') },
-    { version: 53, name: 'session_wakeup_attachments', sqlFile: path.join(schemaDir, '0053_session_wakeup_attachments.sql') },
-    { version: 54, name: 'session_wakeup_origin', sqlFile: path.join(schemaDir, '0054_session_wakeup_origin.sql') },
-    { version: 55, name: 'tool_usage_token_estimates', sqlFile: path.join(schemaDir, '0055_tool_usage_token_estimates.sql') },
-    { version: 56, name: 'message_input_times_index', sqlFile: path.join(schemaDir, '0056_message_input_times_index.sql') },
+    { version: 53, name: 'index_hygiene', sqlFile: path.join(schemaDir, '0053_index_hygiene.sql') },
+    { version: 54, name: 'project_file_sync_disk_stamp', sqlFile: path.join(schemaDir, '0054_project_file_sync_disk_stamp.sql') },
+    { version: 55, name: 'tracker_recovery_revision', sqlFile: path.join(schemaDir, '0055_tracker_recovery_revision.sql') },
+    // Fork migrations, renumbered past upstream's 53-55 (names unchanged, so
+    // relocateRenumberedMigrations moves installs' existing records).
+    { version: 56, name: 'session_wakeup_attachments', sqlFile: path.join(schemaDir, '0056_session_wakeup_attachments.sql') },
+    { version: 57, name: 'session_wakeup_origin', sqlFile: path.join(schemaDir, '0057_session_wakeup_origin.sql') },
+    { version: 58, name: 'tool_usage_token_estimates', sqlFile: path.join(schemaDir, '0058_tool_usage_token_estimates.sql') },
+    { version: 59, name: 'message_input_times_index', sqlFile: path.join(schemaDir, '0059_message_input_times_index.sql') },
   ];
 }
 
@@ -276,12 +281,20 @@ function relocateRenumberedMigrations(db: SqliteDatabase, migrations: Migration[
       .all() as Array<{ version: number; name: string }>;
     const recorded = new Set(rows.map((r) => r.version));
     const move = db.prepare('UPDATE _migrations SET version = ? WHERE version = ?');
-    for (const row of rows) {
-      const current = versionByName.get(row.name);
-      if (current === undefined || current === row.version || recorded.has(current)) continue;
-      move.run(current, row.version);
-      recorded.delete(row.version);
-      recorded.add(current);
+    // A target can still hold a record that is itself moving (53 -> 56 while
+    // 56 -> 59), so repeat until a pass moves nothing.
+    let moved = true;
+    while (moved) {
+      moved = false;
+      for (const row of rows) {
+        const current = versionByName.get(row.name);
+        if (current === undefined || current === row.version || recorded.has(current)) continue;
+        move.run(current, row.version);
+        recorded.delete(row.version);
+        recorded.add(current);
+        row.version = current;
+        moved = true;
+      }
     }
   }).immediate();
 }

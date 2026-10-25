@@ -78,6 +78,9 @@ export const COLLAB_BUNDLE_EAGER_GZIP_BUDGET_BYTES = {
   // them). Raised with ~4% headroom.
   // 2026-10-16: 92,065 bytes on the fork after merging upstream v0.81.6.
   // Raised with ~3% headroom.
+  // 2026-10-22: clean release build measured 92,149 bytes after typed-page
+  // sidebar reveal and page-index readiness/retry handling. No new eager
+  // source modules since 0.12.1; reset with ~3% headroom.
   'docs-ui': 95_000,
   // Sep 5 privacy-aware document transport graph measured 35,049 bytes.
   // Keep a narrow allowance for the supported response/refresh contract.

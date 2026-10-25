@@ -2897,6 +2897,7 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
         queueCount={queuedPrompts.length}
         onScheduleLater={showRunLaterButton ? handleScheduleLater : undefined}
         currentFilePath={currentFilePath}
+        currentFileName={documentContext?.fileName}
         onLaunchActionInNewSession={handleLaunchActionInNewSession}
       />
     </div>
