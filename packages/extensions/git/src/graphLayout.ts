@@ -53,7 +53,7 @@ export function layoutCommitGraph(commits: readonly GraphCommit[]): CommitGraphR
 
     const lanesBefore = lanes;
     const colorKeysBefore = colorKeys;
-    const parents = [...new Set(commit.parents.filter(Boolean))];
+    const parents = [...new Set((commit.parents ?? []).filter(Boolean))];
     let lanesAfter = [...lanesBefore];
     let colorKeysAfter = [...colorKeysBefore];
 

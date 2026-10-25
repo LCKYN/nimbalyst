@@ -663,7 +663,9 @@ async function isSessionInWorkspace(sessionId: string, workspacePath: string): P
     { success?: boolean; session?: { workspacePath?: string; worktreePath?: string } | null } | null;
   if (!result?.success) return true;
   const session = result.session;
-  if (!session) return false;
+  // Main answers `session: null` for an unknown id; an absent field proves nothing.
+  if (session === null) return false;
+  if (!session) return true;
   return !session.workspacePath || session.workspacePath === workspacePath || session.worktreePath === workspacePath;
 }
 
