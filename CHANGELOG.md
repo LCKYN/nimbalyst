@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
+- Updated the desktop runtime to Electron 43.8.3 with the latest security fixes.
 - A Mermaid diagram with a syntax error no longer leaves stray error graphics behind that could push a project window's title bar out of view.
 - AI Usage Report charts read correctly: the token axis no longer shows truncated zeros, the heatmap legend renders, and chart colors follow the theme.
 - The Git panel names the signal when a push is killed before it finishes, instead of showing the hook's output as the error.
