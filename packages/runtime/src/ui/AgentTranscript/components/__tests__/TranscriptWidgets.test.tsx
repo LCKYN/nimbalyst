@@ -1335,6 +1335,37 @@ describe('GitCommitConfirmationWidget', () => {
     expect(gitCommitCancel).toHaveBeenCalledTimes(1);
   });
 
+  // When the SDK's tool_use row lands before the server's synthetic one, the
+  // widget sees the model's input (workingDirectory, no targetWorktree). The
+  // server never auto-commits into another worktree, so a spinner would hang.
+  it('keeps buttons under auto-approve when the model named another worktree', async () => {
+    const { interactiveWidgetHostAtom } = await import('../../../../store/atoms/interactiveWidgetHost');
+    const message = makeToolMessage('git_commit_proposal', {
+      commitMessage: 'fix: commit into a sibling worktree',
+      filesToStage: ['src/file.ts'],
+      workingDirectory: '/repo_worktrees/fix',
+    });
+    const testStore = createStore();
+    testStore.set(interactiveWidgetHostAtom('auto-sibling'), {
+      sessionId: 'auto-sibling',
+      workspacePath: '/',
+      worktreeId: null,
+      autoCommitEnabled: true,
+      gitCommit: vi.fn(),
+      gitCommitCancel: vi.fn(),
+      trackEvent: vi.fn(),
+    } as any);
+
+    render(
+      <JotaiProvider store={testStore}>
+        <GitCommitConfirmationWidget message={message} isExpanded={false} onToggle={() => {}} sessionId="auto-sibling" />
+      </JotaiProvider>
+    );
+
+    expect(screen.getByTestId('git-commit-widget').dataset.state).toBe('pending');
+    screen.getByTestId('git-commit-confirm');
+  });
+
   // #1756: desktop refuses a sibling-worktree commit approved from mobile and
   // has no channel to say so, so the widget must not spin on "Committing...".
   it('tells mobile to approve a sibling-worktree commit on desktop', async () => {
