@@ -218,7 +218,7 @@ describe('runMigrations', () => {
     const raw = new BetterSqlite(path.join(tmp, 'renumbered.sqlite'));
     try {
       // Installs from the fork applied tool_usage_token_estimates as 52 before
-      // upstream took that number; it now ships as 55.
+      // upstream took that number; it now ships as 58.
       raw.exec(`CREATE TABLE _migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT '')`);
       const record = raw.prepare('INSERT INTO _migrations (version, name) VALUES (?, ?)');
       const notYetRecorded = new Set(['personal_pages_fields', 'tool_usage_token_estimates']);

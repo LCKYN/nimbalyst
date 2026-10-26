@@ -41,6 +41,8 @@ function installWindow(
           };
         }
         if (channel === 'workspace:get-state') return getState(args[0] as string);
+        // The restored session exists; the ownership check reads it before restoring.
+        if (channel === 'sessions:get') return { success: true, session: { id: args[0] } };
         return { success: true };
       }),
       on: vi.fn(() => () => {}),

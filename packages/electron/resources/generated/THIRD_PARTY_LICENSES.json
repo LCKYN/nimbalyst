@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-07T19:15:27.265Z",
+  "generatedAt": "2026-10-25T14:13:44.742Z",
   "scope": {
     "workspaceRoots": [
       "packages/electron",
@@ -37,7 +37,7 @@
     "description": "Production dependencies reachable from Electron, runtime, and built-in extension workspaces."
   },
   "summary": {
-    "packageCount": 948,
+    "packageCount": 1003,
     "reviewRequiredCount": 0,
     "approvedExceptionCount": 3,
     "licenseCounts": {
@@ -45,12 +45,12 @@
       "Apache-2.0": 29,
       "BlueOak-1.0.0": 12,
       "BSD-2-Clause": 5,
-      "BSD-3-Clause": 29,
+      "BSD-3-Clause": 66,
       "CC0-1.0": 2,
       "EPL-2.0": 1,
-      "ISC": 62,
+      "ISC": 67,
       "LGPL-3.0": 1,
-      "MIT": 802,
+      "MIT": 815,
       "Python-2.0": 1,
       "SEE LICENSE IN README.md": 1,
       "Unlicense": 2
@@ -59,7 +59,7 @@
     "approvedExceptions": [
       {
         "name": "@anthropic-ai/claude-agent-sdk",
-        "version": "0.3.284",
+        "version": "0.3.300",
         "license": "Anthropic Commercial",
         "reason": "Anthropic commercial license (https://code.claude.com/docs/en/legal-and-compliance). Permits use by developers writing code locally, which is exactly how Nimbalyst integrates the SDK. Used unmodified."
       },
@@ -127,9 +127,9 @@
       "noticeFiles": []
     },
     {
-      "id": "@anthropic-ai/claude-agent-sdk@0.3.284",
+      "id": "@anthropic-ai/claude-agent-sdk@0.3.300",
       "name": "@anthropic-ai/claude-agent-sdk",
-      "version": "0.3.284",
+      "version": "0.3.300",
       "rawLicense": "SEE LICENSE IN README.md",
       "selectedLicense": null,
       "reviewRequired": false,
@@ -2379,9 +2379,9 @@
       "noticeFiles": []
     },
     {
-      "id": "@modelcontextprotocol/sdk@1.30.0",
+      "id": "@modelcontextprotocol/sdk@1.32.1",
       "name": "@modelcontextprotocol/sdk",
-      "version": "1.30.0",
+      "version": "1.32.1",
       "rawLicense": "MIT",
       "selectedLicense": "MIT",
       "reviewRequired": false,
@@ -2451,9 +2451,9 @@
       "noticeFiles": []
     },
     {
-      "id": "@openai/codex@0.159.2",
+      "id": "@openai/codex@0.162.1",
       "name": "@openai/codex",
-      "version": "0.159.2",
+      "version": "0.162.1",
       "rawLicense": "Apache-2.0",
       "selectedLicense": "Apache-2.0",
       "reviewRequired": false,
@@ -2471,9 +2471,9 @@
       "noticeFiles": []
     },
     {
-      "id": "@openai/codex-sdk@0.159.2",
+      "id": "@openai/codex-sdk@0.162.1",
       "name": "@openai/codex-sdk",
-      "version": "0.159.2",
+      "version": "0.162.1",
       "rawLicense": "Apache-2.0",
       "selectedLicense": "Apache-2.0",
       "reviewRequired": false,
@@ -3793,9 +3793,9 @@
       "noticeFiles": []
     },
     {
-      "id": "@simple-git/args-pathspec@1.0.3",
+      "id": "@simple-git/args-pathspec@1.0.4",
       "name": "@simple-git/args-pathspec",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "rawLicense": "MIT",
       "selectedLicense": "MIT",
       "reviewRequired": false,
@@ -3803,19 +3803,23 @@
       "approved": false,
       "approvalReason": null,
       "approvalLicense": null,
-      "issues": [
-        "No license file found in package directory"
-      ],
+      "issues": [],
       "installPaths": [
         "node_modules/@simple-git/args-pathspec"
       ],
-      "licenseFiles": [],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/@simple-git/args-pathspec/LICENSE",
+          "text": "The MIT License (MIT)\n\nCopyright (c) 2025 Steve King\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
       "noticeFiles": []
     },
     {
-      "id": "@simple-git/argv-parser@1.1.1",
+      "id": "@simple-git/argv-parser@2.0.1",
       "name": "@simple-git/argv-parser",
-      "version": "1.1.1",
+      "version": "2.0.1",
       "rawLicense": "MIT",
       "selectedLicense": "MIT",
       "reviewRequired": false,
@@ -3823,13 +3827,17 @@
       "approved": false,
       "approvalReason": null,
       "approvalLicense": null,
-      "issues": [
-        "No license file found in package directory"
-      ],
+      "issues": [],
       "installPaths": [
         "node_modules/@simple-git/argv-parser"
       ],
-      "licenseFiles": [],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/@simple-git/argv-parser/LICENSE",
+          "text": "The MIT License (MIT)\n\nCopyright (c) 2025 Steve King\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
       "noticeFiles": []
     },
     {
@@ -4759,6 +4767,36 @@
         {
           "fileName": "LICENSE",
           "relativePath": "node_modules/@types/estree/LICENSE",
+          "text": "    MIT License\n\n    Copyright (c) Microsoft Corporation.\n\n    Permission is hereby granted, free of charge, to any person obtaining a copy\n    of this software and associated documentation files (the \"Software\"), to deal\n    in the Software without restriction, including without limitation the rights\n    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n    copies of the Software, and to permit persons to whom the Software is\n    furnished to do so, subject to the following conditions:\n\n    The above copyright notice and this permission notice shall be included in all\n    copies or substantial portions of the Software.\n\n    THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n    SOFTWARE\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "@types/estree@1.0.9",
+      "name": "@types/estree",
+      "version": "1.0.9",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-expression/node_modules/@types/estree",
+        "node_modules/vega-lite/node_modules/@types/estree"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-expression/node_modules/@types/estree/LICENSE",
+          "text": "    MIT License\n\n    Copyright (c) Microsoft Corporation.\n\n    Permission is hereby granted, free of charge, to any person obtaining a copy\n    of this software and associated documentation files (the \"Software\"), to deal\n    in the Software without restriction, including without limitation the rights\n    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n    copies of the Software, and to permit persons to whom the Software is\n    furnished to do so, subject to the following conditions:\n\n    The above copyright notice and this permission notice shall be included in all\n    copies or substantial portions of the Software.\n\n    THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n    SOFTWARE\n"
+        },
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-lite/node_modules/@types/estree/LICENSE",
           "text": "    MIT License\n\n    Copyright (c) Microsoft Corporation.\n\n    Permission is hereby granted, free of charge, to any person obtaining a copy\n    of this software and associated documentation files (the \"Software\"), to deal\n    in the Software without restriction, including without limitation the rights\n    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n    copies of the Software, and to permit persons to whom the Software is\n    furnished to do so, subject to the following conditions:\n\n    The above copyright notice and this permission notice shall be included in all\n    copies or substantial portions of the Software.\n\n    THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n    SOFTWARE\n"
         }
       ],
@@ -5799,6 +5837,30 @@
       "noticeFiles": []
     },
     {
+      "id": "ansi-regex@6.4.0",
+      "name": "ansi-regex",
+      "version": "6.4.0",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite/node_modules/ansi-regex"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "license",
+          "relativePath": "node_modules/vega-lite/node_modules/ansi-regex/license",
+          "text": "MIT License\n\nCopyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
       "id": "ansi-styles@4.3.0",
       "name": "ansi-styles",
       "version": "4.3.0",
@@ -5818,6 +5880,30 @@
           "fileName": "license",
           "relativePath": "node_modules/ansi-styles/license",
           "text": "MIT License\n\nCopyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "ansi-styles@6.2.3",
+      "name": "ansi-styles",
+      "version": "6.2.3",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite/node_modules/ansi-styles"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "license",
+          "relativePath": "node_modules/vega-lite/node_modules/ansi-styles/license",
+          "text": "MIT License\n\nCopyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
         }
       ],
       "noticeFiles": []
@@ -6956,6 +7042,30 @@
       "noticeFiles": []
     },
     {
+      "id": "cliui@9.0.1",
+      "name": "cliui",
+      "version": "9.0.1",
+      "rawLicense": "ISC",
+      "selectedLicense": "ISC",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite/node_modules/cliui"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE.txt",
+          "relativePath": "node_modules/vega-lite/node_modules/cliui/LICENSE.txt",
+          "text": "Copyright (c) 2015, Contributors\n\nPermission to use, copy, modify, and/or distribute this software\nfor any purpose with or without fee is hereby granted, provided\nthat the above copyright notice and this permission notice\nappear in all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES\nWITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES\nOF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE\nLIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES\nOR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,\nWHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,\nARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
       "id": "clsx@1.1.1",
       "name": "clsx",
       "version": "1.1.1",
@@ -7124,33 +7234,9 @@
       "noticeFiles": []
     },
     {
-      "id": "commander@7.2.0",
+      "id": "commander@15.0.0",
       "name": "commander",
-      "version": "7.2.0",
-      "rawLicense": "MIT",
-      "selectedLicense": "MIT",
-      "reviewRequired": false,
-      "reviewReasons": [],
-      "approved": false,
-      "approvalReason": null,
-      "approvalLicense": null,
-      "issues": [],
-      "installPaths": [
-        "node_modules/d3-dsv/node_modules/commander"
-      ],
-      "licenseFiles": [
-        {
-          "fileName": "LICENSE",
-          "relativePath": "node_modules/d3-dsv/node_modules/commander/LICENSE",
-          "text": "(The MIT License)\n\nCopyright (c) 2011 TJ Holowaychuk <tj@vision-media.ca>\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n'Software'), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\nTORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
-        }
-      ],
-      "noticeFiles": []
-    },
-    {
-      "id": "commander@8.3.0",
-      "name": "commander",
-      "version": "8.3.0",
+      "version": "15.0.0",
       "rawLicense": "MIT",
       "selectedLicense": "MIT",
       "reviewRequired": false,
@@ -7166,6 +7252,60 @@
         {
           "fileName": "LICENSE",
           "relativePath": "node_modules/katex/node_modules/commander/LICENSE",
+          "text": "(The MIT License)\n\nCopyright (c) 2011 TJ Holowaychuk <tj@vision-media.ca>\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n'Software'), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\nTORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "commander@2.20.3",
+      "name": "commander",
+      "version": "2.20.3",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/commander"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/commander/LICENSE",
+          "text": "(The MIT License)\n\nCopyright (c) 2011 TJ Holowaychuk <tj@vision-media.ca>\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n'Software'), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\nTORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "commander@7.2.0",
+      "name": "commander",
+      "version": "7.2.0",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/d3-dsv/node_modules/commander",
+        "node_modules/d3-geo-projection/node_modules/commander"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/d3-dsv/node_modules/commander/LICENSE",
+          "text": "(The MIT License)\n\nCopyright (c) 2011 TJ Holowaychuk <tj@vision-media.ca>\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n'Software'), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\nTORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        },
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/d3-geo-projection/node_modules/commander/LICENSE",
           "text": "(The MIT License)\n\nCopyright (c) 2011 TJ Holowaychuk <tj@vision-media.ca>\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n'Software'), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\nTORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
         }
       ],
@@ -8134,6 +8274,30 @@
           "fileName": "LICENSE",
           "relativePath": "node_modules/d3-geo/LICENSE",
           "text": "Copyright 2010-2024 Mike Bostock\n\nPermission to use, copy, modify, and/or distribute this software for any purpose\nwith or without fee is hereby granted, provided that the above copyright notice\nand this permission notice appear in all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH\nREGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND\nFITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,\nINDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS\nOF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER\nTORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF\nTHIS SOFTWARE.\n\nThis license applies to GeographicLib, versions 1.12 and later.\n\nCopyright 2008-2012 Charles Karney\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "d3-geo-projection@4.0.0",
+      "name": "d3-geo-projection",
+      "version": "4.0.0",
+      "rawLicense": "ISC",
+      "selectedLicense": "ISC",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/d3-geo-projection"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/d3-geo-projection/LICENSE",
+          "text": "Copyright 2013-2021 Mike Bostock\n\nPermission to use, copy, modify, and/or distribute this software for any purpose\nwith or without fee is hereby granted, provided that the above copyright notice\nand this permission notice appear in all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH\nREGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND\nFITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,\nINDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS\nOF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER\nTORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF\nTHIS SOFTWARE.\n\nMIT License for https://github.com/scijs/integrate-adaptive-simpson\n\nThe MIT License (MIT)\n\nCopyright 2015 Ricky Reusser\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n"
         }
       ],
       "noticeFiles": []
@@ -9436,6 +9600,30 @@
       "noticeFiles": []
     },
     {
+      "id": "emoji-regex@10.6.0",
+      "name": "emoji-regex",
+      "version": "10.6.0",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite/node_modules/emoji-regex"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE-MIT.txt",
+          "relativePath": "node_modules/vega-lite/node_modules/emoji-regex/LICENSE-MIT.txt",
+          "text": "Copyright Mathias Bynens <https://mathiasbynens.be/>\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE\nLIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION\nWITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
       "id": "emoji-regex@8.0.0",
       "name": "emoji-regex",
       "version": "8.0.0",
@@ -9743,6 +9931,30 @@
           "fileName": "LICENSE.md",
           "relativePath": "node_modules/esbuild/LICENSE.md",
           "text": "MIT License\n\nCopyright (c) 2020 Evan Wallace\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "escalade@3.2.0",
+      "name": "escalade",
+      "version": "3.2.0",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/escalade"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "license",
+          "relativePath": "node_modules/escalade/license",
+          "text": "MIT License\n\nCopyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
         }
       ],
       "noticeFiles": []
@@ -10201,6 +10413,30 @@
           "fileName": "LICENSE",
           "relativePath": "node_modules/fast-deep-equal/LICENSE",
           "text": "MIT License\n\nCopyright (c) 2017 Evgeny Poberezkin\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "fast-json-patch@3.1.1",
+      "name": "fast-json-patch",
+      "version": "3.1.1",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/fast-json-patch"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE.txt",
+          "relativePath": "node_modules/fast-json-patch/LICENSE.txt",
+          "text": "(The MIT License)\n\nCopyright (c) 2013, 2014, 2020 Joachim Wester\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n'Software'), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\nTORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
         }
       ],
       "noticeFiles": []
@@ -10990,6 +11226,30 @@
       "noticeFiles": []
     },
     {
+      "id": "get-east-asian-width@1.7.0",
+      "name": "get-east-asian-width",
+      "version": "1.7.0",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/get-east-asian-width"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "license",
+          "relativePath": "node_modules/get-east-asian-width/license",
+          "text": "MIT License\n\nCopyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
       "id": "get-intrinsic@1.3.0",
       "name": "get-intrinsic",
       "version": "1.3.0",
@@ -11062,9 +11322,9 @@
       "noticeFiles": []
     },
     {
-      "id": "ghostty-web@0.4.0",
+      "id": "ghostty-web@0.4.0-next.20.g1858a59",
       "name": "ghostty-web",
-      "version": "0.4.0",
+      "version": "0.4.0-next.20.g1858a59",
       "rawLicense": "MIT",
       "selectedLicense": "MIT",
       "reviewRequired": false,
@@ -13448,6 +13708,30 @@
       "noticeFiles": []
     },
     {
+      "id": "json-stringify-pretty-compact@4.0.0",
+      "name": "json-stringify-pretty-compact",
+      "version": "4.0.0",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/json-stringify-pretty-compact"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/json-stringify-pretty-compact/LICENSE",
+          "text": "The MIT License (MIT)\n\nCopyright (c) 2014, 2016, 2017, 2019, 2021, 2022 Simon Lydell\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
       "id": "json-stringify-safe@5.0.1",
       "name": "json-stringify-safe",
       "version": "5.0.1",
@@ -13544,9 +13828,9 @@
       "noticeFiles": []
     },
     {
-      "id": "katex@0.16.47",
+      "id": "katex@0.18.11",
       "name": "katex",
-      "version": "0.16.47",
+      "version": "0.18.11",
       "rawLicense": "MIT",
       "selectedLicense": "MIT",
       "reviewRequired": false,
@@ -19098,18 +19382,12 @@
       "approvalLicense": null,
       "issues": [],
       "installPaths": [
-        "node_modules/readable-stream/node_modules/safe-buffer",
-        "node_modules/string_decoder/node_modules/safe-buffer"
+        "node_modules/safe-buffer"
       ],
       "licenseFiles": [
         {
           "fileName": "LICENSE",
-          "relativePath": "node_modules/readable-stream/node_modules/safe-buffer/LICENSE",
-          "text": "The MIT License (MIT)\n\nCopyright (c) Feross Aboukhadijeh\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n"
-        },
-        {
-          "fileName": "LICENSE",
-          "relativePath": "node_modules/string_decoder/node_modules/safe-buffer/LICENSE",
+          "relativePath": "node_modules/safe-buffer/LICENSE",
           "text": "The MIT License (MIT)\n\nCopyright (c) Feross Aboukhadijeh\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n"
         }
       ],
@@ -19128,12 +19406,12 @@
       "approvalLicense": null,
       "issues": [],
       "installPaths": [
-        "node_modules/safe-buffer"
+        "node_modules/mcp-remote/node_modules/safe-buffer"
       ],
       "licenseFiles": [
         {
           "fileName": "LICENSE",
-          "relativePath": "node_modules/safe-buffer/LICENSE",
+          "relativePath": "node_modules/mcp-remote/node_modules/safe-buffer/LICENSE",
           "text": "The MIT License (MIT)\n\nCopyright (c) Feross Aboukhadijeh\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n"
         }
       ],
@@ -19268,15 +19546,9 @@
       "approvalLicense": null,
       "issues": [],
       "installPaths": [
-        "node_modules/global-agent/node_modules/semver",
         "node_modules/electron-updater/node_modules/semver"
       ],
       "licenseFiles": [
-        {
-          "fileName": "LICENSE",
-          "relativePath": "node_modules/global-agent/node_modules/semver/LICENSE",
-          "text": "The ISC License\n\nCopyright (c) Isaac Z. Schlueter and Contributors\n\nPermission to use, copy, modify, and/or distribute this software for any\npurpose with or without fee is hereby granted, provided that the above\ncopyright notice and this permission notice appear in all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES\nWITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF\nMERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR\nANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES\nWHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN\nACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR\nIN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\n"
-        },
         {
           "fileName": "LICENSE",
           "relativePath": "node_modules/electron-updater/node_modules/semver/LICENSE",
@@ -19814,9 +20086,9 @@
       "noticeFiles": []
     },
     {
-      "id": "simple-git@3.36.0",
+      "id": "simple-git@4.0.2",
       "name": "simple-git",
-      "version": "3.36.0",
+      "version": "4.0.2",
       "rawLicense": "MIT",
       "selectedLicense": "MIT",
       "reviewRequired": false,
@@ -19824,13 +20096,17 @@
       "approved": false,
       "approvalReason": null,
       "approvalLicense": null,
-      "issues": [
-        "No license file found in package directory"
-      ],
+      "issues": [],
       "installPaths": [
         "node_modules/simple-git"
       ],
-      "licenseFiles": [],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/simple-git/LICENSE",
+          "text": "The MIT License (MIT)\n\nCopyright (c) 2025 Steve King\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
       "noticeFiles": []
     },
     {
@@ -20182,6 +20458,30 @@
       "noticeFiles": []
     },
     {
+      "id": "string-width@7.2.0",
+      "name": "string-width",
+      "version": "7.2.0",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite/node_modules/string-width"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "license",
+          "relativePath": "node_modules/vega-lite/node_modules/string-width/license",
+          "text": "MIT License\n\nCopyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
       "id": "stringify-entities@4.0.4",
       "name": "stringify-entities",
       "version": "4.0.4",
@@ -20225,6 +20525,30 @@
           "fileName": "license",
           "relativePath": "node_modules/strip-ansi/license",
           "text": "MIT License\n\nCopyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "strip-ansi@7.2.0",
+      "name": "strip-ansi",
+      "version": "7.2.0",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite/node_modules/strip-ansi"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "license",
+          "relativePath": "node_modules/vega-lite/node_modules/strip-ansi/license",
+          "text": "MIT License\n\nCopyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
         }
       ],
       "noticeFiles": []
@@ -20609,6 +20933,30 @@
           "fileName": "LICENSE.txt",
           "relativePath": "node_modules/token-types/LICENSE.txt",
           "text": "The MIT License (MIT)\n\nCopyright © 2026 Borewit\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "topojson-client@3.1.0",
+      "name": "topojson-client",
+      "version": "3.1.0",
+      "rawLicense": "ISC",
+      "selectedLicense": "ISC",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/topojson-client"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/topojson-client/LICENSE",
+          "text": "Copyright 2012-2019 Michael Bostock\n\nPermission to use, copy, modify, and/or distribute this software for any purpose\nwith or without fee is hereby granted, provided that the above copyright notice\nand this permission notice appear in all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH\nREGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND\nFITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,\nINDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS\nOF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER\nTORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF\nTHIS SOFTWARE.\n"
         }
       ],
       "noticeFiles": []
@@ -21538,6 +21886,894 @@
       "noticeFiles": []
     },
     {
+      "id": "vega@6.4.0",
+      "name": "vega",
+      "version": "6.4.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-canvas@2.0.0",
+      "name": "vega-canvas",
+      "version": "2.0.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-canvas"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-canvas/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-crossfilter@5.1.3",
+      "name": "vega-crossfilter",
+      "version": "5.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-crossfilter"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-crossfilter/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-dataflow@6.1.3",
+      "name": "vega-dataflow",
+      "version": "6.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-dataflow"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-dataflow/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-embed@7.3.0",
+      "name": "vega-embed",
+      "version": "7.3.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-embed"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-embed/LICENSE",
+          "text": "Copyright (c) 2015, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-encode@5.2.2",
+      "name": "vega-encode",
+      "version": "5.2.2",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-encode"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-encode/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-event-selector@4.0.0",
+      "name": "vega-event-selector",
+      "version": "4.0.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-event-selector"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-event-selector/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-expression@6.1.0",
+      "name": "vega-expression",
+      "version": "6.1.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite/node_modules/vega-expression"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-lite/node_modules/vega-expression/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-expression@6.2.2",
+      "name": "vega-expression",
+      "version": "6.2.2",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-expression"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-expression/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-force@5.1.3",
+      "name": "vega-force",
+      "version": "5.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-force"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-force/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-format@2.1.3",
+      "name": "vega-format",
+      "version": "2.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-format"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-format/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-functions@6.2.0",
+      "name": "vega-functions",
+      "version": "6.2.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-functions"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-functions/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-geo@5.1.3",
+      "name": "vega-geo",
+      "version": "5.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-geo"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-geo/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-hierarchy@5.1.3",
+      "name": "vega-hierarchy",
+      "version": "5.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-hierarchy"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-hierarchy/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-interpreter@2.3.2",
+      "name": "vega-interpreter",
+      "version": "2.3.2",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-interpreter"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-interpreter/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-label@2.1.3",
+      "name": "vega-label",
+      "version": "2.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-label"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-label/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-lite@6.4.3",
+      "name": "vega-lite",
+      "version": "6.4.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-lite/LICENSE",
+          "text": "Copyright (c) 2015, University of Washington Interactive Data Lab.\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-loader@5.1.3",
+      "name": "vega-loader",
+      "version": "5.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-loader"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-loader/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-parser@7.1.3",
+      "name": "vega-parser",
+      "version": "7.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-parser"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-parser/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-projection@2.1.3",
+      "name": "vega-projection",
+      "version": "2.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-projection"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-projection/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-regression@2.1.3",
+      "name": "vega-regression",
+      "version": "2.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-regression"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-regression/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-runtime@7.1.3",
+      "name": "vega-runtime",
+      "version": "7.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-runtime"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-runtime/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-scale@8.1.3",
+      "name": "vega-scale",
+      "version": "8.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-scale"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-scale/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-scenegraph@5.3.0",
+      "name": "vega-scenegraph",
+      "version": "5.3.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-scenegraph"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-scenegraph/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-schema-url-parser@3.0.2",
+      "name": "vega-schema-url-parser",
+      "version": "3.0.2",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-schema-url-parser"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-schema-url-parser/LICENSE",
+          "text": "BSD 3-Clause License\n\nCopyright (c) 2017, Vega\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n* Redistributions of source code must retain the above copyright notice, this\n  list of conditions and the following disclaimer.\n\n* Redistributions in binary form must reproduce the above copyright notice,\n  this list of conditions and the following disclaimer in the documentation\n  and/or other materials provided with the distribution.\n\n* Neither the name of the copyright holder nor the names of its\n  contributors may be used to endorse or promote products derived from\n  this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-selections@6.1.5",
+      "name": "vega-selections",
+      "version": "6.1.5",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-selections"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-selections/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-statistics@2.0.0",
+      "name": "vega-statistics",
+      "version": "2.0.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-statistics"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-statistics/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-themes@3.0.0",
+      "name": "vega-themes",
+      "version": "3.0.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-themes"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-themes/LICENSE",
+          "text": "Copyright (c) 2016, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-time@3.3.0",
+      "name": "vega-time",
+      "version": "3.3.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-time"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-time/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-tooltip@1.1.0",
+      "name": "vega-tooltip",
+      "version": "1.1.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-tooltip"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-tooltip/LICENSE",
+          "text": "Copyright 2016 Interactive Data Lab and contributors\n\nRedistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-transforms@5.2.2",
+      "name": "vega-transforms",
+      "version": "5.2.2",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-transforms"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-transforms/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-typings@2.3.0",
+      "name": "vega-typings",
+      "version": "2.3.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-typings"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-typings/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-util@2.1.3",
+      "name": "vega-util",
+      "version": "2.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-util"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-util/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-view@6.2.0",
+      "name": "vega-view",
+      "version": "6.2.0",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-view"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-view/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-view-transforms@5.2.2",
+      "name": "vega-view-transforms",
+      "version": "5.2.2",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-view-transforms"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-view-transforms/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-voronoi@5.1.3",
+      "name": "vega-voronoi",
+      "version": "5.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-voronoi"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-voronoi/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "vega-wordcloud@5.1.3",
+      "name": "vega-wordcloud",
+      "version": "5.1.3",
+      "rawLicense": "BSD-3-Clause",
+      "selectedLicense": "BSD-3-Clause",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-wordcloud"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-wordcloud/LICENSE",
+          "text": "Copyright (c) 2015-2023, University of Washington Interactive Data Lab\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors\n  may be used to endorse or promote products derived from this software\n  without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
       "id": "vfile@6.0.3",
       "name": "vfile",
       "version": "6.0.3",
@@ -22110,6 +23346,30 @@
       "noticeFiles": []
     },
     {
+      "id": "wrap-ansi@9.0.2",
+      "name": "wrap-ansi",
+      "version": "9.0.2",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite/node_modules/wrap-ansi"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "license",
+          "relativePath": "node_modules/vega-lite/node_modules/wrap-ansi/license",
+          "text": "MIT License\n\nCopyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
       "id": "wrappy@1.0.2",
       "name": "wrappy",
       "version": "1.0.2",
@@ -22374,6 +23634,30 @@
       "noticeFiles": []
     },
     {
+      "id": "y18n@5.0.8",
+      "name": "y18n",
+      "version": "5.0.8",
+      "rawLicense": "ISC",
+      "selectedLicense": "ISC",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/y18n"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/y18n/LICENSE",
+          "text": "Copyright (c) 2015, Contributors\n\nPermission to use, copy, modify, and/or distribute this software for any purpose\nwith or without fee is hereby granted, provided that the above copyright notice\nand this permission notice appear in all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH\nREGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND\nFITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,\nINDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS\nOF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER\nTORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF\nTHIS SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
       "id": "yallist@5.0.0",
       "name": "yallist",
       "version": "5.0.0",
@@ -22446,6 +23730,30 @@
       "noticeFiles": []
     },
     {
+      "id": "yargs@18.0.0",
+      "name": "yargs",
+      "version": "18.0.0",
+      "rawLicense": "MIT",
+      "selectedLicense": "MIT",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite/node_modules/yargs"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE",
+          "relativePath": "node_modules/vega-lite/node_modules/yargs/LICENSE",
+          "text": "MIT License\n\nCopyright 2010 James Halliday (mail@substack.net); Modified work Copyright 2014 Contributors (ben@npmjs.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
       "id": "yargs-parser@18.1.3",
       "name": "yargs-parser",
       "version": "18.1.3",
@@ -22464,6 +23772,30 @@
         {
           "fileName": "LICENSE.txt",
           "relativePath": "node_modules/qrcode/node_modules/yargs-parser/LICENSE.txt",
+          "text": "Copyright (c) 2016, Contributors\n\nPermission to use, copy, modify, and/or distribute this software\nfor any purpose with or without fee is hereby granted, provided\nthat the above copyright notice and this permission notice\nappear in all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES\nWITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES\nOF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE\nLIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES\nOR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,\nWHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,\nARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\n"
+        }
+      ],
+      "noticeFiles": []
+    },
+    {
+      "id": "yargs-parser@22.0.0",
+      "name": "yargs-parser",
+      "version": "22.0.0",
+      "rawLicense": "ISC",
+      "selectedLicense": "ISC",
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "approved": false,
+      "approvalReason": null,
+      "approvalLicense": null,
+      "issues": [],
+      "installPaths": [
+        "node_modules/vega-lite/node_modules/yargs-parser"
+      ],
+      "licenseFiles": [
+        {
+          "fileName": "LICENSE.txt",
+          "relativePath": "node_modules/vega-lite/node_modules/yargs-parser/LICENSE.txt",
           "text": "Copyright (c) 2016, Contributors\n\nPermission to use, copy, modify, and/or distribute this software\nfor any purpose with or without fee is hereby granted, provided\nthat the above copyright notice and this permission notice\nappear in all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES\nWITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES\nOF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE\nLIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES\nOR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,\nWHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,\nARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.\n"
         }
       ],

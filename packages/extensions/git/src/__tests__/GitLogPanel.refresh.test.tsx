@@ -150,7 +150,7 @@ describe('GitLogPanel refresh', () => {
 });
 
 describe('GitLogPanel commit hover card', () => {
-  const COMMIT = { hash: 'abc1234def', message: 'Fix the thing', author: 'Dev', date: '2026-10-01T12:00:00Z' };
+  const COMMIT = { hash: 'abc1234def', parents: [], message: 'Fix the thing', author: 'Dev', date: '2026-10-01T12:00:00Z' };
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   beforeEach(() => {

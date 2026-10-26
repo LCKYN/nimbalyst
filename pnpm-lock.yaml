@@ -660,7 +660,7 @@ importers:
         version: 0.3.14
       '@electron-toolkit/utils':
         specifier: ^4.0.0
-        version: 4.0.0(electron@43.7.0(supports-color@10.2.2))
+        version: 4.0.0(electron@43.8.3(supports-color@10.2.2))
       '@excalidraw/excalidraw':
         specifier: 0.18.1
         version: 0.18.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(immer@11.1.8)(react-dom@19.2.7(patch_hash=ae8a3da582fb1e2f191ccdf6230837b3647f17abb2c7c203bd45dcd04b8e8e2e)(react@19.2.7))(react@19.2.7)
@@ -981,8 +981,8 @@ importers:
         specifier: ^16.6.1
         version: 16.6.1
       electron:
-        specifier: 43.7.0
-        version: 43.7.0(supports-color@10.2.2)
+        specifier: 43.8.3
+        version: 43.8.3(supports-color@10.2.2)
       electron-builder:
         specifier: ^26.0.12
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)(supports-color@10.2.2)
@@ -6794,8 +6794,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@43.7.0:
-    resolution: {integrity: sha512-m98FUehwnoo6q2D9Mr+n602Natb2CRFeKD81GhTdJlKh/Iyud0R1X8hChjpaMBLSsIX9r2ZEFnz0sdIALiO9ZQ==}
+  electron@43.8.3:
+    resolution: {integrity: sha512-KgvSm3bHXz96hSXzqxyRjLeli80rIdszbDQFKlRSfckmGazTPCH/CxUN31Dp9c5rFKTQSNf9gPJRWl1yWNB3pA==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -10782,9 +10782,9 @@ snapshots:
 
   '@electron-internal/extract-zip@1.0.3': {}
 
-  '@electron-toolkit/utils@4.0.0(electron@43.7.0(supports-color@10.2.2))':
+  '@electron-toolkit/utils@4.0.0(electron@43.8.3(supports-color@10.2.2))':
     dependencies:
-      electron: 43.7.0(supports-color@10.2.2)
+      electron: 43.8.3(supports-color@10.2.2)
 
   '@electron/asar@3.4.1':
     dependencies:
@@ -14557,7 +14557,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@43.7.0(supports-color@10.2.2):
+  electron@43.8.3(supports-color@10.2.2):
     dependencies:
       '@electron-internal/extract-zip': 1.0.3
       '@electron/get': 5.0.0(supports-color@10.2.2)
