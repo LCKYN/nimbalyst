@@ -20,6 +20,8 @@ interface PromptQueueListProps {
   onSendNow?: (id: string, prompt: string) => void;
   /** The turn is blocked on an interactive prompt, so the queue will not drain on its own. */
   blockedOnPrompt?: boolean;
+  /** Send now was pressed while a commit proposal is open; it sends once that settles (#1682). */
+  sendNowHeldForCommit?: boolean;
 }
 
 export function AttachmentIndicator({ attachments }: { attachments: QueuedPromptAttachment[] }) {
@@ -56,7 +58,7 @@ export function AttachmentIndicator({ attachments }: { attachments: QueuedPrompt
 /**
 - PromptQueueList - Displays queued prompts waiting to be processed
  */
-export function PromptQueueList({ queue, onCancel, onEdit, onSendNow, blockedOnPrompt }: PromptQueueListProps) {
+export function PromptQueueList({ queue, onCancel, onEdit, onSendNow, blockedOnPrompt, sendNowHeldForCommit }: PromptQueueListProps) {
   if (queue.length === 0) {
     return null;
   }
@@ -67,9 +69,11 @@ export function PromptQueueList({ queue, onCancel, onEdit, onSendNow, blockedOnP
         <span className="prompt-queue-count text-[11px] font-medium text-nim-muted uppercase tracking-wide">{queue.length} queued</span>
         {blockedOnPrompt && (
           <span className="prompt-queue-blocked-note text-[11px] text-[var(--nim-warning)]">
-            {onSendNow
-              ? 'Waiting on the prompt above. Respond to it, or use Send now to interrupt.'
-              : 'Waiting on the prompt above. These run after you respond.'}
+            {sendNowHeldForCommit
+              ? 'A commit proposal can\'t be interrupted. Approve or decline it and the next prompt sends.'
+              : onSendNow
+                ? 'Waiting on the prompt above. Respond to it, or use Send now to interrupt.'
+                : 'Waiting on the prompt above. These run after you respond.'}
           </span>
         )}
       </div>

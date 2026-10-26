@@ -699,7 +699,13 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       // If pending (mobile sent to desktop), stay in "Committing..." state.
       // The tool result will arrive via sync and update completedState.
       if (result.pending) {
-        // Keep isCommitting true - don't reset
+        // #1756: desktop refuses a sibling-worktree commit approved from mobile
+        // and has no channel to say so, so say it here instead of spinning.
+        if (targetWorktree) {
+          setIsCommitting(false);
+          setStaleHunkNotice('This commit targets another worktree. Approve it in the Nimbalyst desktop app.');
+        }
+        // Otherwise keep isCommitting true - don't reset
         return;
       }
 
@@ -728,7 +734,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       };
       setLocalResult(errorResult);
     }
-  }, [stagedFiles, filesToStage, hunkStates, commitMessage, isPending, proposalId, host, loadHunkState]);
+  }, [stagedFiles, filesToStage, hunkStates, commitMessage, isPending, proposalId, host, loadHunkState, targetWorktree]);
 
   const handleCancel = useCallback(() => {
     if (hasResponded || !isPending || !host) return; // Prevent double-response
