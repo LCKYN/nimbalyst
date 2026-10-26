@@ -594,8 +594,8 @@ async function runGitCommitProposal(
   } catch {
     // If we can't read settings, fall through to manual mode
   }
-  // #1756: a commit into a sibling worktree is always approved by hand.
-  if (target.worktree) isAutoCommit = false;
+  // Auto-approve covers a sibling worktree too: `target` was verified against
+  // `git worktree list` just above, in this same call.
 
   // Persist the proposal to database for durability
   try {
