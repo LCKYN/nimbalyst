@@ -1335,6 +1335,38 @@ describe('GitCommitConfirmationWidget', () => {
     expect(gitCommitCancel).toHaveBeenCalledTimes(1);
   });
 
+  // #1756: desktop refuses a sibling-worktree commit approved from mobile and
+  // has no channel to say so, so the widget must not spin on "Committing...".
+  it('tells mobile to approve a sibling-worktree commit on desktop', async () => {
+    const { interactiveWidgetHostAtom } = await import('../../../../store/atoms/interactiveWidgetHost');
+    const message = makeToolMessage('git_commit_proposal', {
+      commitMessage: 'fix: commit into a sibling worktree',
+      filesToStage: ['src/file.ts'],
+      targetWorktree: { path: '/repo_worktrees/fix', branch: 'fix/x' },
+    });
+    const testStore = createStore();
+    const gitCommit = vi.fn().mockResolvedValue({ success: true, pending: true });
+    testStore.set(interactiveWidgetHostAtom('mobile-worktree'), {
+      sessionId: 'mobile-worktree',
+      workspacePath: '/',
+      worktreeId: null,
+      gitCommit,
+      gitCommitCancel: vi.fn().mockResolvedValue(undefined),
+      trackEvent: vi.fn(),
+    } as any);
+
+    render(
+      <JotaiProvider store={testStore}>
+        <GitCommitConfirmationWidget message={message} isExpanded={false} onToggle={() => {}} sessionId="mobile-worktree" />
+      </JotaiProvider>
+    );
+    fireEvent.click(screen.getByTestId('git-commit-confirm'));
+
+    await screen.findByText(/Approve it in the Nimbalyst desktop app/);
+    expect(gitCommit).toHaveBeenCalledTimes(1);
+    expect((screen.getByTestId('git-commit-confirm') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('returns null when no tool call', () => {
     const message = makeMessage({ type: 'tool_call' });
     const { container } = render(

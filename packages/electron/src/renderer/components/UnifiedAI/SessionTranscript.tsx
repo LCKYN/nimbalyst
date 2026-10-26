@@ -31,6 +31,7 @@ import { isToolLikeMessage } from '@nimbalyst/runtime/ui/AgentTranscript/utils/m
 import type { AIInputRef } from './AIInput';
 import { SessionAIInput } from './SessionAIInput';
 import { PromptQueueList } from './PromptQueueList';
+import { sendQueuedPromptNow } from './sendQueuedPromptNow';
 import { TranscriptEmbeddedFileCard } from './TranscriptEmbeddedFileCard';
 import { getDiffPeekSizeForInteractiveWidgetHost } from './interactiveWidgetHostProxy';
 import { createFeedbackComposeHost } from '../FeedbackRequest/createFeedbackComposeHost';
@@ -1645,19 +1646,16 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
     }
   }, [setDraftInput]);
 
+  const [sendNowHeldForCommit, setSendNowHeldForCommit] = useState(false);
+  const blockedOnPrompt = isLoading && hasPendingInteractivePrompt;
+  useEffect(() => {
+    if (!blockedOnPrompt) setSendNowHeldForCommit(false);
+  }, [blockedOnPrompt]);
+
   const handleSendNowQueuedPrompt = useCallback(async (_id: string, _prompt: string) => {
     try {
-      // Two-step send-now: (1) interrupt the current turn (graceful for
-      // Claude Code, hard abort for other providers via the BaseAIProvider
-      // default); (2) explicitly trigger queue processing. The natural
-      // completion-handler path also triggers it, and the server's
-      // sessionsProcessingQueue guard de-dupes, so this is safe to call.
-      // We don't rely on the isLoading auto-effect because session:completed
-      // may race or, in some edge cases, may not fire cleanly after abort.
-      await window.electronAPI.invoke('ai:interruptCurrentTurn', sessionId);
-      if (workspacePath) {
-        await window.electronAPI.invoke('ai:triggerQueueProcessing', sessionId, workspacePath, 'send-now');
-      }
+      const outcome = await sendQueuedPromptNow(window.electronAPI.invoke, sessionId, workspacePath);
+      setSendNowHeldForCommit(outcome === 'held-for-commit');
     } catch (error) {
       console.error('[SessionTranscript] Failed to interrupt for send-now:', error);
     }
@@ -2834,7 +2832,8 @@ const LocalSessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscrip
         onCancel={handleCancelQueuedPrompt}
         onEdit={handleEditQueuedPrompt}
         onSendNow={isLoading && !isClaudeCliTerminalSession(provider) ? handleSendNowQueuedPrompt : undefined}
-        blockedOnPrompt={isLoading && hasPendingInteractivePrompt}
+        blockedOnPrompt={blockedOnPrompt}
+        sendNowHeldForCommit={sendNowHeldForCommit}
       />
 
       {/* Note: All interactive prompts (ToolPermission, ExitPlanMode, AskUserQuestion) use inline widgets in transcript */}
