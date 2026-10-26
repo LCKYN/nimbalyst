@@ -912,7 +912,8 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 
   // Auto-approve is a preference, not evidence that the server committed.
   // Wait for its result without issuing a second git:commit from the widget.
-  // The server never auto-commits into another worktree (#1756). `targetWorktree`
+  // A sibling-worktree proposal (#1756) keeps its buttons until the result lands,
+  // so one an older build left manual never spins forever. `targetWorktree`
   // is missing when the SDK's tool_use row beats the server's, so the model's own
   // `workingDirectory` counts too; every commit path is once-per-proposal, so
   // showing buttons for an auto-commit that is already running is harmless.

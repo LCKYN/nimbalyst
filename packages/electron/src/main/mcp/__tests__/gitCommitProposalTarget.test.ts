@@ -160,19 +160,17 @@ it('still settles both paths and releases the in-flight mark when the outcome lo
   expect(isCommitProposalInFlight('session')).toBe(false);
 });
 
-// #1756: an explicit sibling worktree is never committed automatically.
-it('always asks for manual approval for a sibling worktree target, even with auto-commit on', async () => {
+// #1756: a sibling worktree target is recorded on the proposal; auto-approve still applies to it.
+it('auto-commits into a verified sibling worktree when auto-commit is on', async () => {
   mocks.target.mockResolvedValue({
     workspacePath: '/sibling', repoPath: '/sibling', files: ['/sibling/shared.txt'],
     worktree: { path: '/sibling', branch: 'feature' },
   });
-  const pending = handleGitCommitProposal({ workingDirectory: '/sibling', filesToStage: ['shared.txt'], commitMessage: 'fix: x' }, 'session', '/parent', {});
-  await vi.waitFor(() => expect(mocks.ipcOn).toHaveBeenCalled());
-  expect(mocks.commit).not.toHaveBeenCalled();
-  expect(proposalRow()).toMatchObject({ autoApproved: false, targetWorktree: { path: '/sibling', branch: 'feature' } });
+  await handleGitCommitProposal({ workingDirectory: '/sibling', filesToStage: ['shared.txt'], commitMessage: 'fix: x' }, 'session', '/parent', {});
+  expect(mocks.commit).toHaveBeenCalledWith('/sibling', 'fix: x', ['/sibling/shared.txt'], expect.objectContaining({ repoPath: '/sibling' }));
+  expect(mocks.ipcOn).not.toHaveBeenCalled();
+  expect(proposalRow()).toMatchObject({ autoApproved: true, targetWorktree: { path: '/sibling', branch: 'feature' } });
   const toolUse = mocks.create.mock.calls.map(([row]) => JSON.parse(row.content)).find(row => row.type === 'nimbalyst_tool_use');
   expect(toolUse.input.targetWorktree).toEqual({ path: '/sibling', branch: 'feature' });
-  expect(mocks.send).toHaveBeenCalledWith('ai:gitCommitProposal', expect.objectContaining({ autoApproved: false }));
-  await answerWidget({ action: 'cancelled' });
-  await pending;
+  expect(mocks.send).toHaveBeenCalledWith('ai:gitCommitProposal', expect.objectContaining({ autoApproved: true }));
 });
