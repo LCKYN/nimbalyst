@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import type { TranscriptViewMessage } from '../../../ai/server/types';
 import type { ToolCallDiffLoadResult } from '../../../ai/server/transcript';
 import { MarkdownRenderer, type TranscriptFileLocation } from './MarkdownRenderer';
@@ -588,6 +588,8 @@ export const TranscriptToolCard = React.memo(function TranscriptToolCard({
   const tool = toolMsg.toolCall;
   const toolId = getToolExpandId(toolMsg, toolIndex);
   const onToggle = useCallback(() => onToggleTool(toolId), [onToggleTool, toolId]);
+  // Show a text result as raw text instead of markdown.
+  const [showRawResult, setShowRawResult] = useState(false);
 
   const providerToolCallId = tool?.providerToolCallId;
   const createdAtMs = toolMsg.createdAt?.getTime();
@@ -681,6 +683,7 @@ export const TranscriptToolCard = React.memo(function TranscriptToolCard({
 
   // Extract result text
   const resultText = tool.result ? extractResultText(tool.result) : null;
+  const textResult = resultText || (typeof tool.result === 'string' ? tool.result : null);
 
   // Special styling for sub-agents and teammates
   const cardClass = isTeammate
@@ -896,14 +899,28 @@ export const TranscriptToolCard = React.memo(function TranscriptToolCard({
             {/* Show result - extract text from JSON if possible */}
             {tool.result && (
               <details className="rich-transcript-tool-details my-2" open={!isSubAgent}>
-                <summary className="rich-transcript-tool-details-summary text-xs text-[var(--nim-text-faint)] cursor-pointer py-1 select-none hover:text-[var(--nim-text-muted)]">
+                <summary className="rich-transcript-tool-details-summary flex items-center gap-2 text-xs text-[var(--nim-text-faint)] cursor-pointer py-1 select-none hover:text-[var(--nim-text-muted)]">
                   {isSubAgent ? 'View result' : 'Result'}
+                  {textResult && (
+                    <button
+                      type="button"
+                      className="rich-transcript-tool-result-format-toggle ml-auto px-1.5 rounded border border-[var(--nim-border)] text-[var(--nim-text-faint)] hover:text-[var(--nim-text)]"
+                      title={showRawResult ? 'Show formatted result' : 'Show raw result'}
+                      onClick={(e) => {
+                        // Inside <summary>: don't also toggle the disclosure.
+                        e.preventDefault();
+                        setShowRawResult(raw => !raw);
+                      }}
+                    >
+                      {showRawResult ? 'Rich' : 'Raw'}
+                    </button>
+                  )}
                 </summary>
                 <div className="rich-transcript-tool-details-content mt-1 text-sm">
-                  {resultText ? (
-                    <MarkdownRenderer content={resultText} isUser={false} onOpenFile={onOpenFile} onOpenSession={onOpenSession} />
-                  ) : typeof tool.result === 'string' ? (
-                    <MarkdownRenderer content={tool.result} isUser={false} onOpenFile={onOpenFile} onOpenSession={onOpenSession} />
+                  {textResult && showRawResult ? (
+                    <pre className="rich-transcript-tool-result-raw m-0 whitespace-pre-wrap break-words font-mono text-xs select-text">{textResult}</pre>
+                  ) : textResult ? (
+                    <MarkdownRenderer content={textResult} isUser={false} onOpenFile={onOpenFile} onOpenSession={onOpenSession} />
                   ) : (
                     <JSONViewer data={tool.result} maxHeight="16rem" />
                   )}
