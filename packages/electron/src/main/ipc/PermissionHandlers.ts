@@ -11,13 +11,13 @@ import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { getPermissionService, resolveWorkspacePathForPermissions } from '../services/PermissionService';
 import { ClaudeSettingsManager } from '../services/ClaudeSettingsManager';
 import { logger } from '../utils/logger';
+import {
+  getDefaultBackendModuleLifecycleDeps,
+  retryBackendModulesAwaitingTrust,
+} from '../extensions/backendModuleLifecycle';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { resolveProjectPath, isWorktreePath } from '../utils/workspaceDetection';
 import { getDialogDefaultPath, rememberDialogSelection } from '../utils/dialogPaths';
-import {
-  getDefaultBackendModuleLifecycleDeps,
-  restartAwaitingTrustBackendModules,
-} from '../extensions/backendModuleLifecycle';
 
 /**
  * Broadcast permission changes to all renderer processes.
@@ -45,12 +45,6 @@ function broadcastPermissionChange(workspacePath: string): void {
 
   void ClaudeCodeProvider.applyPermissionChange().catch((error) => {
     logger.main.error('[PermissionHandlers] Failed to apply permission change to running sessions:', error);
-  });
-
-  // Backend modules of a workspace opened untrusted are parked on
-  // `awaiting-trust` and never retried by the open path.
-  void restartAwaitingTrustBackendModules(getDefaultBackendModuleLifecycleDeps()).catch((error) => {
-    logger.main.error('[PermissionHandlers] Failed to restart backend modules after permission change:', error);
   });
 }
 
@@ -169,6 +163,9 @@ export function registerPermissionHandlers(): void {
       // Broadcast using resolved path (parent project for worktrees)
       // This notifies all windows, which will fetch permissions for their own workspace
       broadcastPermissionChange(resolvedPath);
+      void retryBackendModulesAwaitingTrust(getDefaultBackendModuleLifecycleDeps()).catch((error) =>
+        logger.main.error('[PermissionHandlers] Failed to start backend modules after trust:', error)
+      );
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to trust workspace:', error);
@@ -295,6 +292,11 @@ export function registerPermissionHandlers(): void {
 
       // Broadcast using resolved path (parent project for worktrees)
       broadcastPermissionChange(resolvedPath);
+      if (savedMode !== null) {
+        void retryBackendModulesAwaitingTrust(getDefaultBackendModuleLifecycleDeps()).catch((error) =>
+          logger.main.error('[PermissionHandlers] Failed to start backend modules after trust:', error)
+        );
+      }
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to set permission mode:', error);
