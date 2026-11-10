@@ -168,8 +168,45 @@ it('badges an inactive project waiting for input and copies its path from the me
   store.set(markSessionStreamingAtom, { sessionId: 's1', workspacePath: projects[1].path });
   store.set(sessionHasPendingInteractivePromptAtom('s1'), true);
   const view = render(<Provider store={store}><ProjectRail /></Provider>);
-  expect(view.getByLabelText('1 waiting for your response').textContent).toBe('1');
+  expect(view.getByLabelText('1 awaiting input session').textContent).toBe('1');
   fireEvent.contextMenu(view.getByRole('button', { name: 'Switch to project Other' }));
   fireEvent.click(view.getByRole('menuitem', { name: 'Copy path' }));
   await waitFor(() => expect(copyToClipboard).toHaveBeenCalledWith('/p/Other'));
+});
+
+it('closes a project on middle-click and offers no hover close button to hit by accident', async () => {
+  vi.stubGlobal('electronAPI', { invoke: vi.fn().mockResolvedValue(undefined) });
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const store = createStore();
+  const projects = ['A', 'B'].map(name => ({ path: `/p/${name}`, name, openedAt: 0 }));
+  store.set(multiProjectModeAtom, true);
+  store.set(openProjectsAtom, projects);
+  store.set(activeWorkspacePathAtom, projects[0].path);
+  const view = render(<Provider store={store}><ProjectRail /></Provider>);
+
+  expect(view.queryByRole('button', { name: /^Close / })).toBeNull();
+
+  // A left click selects; it must never close.
+  fireEvent.click(view.getByRole('button', { name: 'Switch to project B' }));
+  expect(store.get(openProjectsAtom).map(p => p.name)).toEqual(['A', 'B']);
+
+  fireEvent(view.getByRole('button', { name: 'Switch to project B' }), new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+  await waitFor(() => expect(store.get(openProjectsAtom).map(p => p.name)).toEqual(['A']));
+});
+
+it('keeps the session badge on a project when it becomes the selected one', () => {
+  vi.stubGlobal('electronAPI', { invoke: vi.fn().mockResolvedValue(undefined) });
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  const store = createStore();
+  const projects = ['A', 'B'].map(name => ({ path: `/p/${name}`, name, openedAt: 0 }));
+  store.set(multiProjectModeAtom, true);
+  store.set(openProjectsAtom, projects);
+  store.set(activeWorkspacePathAtom, projects[0].path);
+  store.set(markSessionStreamingAtom, { sessionId: 's1', workspacePath: '/p/B' });
+  const view = render(<Provider store={store}><ProjectRail /></Provider>);
+
+  view.getByLabelText('1 running session');
+  fireEvent.click(view.getByRole('button', { name: 'Switch to project B' }));
+  expect(store.get(activeWorkspacePathAtom)).toBe('/p/B');
+  view.getByLabelText('1 running session');
 });

@@ -33,7 +33,7 @@ export function hasClaudeUsageReset(provider: string | null | undefined): boolea
 export function usageResumeAt(usage: Pick<ClaudeUsageData, 'fiveHour' | 'sevenDay'> | null): string | null {
   if (!usage) return null;
   if (usage.sevenDay.utilization >= 100 && usage.sevenDay.resetsAt) return usage.sevenDay.resetsAt;
-  return usage.fiveHour.resetsAt;
+  return usage.fiveHour?.resetsAt ?? null;
 }
 
 /**

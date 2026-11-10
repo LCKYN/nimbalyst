@@ -62,6 +62,12 @@ describe('usageResumeAt', () => {
   it('has no time without usage data', () => {
     expect(usageResumeAt(null)).toBeNull();
   });
+
+  it('has no time on a plan with no 5-hour limit unless the weekly one is exhausted', () => {
+    const noFiveHour = { ...usage([0, null], [60, at(50)]), fiveHour: null };
+    expect(usageResumeAt(noFiveHour)).toBeNull();
+    expect(usageResumeAt({ ...noFiveHour, sevenDay: { utilization: 100, resetsAt: at(50) } })).toBe(at(50));
+  });
 });
 
 describe('submitWithDraftCleared', () => {

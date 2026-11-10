@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   ipcOn: vi.fn(),
   outcome: vi.fn(async (_opts: any): Promise<any> => ({ kind: 'not-committed' })),
   cancel: vi.fn(async (_s: string, _p: string) => true),
+  processNewMessages: vi.fn(async (_s: string, _p: string) => {}),
 }));
 vi.mock('electron', () => ({ BrowserWindow: { fromId: () => ({ isDestroyed: () => false, webContents: { send: mocks.send } }) }, ipcMain: { on: mocks.ipcOn, removeListener: vi.fn() } }));
 vi.mock('../../utils/privateSettingsStore', () => ({ default: class { get() { return mocks.auto; } } }));
@@ -27,7 +28,10 @@ vi.mock('../../services/ai/CommitProposalExecution', () => ({
 vi.mock('../tools/promptResponsePoll', () => ({ findGitCommitProposalResponse: async () => null, findToolPermissionResponse: async () => null }));
 vi.mock('../../services/CommitTrackerLinker', () => ({ commitTrackerLinker: { linkBySession: async () => ({ closedItemIds: [] }) } }));
 vi.mock('@nimbalyst/runtime/storage/repositories/AgentMessagesRepository', () => ({ AgentMessagesRepository: { create: mocks.create } }));
-vi.mock('@nimbalyst/runtime/storage/repositories/AISessionsRepository', () => ({ AISessionsRepository: { get: async () => ({ title: 'Session' }) } }));
+vi.mock('@nimbalyst/runtime/storage/repositories/AISessionsRepository', () => ({ AISessionsRepository: { get: async () => ({ title: 'Session', provider: 'claude-code' }) } }));
+vi.mock('@nimbalyst/runtime/storage/repositories/TranscriptMigrationRepository', () => ({
+  TranscriptMigrationRepository: { hasService: () => true, getService: () => ({ processNewMessages: mocks.processNewMessages }) },
+}));
 vi.mock('../../database/PGLiteDatabaseWorker', () => ({ database: { query: async () => ({ rows: [] }) } }));
 vi.mock('../mcpWorkspaceResolver', () => ({ findWindowIdForWorkspacePath: async () => 1 }));
 vi.mock('../tools/codexToolCallResolver', () => ({ resolveToolUseIdFromMcpRequest: async () => 'tool-1' }));
@@ -201,5 +205,8 @@ it('auto-commits into a verified sibling worktree when auto-commit is on', async
   expect(proposalRow()).toMatchObject({ autoApproved: true, targetWorktree: { path: '/sibling', branch: 'feature' } });
   const toolUse = mocks.create.mock.calls.map(([row]) => JSON.parse(row.content)).find(row => row.type === 'nimbalyst_tool_use');
   expect(toolUse.input.targetWorktree).toEqual({ path: '/sibling', branch: 'feature' });
+  // #1890: the widget renders from the host's decision.
+  expect(toolUse.input.autoApproved).toBe(true);
+  expect(mocks.processNewMessages).toHaveBeenCalledWith('session', 'claude-code');
   expect(mocks.send).toHaveBeenCalledWith('ai:gitCommitProposal', expect.objectContaining({ autoApproved: true }));
 });

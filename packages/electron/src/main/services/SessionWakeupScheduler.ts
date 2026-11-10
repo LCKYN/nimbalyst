@@ -21,6 +21,7 @@ import type { ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import type { SessionWakeupOrigin } from '../../shared/sessionWakeups';
 import { findWindowByWorkspace } from '../window/WindowManager';
 import { resolveNotificationIcon } from './notificationIcons';
+import type { SessionNotificationNavigationTarget } from '../../shared/sessionNotificationNavigation';
 import {
   type SessionWakeup,
   type SessionWakeupsStore,
@@ -280,7 +281,7 @@ export class SessionWakeupScheduler {
   }
 }
 
-function notifyWakeupFired(row: SessionWakeup): void {
+export function notifyWakeupFired(row: SessionWakeup): void {
   if (!Notification.isSupported()) return;
   try {
     const title = row.origin === 'user' ? 'Scheduled prompt sent' : 'Session resumed';
@@ -303,7 +304,15 @@ function notifyWakeupFired(row: SessionWakeup): void {
         win.show();
         win.focus();
         try {
-          win.webContents.send('wakeup:focus-session', { sessionId: row.sessionId });
+          // The window holding the project may be showing another rail
+          // project; the renderer's notification navigation switches to the
+          // session's project before selecting it.
+          const navigation: SessionNotificationNavigationTarget = {
+            sessionId: row.sessionId,
+            workspacePath: row.workspaceId,
+            sourceLabel: 'Scheduled wakeup',
+          };
+          win.webContents.send('notification-clicked', navigation);
         } catch {
           // ignore -- window may have been destroyed mid-send
         }

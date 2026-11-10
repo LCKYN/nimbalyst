@@ -31,7 +31,6 @@ import { workstreamStateAtom, setWorkstreamActiveChildAtom } from './workstreamS
 import { clearSessionUnreadAtom } from './sessionActivity';
 import { aiInputHistoryAtom } from './aiInputUndo';
 import { sessionErrorNoticeAtom } from './sessionTranscript';
-import { sessionActivityIndexAtom } from './sessionActivity';
 
 // SessionMeta is imported from @nimbalyst/runtime (canonical type).
 // Re-export for consumers that import from the store.
@@ -779,6 +778,15 @@ export const sessionLoadingAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
+ * Per-session load failure: why the last load threw, or null. Lets the view
+ * tell a session that failed to load apart from one that does not exist
+ * (#1812).
+ */
+export const sessionLoadErrorAtom = atomFamily((_sessionId: string) =>
+  atom<string | null>(null)
+);
+
+/**
  * Per-session AI mode (plan vs agent).
  * This is a read-write derived atom that reads from sessionStoreAtom and writes through it.
  * This ensures the mode stays in sync with session data during reloads.
@@ -1191,6 +1199,9 @@ export const loadSessionChildrenAtom = atom(
         { includeArchived: false }
       );
       // console.log('[loadSessionChildrenAtom] IPC result:', result);
+      // The window may have switched projects while this was in flight.
+      const listWorkspace = get(sessionListWorkspaceAtom);
+      if (listWorkspace && listWorkspace !== workspacePath) return [];
       if (result.success && Array.isArray(result.children)) {
         const childIds = result.children.map((c: any) => c.id);
         // console.log('[loadSessionChildrenAtom] Setting children:', childIds);
@@ -1795,6 +1806,7 @@ export const setSessionWorkspaceOpenAtom = atom(
       closed.delete(workspacePath);
     } else {
       closed.add(workspacePath);
+      sessionListCache.delete(workspacePath);
       const generations = new Map(get(sessionWorkspaceGenerationsAtom));
       generations.set(workspacePath, {});
       set(sessionWorkspaceGenerationsAtom, generations);
@@ -1817,6 +1829,12 @@ export const setSessionWorkspaceOpenAtom = atom(
   }
 );
 
+
+/** The thrown reason, without Electron's "Error invoking remote method" wrapper. */
+function describeSessionLoadError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/^Error invoking remote method '[^']*': /, '');
+}
 
 /**
  * Load session data into the atom.
@@ -1841,6 +1859,7 @@ export const loadSessionDataAtom = atom(
     }
 
     set(sessionLoadingAtom(sessionId), true);
+    set(sessionLoadErrorAtom(sessionId), null);
     const draftWasHydrated = get(sessionDraftHydratedAtom(sessionId));
     const draftModifiedAtStart = get(sessionDraftLocalModifiedAtAtom(sessionId));
 
@@ -1890,6 +1909,9 @@ export const loadSessionDataAtom = atom(
       }
     } catch (error) {
       console.error(`[sessions] Failed to load session ${sessionId}:`, error);
+      if (get(sessionWorkspaceGenerationsAtom).get(workspacePath) === generation) {
+        set(sessionLoadErrorAtom(sessionId), describeSessionLoadError(error));
+      }
     } finally {
       if (get(sessionWorkspaceGenerationsAtom).get(workspacePath) === generation) {
         set(sessionLoadingAtom(sessionId), false);
@@ -2069,6 +2091,7 @@ export const cleanupSessionAtom = atom(null, (get, set, sessionId: string) => {
   // Remove all per-session atoms
   sessionStoreAtom.remove(sessionId);
   sessionLoadingAtom.remove(sessionId);
+  sessionLoadErrorAtom.remove(sessionId);
   sessionModeAtom.remove(sessionId);
   sessionModelAtom.remove(sessionId);
   sessionArchivedAtom.remove(sessionId);
@@ -2114,21 +2137,6 @@ export const anySessionProcessingAtom = atom((get) => {
 export const anyPendingInteractivePromptAtom = atom((get) => {
   const sessions = get(sessionListAtom);
   return sessions.some((s) => get(sessionHasPendingInteractivePromptAtom(s.id)));
-});
-
-/**
- * Map<workspacePath, count> of sessions waiting on an interactive prompt,
- * across every project in the rail. `sessionListAtom` only holds the active
- * project, so this walks the cross-workspace activity index instead.
- */
-export const projectAwaitingInputCountAtom = atom((get) => {
-  const out = new Map<string, number>();
-  for (const [sessionId, path] of get(sessionActivityIndexAtom)) {
-    if (get(sessionHasPendingInteractivePromptAtom(sessionId))) {
-      out.set(path, (out.get(path) ?? 0) + 1);
-    }
-  }
-  return out;
 });
 
 /**
@@ -2209,6 +2217,9 @@ export const sessionListRootAtom = atom<SessionListItem[]>((get) => {
 
   return Array.from(registry.values())
     .filter(s => {
+      // GitHub #1887: the send path rejects a session whose workspace_id is not
+      // this workspace, so never list one (the registry is shared per window).
+      if (workspacePath && s.workspaceId && s.workspaceId !== workspacePath) return false;
       if ((s.remoteHostDeviceId ?? "") !== host) return false;
       if (!showArchived && s.isArchived) return false;
       // Root sessions (no parent) are always included
@@ -2330,12 +2341,15 @@ export const refreshSessionListAtom = atom(
  */
 let initInProgress: Promise<void> | null = null;
 let lastInitWorkspacePath: string | null = null;
+/** Session list of each project this window switched away from, by workspace path. */
+const sessionListCache = new Map<string, { registry: Map<string, SessionMeta>; launchCounts: Record<string, number> }>();
 let initializedWorkspacePath: string | null = null;
 
 export async function initSessionList(workspacePath: string): Promise<void> {
-  // If already initialized for this workspace, return immediately. The list must
-  // still hold it: a fast A->B->A switch leaves `initializedWorkspacePath` at A
-  // while B is loading.
+  // If already initialized for this workspace, return immediately. A rail
+  // switch away and back before the other project's load finished leaves
+  // initializedWorkspacePath on this project while the list points at the
+  // other one, so the list's workspace must match too.
   if (initializedWorkspacePath === workspacePath && store.get(sessionListWorkspaceAtom) === workspacePath) {
     return;
   }
@@ -2346,19 +2360,36 @@ export async function initSessionList(workspacePath: string): Promise<void> {
   }
 
   lastInitWorkspacePath = workspacePath;
-  if (store.get(sessionListWorkspaceAtom) !== workspacePath) store.set(sessionLaunchCountsAtom, {});
+  const previousWorkspacePath = store.get(sessionListWorkspaceAtom);
+  if (previousWorkspacePath !== workspacePath) {
+    // The registry holds one project's sessions. Keep the outgoing project's
+    // list and show the incoming one's cached list while it refetches, so a
+    // rail switch back to a project does not blank the list for the round trip.
+    // A switch can land before the outgoing project's first refresh did, when
+    // the registry still holds an older project; cache only matching rows.
+    const outgoing = [...store.get(sessionRegistryAtom)].filter(([, s]) => s.workspaceId === previousWorkspacePath);
+    if (previousWorkspacePath && outgoing.length > 0) {
+      sessionListCache.set(previousWorkspacePath, {
+        registry: new Map(outgoing),
+        launchCounts: store.get(sessionLaunchCountsAtom),
+      });
+    }
+    const cached = sessionListCache.get(workspacePath);
+    store.set(sessionLaunchCountsAtom, cached?.launchCounts ?? {});
+    if (cached) store.set(sessionRegistryAtom, cached.registry);
+  }
   store.set(sessionListWorkspaceAtom, workspacePath);
 
   // Trigger initial load and track the promise
-  const thisInit = store.set(refreshSessionListAtom);
-  initInProgress = thisInit;
+  const load = store.set(refreshSessionListAtom);
+  initInProgress = load;
   try {
-    await thisInit;
-    // Mark as initialized only after successful completion, and only if a later
-    // switch hasn't superseded this workspace.
+    await load;
+    // Mark as initialized only after successful completion, and only if the
+    // list still shows this project: a switch during the load discards it.
     if (store.get(sessionListWorkspaceAtom) === workspacePath) initializedWorkspacePath = workspacePath;
   } finally {
-    if (initInProgress === thisInit) initInProgress = null;
+    if (initInProgress === load) initInProgress = null;
   }
 }
 

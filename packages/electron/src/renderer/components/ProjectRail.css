@@ -108,44 +108,17 @@
   pointer-events: none;
 }
 
-/* Status colors are bright in every built-in theme, so the glyph is always
+/* Same colors as the Agent gutter bubble: awaiting input, running, unread.
+   Status colors are bright in every built-in theme, so the glyph is always
    dark. --nim-bg would be white on light themes (~2:1 contrast). */
-.project-rail-item-badge.is-awaiting {
+.project-rail-item-badge[data-state='orange'] {
   background-color: var(--nim-warning);
   color: #111827;
 }
 
-.project-rail-item-badge.is-finished {
+.project-rail-item-badge[data-state='green'] {
   background-color: var(--nim-success);
   color: #111827;
-}
-
-.project-rail-item-close {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background-color: var(--nim-bg-secondary, #1a1a1a);
-  color: var(--nim-text, #111827);
-  border: 1px solid var(--nim-border, rgba(255, 255, 255, 0.12));
-  display: none;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0;
-}
-
-.project-rail-item:hover .project-rail-item-close {
-  display: flex;
-}
-
-.project-rail-item-close:hover {
-  background-color: var(--nim-error, #ef4444);
-  color: #ffffff;
 }
 
 .project-rail-divider {
@@ -184,6 +157,23 @@
 .project-rail-add:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* App-wide items portaled in from NavigationGutter. */
+.project-rail-global-items {
+  flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--nim-border, rgba(255, 255, 255, 0.06));
+}
+
+.project-rail-global-items:empty {
+  display: none;
 }
 
 .project-rail-context-menu {
@@ -292,6 +282,12 @@
 .project-rail-tooltip-name {
   font-weight: 600;
   color: var(--nim-text, #111827);
+}
+
+.project-rail-tooltip-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--nim-text-faint, var(--nim-text-muted, #6b7280));
 }
 
 .project-rail-tooltip-path {
