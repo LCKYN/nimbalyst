@@ -17,7 +17,10 @@ const config: Config = {
     './packages/extensions/*/samples/**/*.html',
     './packages/extension-sdk-docs/examples/*/src/**/*.{ts,tsx,js,jsx}',
   ],
-  darkMode: ['variant', '&:is([data-theme="dark"] *, [data-theme="crystal-dark"] *)'],
+  // `.dark-theme` is set by useTheme for every isDark theme (file-based and
+  // extension themes like Monokai or Dracula Pro); the data-theme selectors
+  // cover pages that set only the attribute.
+  darkMode: ['variant', '&:is([data-theme="dark"] *, [data-theme="crystal-dark"] *, .dark-theme *)'],
   theme: {
     extend: {
       colors: {
