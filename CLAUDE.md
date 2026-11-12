@@ -116,3 +116,5 @@ Transcripts: `ai_agent_messages` is the only persisted source of truth; canonica
 | Releases, marketing captures | [RELEASING.md](./RELEASING.md), [MARKETING_SCREENSHOTS.md](./docs/MARKETING_SCREENSHOTS.md), [ANDROID_MARKETING_SCREENSHOTS.md](./docs/ANDROID_MARKETING_SCREENSHOTS.md) |
 
 Support docs for users live in `support/`.
+
+Features: .features/
