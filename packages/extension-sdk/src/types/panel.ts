@@ -92,7 +92,9 @@ export interface PanelContribution {
 
   /**
    * Sort order for gutter buttons.
-   * Lower numbers appear higher/earlier.
+   * Lower numbers appear higher/earlier. A negative order on a `fullscreen`
+   * panel marks it as a top-level view: its button sits with the built-in
+   * modes, directly above Tracker, instead of with the other panels.
    * @default 100
    */
   order?: number;

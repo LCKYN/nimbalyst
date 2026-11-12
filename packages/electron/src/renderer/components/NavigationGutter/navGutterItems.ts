@@ -107,6 +107,20 @@ export function sortBySavedOrder<T extends { id: string }>(
 }
 
 /**
+ * A fullscreen extension panel that declares a negative `order` is a top-level
+ * view rather than a tool: its button joins the modes section, above Tracker.
+ */
+export function isModeLevelPanel(panel: { placement: string; order: number }): boolean {
+  return panel.placement === 'fullscreen' && panel.order < 0;
+}
+
+/** Insert mode-level panel buttons directly above Tracker (or last, when Tracker is unavailable). */
+export function insertAboveTracker<T extends { id: string }>(modes: T[], panels: T[]): T[] {
+  const at = modes.findIndex((mode) => mode.id === 'tracker');
+  return at < 0 ? [...modes, ...panels] : [...modes.slice(0, at), ...panels, ...modes.slice(at)];
+}
+
+/**
  * Apply the keep-one-mode guard: returns true if hiding `id` would be allowed.
  * Hiding is blocked only when `id` is the last visible content mode.
  *

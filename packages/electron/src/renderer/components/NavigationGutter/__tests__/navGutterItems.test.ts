@@ -3,6 +3,8 @@ import { describe, it, expect } from 'vitest';
 import {
   sortBySavedOrder,
   canHideGutterItem,
+  isModeLevelPanel,
+  insertAboveTracker,
   type GutterItemMeta,
 } from '../navGutterItems';
 
@@ -58,5 +60,21 @@ describe('canHideGutterItem', () => {
     expect(
       canHideGutterItem('agent', meta('agent', 'modes'), ['files', 'agent', 'tracker'], ['files']),
     ).toBe(true);
+  });
+});
+
+describe('mode-level extension panels', () => {
+  it('treats only a fullscreen panel with a negative order as mode-level', () => {
+    expect(isModeLevelPanel({ placement: 'fullscreen', order: -1 })).toBe(true);
+    expect(isModeLevelPanel({ placement: 'fullscreen', order: 100 })).toBe(false);
+    expect(isModeLevelPanel({ placement: 'sidebar', order: -1 })).toBe(false);
+  });
+
+  it('inserts them directly above Tracker, or last when Tracker is unavailable', () => {
+    const ids = (items: { id: string }[]) => items.map((i) => i.id);
+    const panels = [{ id: 'ext.board' }];
+    expect(ids(insertAboveTracker([{ id: 'files' }, { id: 'agent' }, { id: 'tracker' }, { id: 'collab' }], panels)))
+      .toEqual(['files', 'agent', 'ext.board', 'tracker', 'collab']);
+    expect(ids(insertAboveTracker([{ id: 'files' }, { id: 'agent' }], panels))).toEqual(['files', 'agent', 'ext.board']);
   });
 });
