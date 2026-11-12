@@ -48,6 +48,12 @@ export interface SessionMeta {
   hasPendingInteractivePrompt?: boolean;
   /** Last provider error (`metadata.errorNotice`), cleared when the next turn starts. */
   errorNotice?: { kind: 'usage_limit' | 'network' | 'error'; message: string; resetsAt?: number };
+  /**
+   * `metadata.userWorkstream`: a `workstream` wrapper the user made on purpose.
+   * Unmarked wrappers (auto-created before the session tree) are merged into
+   * their only child in the sidebar; marked ones always show.
+   */
+  userWorkstream?: boolean;
   // Kanban board phase and tags (from metadata JSONB)
   phase?: string;
   tags?: string[];
