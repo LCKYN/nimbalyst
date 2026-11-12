@@ -3,12 +3,13 @@
  * Fails if an IPC channel that an out-of-tree extension depends on stops being
  * registered (or, for events, emitted) in packages/electron/src/main.
  *
- * The channels come from two extensions that live in separate repos and call
+ * The channels come from extensions that live in separate repos and call
  * `window.electronAPI.invoke(...)` / `.on(...)` directly, so nothing in this
  * repo's typecheck or tests notices when a handler is removed:
  *   - AI Usage (com.nimbalyst.ai-usage):      github.com/LCKYN/nimbalyst-ai-usage
  *   - Git Insights:                           github.com/LCKYN/nimbalyst-git-insights
- * When either extension starts calling a new channel, add it here.
+ *   - Feature Board:                          ~/Documents/repo/nimbalyst-feature-board
+ * When any of them starts calling a new channel, add it here.
  *
  * ponytail: checks that each channel exists, not the shape of its arguments or
  * response; a contract test against the extensions' types is the upgrade path
@@ -38,6 +39,9 @@ const HANDLED = [
   'sessions:list',
   'session-files:get-by-sessions',
   'session-files:get-sessions-by-file',
+  // Feature Board
+  'get-folder-contents',
+  'read-file-content',
 ];
 
 /** Events the extensions subscribe to with `electronAPI.on` / `host.onWorkspaceEvent`. */
