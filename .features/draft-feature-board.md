@@ -12,7 +12,7 @@ One place that answers "what does this feature need from me right now", so I don
 
 ## Acceptance criteria
 - [ ] A full-window "Features" panel lists every file in `.features/` as a card, in six status columns (จะทำ, ปรึกษา, เริ่มทำ, กำลังทำ, รอตัดสินใจ, เสร็จแล้ว); cancelled features are hidden.
-- [ ] A card's status is computed from tasks, sessions, the worktree and the MR by the table in `~/.claude/feature-rules.md`, never read from the file; the same inputs always give the same status (unit test).
+- [ ] A card's status is computed from tasks, sessions, the worktree and the MR by the table in `~/.claude/feature-rules.md`, never read from the file; the same inputs always give the same status (unit test). The user can set a card's status by hand; a hand-set status is marked as such on the card and can be cleared to return to the computed one.
 - [ ] Opening a card shows, in this order: header (tasks done x/y, tokens and cost, MR state), Waiting on you, Stuck, Still missing, then tasks with their sessions.
 - [ ] "Waiting on you" lists every session of the feature with an unanswered prompt without the AI having to report it; clicking one opens that session.
 - [ ] Tokens and cost on a card equal the sum over the sessions linked to its `feature-task` items.
