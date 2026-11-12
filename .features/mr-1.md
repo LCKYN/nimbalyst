@@ -16,7 +16,8 @@ One place that answers "what does this feature need from me right now", so I don
 - [ ] Opening a card shows, in this order: header (tasks done x/y, tokens and cost, MR state), Waiting on you, Stuck, Still missing, then tasks with their sessions.
 - [ ] "Waiting on you" lists every session of the feature with an unanswered prompt without the AI having to report it; clicking one opens that session.
 - [ ] Tokens and cost on a card equal the sum over the sessions linked to its `feature-task` items.
-- [ ] No tracker, database-schema or provider code in the fork changes; the only core file touched is `scripts/check-extension-ipc-channels.mjs`.
+- [ ] No tracker, database-schema or provider code in the fork changes. Core changes are limited to the IPC guard list (`scripts/check-extension-ipc-channels.mjs`) and letting a fullscreen extension panel sit above Tracker in the navigation gutter.
+- [ ] The Features button sits in the gutter's top group, directly above Tracker.
 
 ## Related code
 - The extension lives outside this repo at `~/Documents/repo/nimbalyst-feature-board/` (same setup as `nimbalyst-ai-usage`).
@@ -27,4 +28,5 @@ One place that answers "what does this feature need from me right now", so I don
 - 2026-11-12: Tasks are tracker items of the personal type `feature-task`, not a new table and not the built-in `task` type (that one is a team type and its items queue for sync).
 - 2026-11-12: Sessions are attributed to tasks through the existing session-to-tracker link; no `FEATURE_ID`/`TASK_ID` environment variables and no session hooks.
 - 2026-11-12: Wait items are computed from session and MR state, not stored, so a session that forgets to report still shows up.
+- 2026-11-12: The board is a top-level view, so its button goes above Tracker. Extension panels were confined to the lower gutter group; a fullscreen panel with a negative `order` now joins the modes group. This is a second core change, accepted for the placement.
 - 2026-11-12: No new MCP tools in the first version; the existing tracker tools and AskUserQuestion cover them.

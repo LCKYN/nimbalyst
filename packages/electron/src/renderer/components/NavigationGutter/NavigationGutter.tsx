@@ -49,6 +49,8 @@ import {
   type GutterItemMeta,
   type GutterSection,
   sortBySavedOrder,
+  isModeLevelPanel,
+  insertAboveTracker,
   canHideGutterItem,
 } from './navGutterItems';
 import { prRemoteAtom } from '../../store/atoms/pullRequests';
@@ -441,10 +443,20 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     }] : []),
   ];
 
+  // Mode-level extension panels render in the modes section but stay out of
+  // `modeIds`, so the keep-one-mode guard still counts only real content modes.
+  const modeSectionItems: GutterItem[] = insertAboveTracker(
+    modeItems,
+    extensionPanelButtons.filter(isModeLevelPanel).map((panel): GutterItem => ({
+      id: panel.id, section: 'modes', icon: panel.icon, label: panel.label, hideable: true,
+      render: () => renderExtensionPanelButton(panel),
+    })),
+  );
+
   const panelItems: GutterItem[] = [
     // Fullscreen extension panels (view switchers), then sidebar toggles.
     ...extensionPanelButtons
-      .filter((p) => p.placement === 'fullscreen')
+      .filter((p) => p.placement === 'fullscreen' && !isModeLevelPanel(p))
       .map((panel): GutterItem => ({
         id: panel.id, section: 'panels', icon: panel.icon, label: panel.label, hideable: true,
         render: () => renderExtensionPanelButton(panel),
@@ -529,7 +541,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   ];
 
   // All available items, and just the metadata (for the context menu / popover).
-  const registry: GutterItem[] = [...modeItems, ...panelItems, ...indicatorItems];
+  const registry: GutterItem[] = [...modeSectionItems, ...panelItems, ...indicatorItems];
   const registryMeta: GutterItemMeta[] = registry.map(({ id, section, icon, label, hideable }) => ({
     id, section, icon, label, hideable,
   }));
@@ -663,7 +675,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     >
       {/* Navigation Modes (top) */}
       <div className="nav-section nav-content-modes flex flex-col items-center gap-1 w-full px-1.5 py-1">
-        {renderSection(modeItems, 'modes')}
+        {renderSection(modeSectionItems, 'modes')}
       </div>
 
       {/* Spacer pushes panels + indicators to the lower half */}
