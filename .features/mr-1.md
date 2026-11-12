@@ -1,10 +1,10 @@
 ---
-id: draft-feature-board
+id: mr-1
 title: See what each feature is waiting on, on one board
 kind: feature
 relates: []
 branch: feat/feature-board
-mrs: []
+mrs: [1]
 source: new
 ---
 ## Goal
