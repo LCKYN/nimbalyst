@@ -193,25 +193,65 @@ it('still settles both paths and releases the in-flight mark when the outcome lo
   expect(isCommitProposalInFlight('session')).toBe(false);
 });
 
-// #1756: a sibling worktree target is recorded on the proposal; auto-approve still applies to it.
-it('auto-commits into a verified sibling worktree when auto-commit is on', async () => {
+// #1968: auto-commit applies to a validated sibling worktree target too.
+it('auto-commits into a sibling worktree target when auto-commit is on', async () => {
   mocks.target.mockResolvedValue({
     workspacePath: '/sibling', repoPath: '/sibling', files: ['/sibling/shared.txt'],
     worktree: { path: '/sibling', branch: 'feature' },
   });
-  await handleGitCommitProposal({ workingDirectory: '/sibling', filesToStage: ['shared.txt'], commitMessage: 'fix: x' }, 'session', '/parent', {});
-  expect(mocks.commit).toHaveBeenCalledWith('/sibling', 'fix: x', ['/sibling/shared.txt'], expect.objectContaining({ repoPath: '/sibling' }));
+  mocks.commit.mockResolvedValue({ success: true, commitHash: 'abc1234' });
+  const result = await handleGitCommitProposal({ workingDirectory: '/sibling', filesToStage: ['shared.txt'], commitMessage: 'fix: x' }, 'session', '/parent', {});
+  expect(text(result)).toContain('abc1234');
   expect(mocks.ipcOn).not.toHaveBeenCalled();
+  expect(mocks.commit).toHaveBeenCalledWith('/sibling', 'fix: x', ['/sibling/shared.txt'], expect.objectContaining({ repoPath: '/sibling' }));
   expect(proposalRow()).toMatchObject({ autoApproved: true, targetWorktree: { path: '/sibling', branch: 'feature' } });
-  const toolUse = mocks.create.mock.calls.map(([row]) => JSON.parse(row.content)).find(row => row.type === 'nimbalyst_tool_use');
-  expect(toolUse.input.targetWorktree).toEqual({ path: '/sibling', branch: 'feature' });
-  // #1890: the widget renders from the host's decision.
-  expect(toolUse.input.autoApproved).toBe(true);
-  expect(mocks.processNewMessages).toHaveBeenCalledWith('session', 'claude-code');
-  expect(mocks.send).toHaveBeenCalledWith('ai:gitCommitProposal', expect.objectContaining({ autoApproved: true }));
 });
 
-it('#1955: a flagged file under an expanded directory turns auto-commit into manual review and is stored for the widget', async () => {
+// #1756: with auto-commit off, the sibling target still waits in the widget.
+it('waits for manual approval for a sibling worktree target when auto-commit is off', async () => {
+  mocks.auto = false;
+  mocks.target.mockResolvedValue({
+    workspacePath: '/sibling', repoPath: '/sibling', files: ['/sibling/shared.txt'],
+    worktree: { path: '/sibling', branch: 'feature' },
+  });
+  const pending = handleGitCommitProposal({ workingDirectory: '/sibling', filesToStage: ['shared.txt'], commitMessage: 'fix: x' }, 'session', '/parent', {});
+  await vi.waitFor(() => expect(mocks.ipcOn).toHaveBeenCalled());
+  expect(mocks.commit).not.toHaveBeenCalled();
+  expect(proposalRow()).toMatchObject({ autoApproved: false, targetWorktree: { path: '/sibling', branch: 'feature' } });
+  const toolUse = mocks.create.mock.calls.map(([row]) => JSON.parse(row.content)).find(row => row.type === 'nimbalyst_tool_use');
+  expect(toolUse.input.targetWorktree).toEqual({ path: '/sibling', branch: 'feature' });
+  // #1890: the widget renders from the host's decision, and the transcript
+  // picks up these rows while the agent is still blocked on this call.
+  expect(toolUse.input.autoApproved).toBe(false);
+  expect(mocks.processNewMessages).toHaveBeenCalledWith('session', 'claude-code');
+  expect(mocks.processNewMessages.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.create.mock.invocationCallOrder.at(-1)!);
+  expect(mocks.send).toHaveBeenCalledWith('ai:gitCommitProposal', expect.objectContaining({ autoApproved: false }));
+  await answerWidget({ action: 'cancelled' });
+  await pending;
+});
+
+// #1968: a file another session also edited no longer pauses auto-commit.
+it('auto-commits an expanded directory that includes a file flagged as another session\'s', async () => {
+  mocks.target.mockResolvedValue({
+    workspacePath: '/worktree', repoPath: '/worktree',
+    files: ['/worktree/design/a.txt', '/worktree/design/b.txt'],
+    fileDetails: [
+      { path: '/worktree/design/a.txt', status: 'added', fromDirectory: 'design/' },
+      { path: '/worktree/design/b.txt', status: 'modified', fromDirectory: 'design/', otherSession: { ownership: 'other-session', sessionId: 'other' } },
+    ],
+    expansion: { requestedPaths: ['/worktree/design'], excludePaths: [], expandedFrom: { 'design/': 2 }, unmatchedExcludes: [] },
+  });
+  mocks.commit.mockResolvedValue({ success: true, commitHash: 'abc1234' });
+  const result = await handleGitCommitProposal({ filesToStage: ['design'], commitMessage: 'test' }, 'session', '/parent', {});
+  expect(text(result)).toContain('abc1234');
+  expect(mocks.ipcOn).not.toHaveBeenCalled();
+  expect(mocks.commit).toHaveBeenCalledWith('/worktree', 'test', ['/worktree/design/a.txt', '/worktree/design/b.txt'], expect.anything());
+  expect(proposalRow().autoApproved).toBe(true);
+  expect(proposalRow().manualReviewReason).toBeUndefined();
+});
+
+it('#1955: a flagged file under an expanded directory is stored for the manual widget', async () => {
+  mocks.auto = false;
   mocks.target.mockResolvedValue({
     workspacePath: '/worktree', repoPath: '/worktree',
     files: ['/worktree/design/a.txt', '/worktree/design/b.txt', '/worktree/notes.md'],
@@ -236,7 +276,6 @@ it('#1955: a flagged file under an expanded directory turns auto-commit into man
     requestedPaths: ['/worktree/design', '/worktree/notes.md'],
     excludePaths: ['design/x'],
     expandedFrom: { 'design/': 2 },
-    manualReviewReason: expect.stringContaining('edited by another session'),
   });
   await answerWidget({ action: 'committed', commitHash: 'abc', filesCommitted: ['/worktree/design/a.txt'] });
   expect(text(await pending)).toContain('excludePaths matched nothing: design/x.');
