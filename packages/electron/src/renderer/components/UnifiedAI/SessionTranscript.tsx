@@ -110,7 +110,7 @@ import {
   loadInitialQueuedPrompts,
 } from '../../store';
 import { streamCompletionSignalAtom } from '../../store/atoms/sessionTranscript';
-import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom, nextOptimisticId, type SessionWakeupView } from '../../store/atoms/sessions';
+import { sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom, nextOptimisticId, type SessionWakeupView } from '../../store/atoms/sessions';
 import { leadTimeBucket, submitWithDraftCleared, type ScheduleLaterChoice } from './scheduleLater';
 import { settingAtom } from '../../store/atoms/settingAtomFamily';
 import { sessionBackgroundTasksAtom } from '../../store/atoms/sessionBackgroundTasks';
